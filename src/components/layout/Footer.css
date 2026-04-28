@@ -1,0 +1,162 @@
+.footer {
+  background: var(--bg-white-0);
+  position: relative;
+}
+
+.footer__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-8);
+  padding-top: var(--space-20);
+  padding-bottom: var(--space-8);
+}
+
+/* Brand */
+.footer__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.footer__logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.footer__logo-mark {
+  width: 28px;
+  height: 28px;
+  background: var(--primary-gradient);
+  border-radius: var(--radius-8);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.footer__logo-mark::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 2px solid #fff;
+  border-radius: 3px;
+  border-bottom: none;
+  border-right: none;
+}
+
+.footer__logo-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-strong-950);
+  letter-spacing: -0.02em;
+}
+
+.footer__tagline {
+  color: var(--text-soft-400);
+  max-width: 300px;
+}
+
+/* Nav */
+.footer__nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1) var(--space-6);
+}
+
+.footer__nav-link {
+  color: var(--text-sub-600);
+  text-decoration: none;
+  padding: 4px 0;
+  transition: color var(--duration-base) var(--ease-default);
+}
+
+.footer__nav-link:hover {
+  color: var(--text-strong-950);
+}
+
+/* Social */
+.footer__social {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.footer__social-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: var(--text-soft-400);
+  border-radius: var(--radius-8);
+  border: 1px solid var(--stroke-soft-200);
+  transition: color var(--duration-base), background var(--duration-base), border-color var(--duration-base), transform 0.2s ease;
+}
+
+.footer__social-link:hover {
+  color: var(--text-strong-950);
+  background: var(--bg-weak-50);
+  border-color: var(--stroke-sub-300);
+  transform: rotate(-8deg) scale(1.12);
+}
+
+.footer__social-link svg {
+  transition: transform 0.2s ease;
+}
+
+/* Divider */
+.footer__divider {
+  width: 100%;
+  height: 1px;
+  background: var(--stroke-soft-200);
+}
+
+/* Bottom */
+.footer__bottom {
+  padding-bottom: var(--space-2);
+}
+
+.footer__copy {
+  color: var(--text-soft-400);
+}
+
+/* ── Large stroke wordmark — 30% submerged (70% visible) ── */
+.footer__wordmark {
+  display: flex;
+  justify-content: center;
+  line-height: 1;
+  overflow: hidden;
+  /* show 70% of the letter height */
+  height: clamp(63px, 13.3vw, 168px);
+  padding: 0 var(--space-4);
+  pointer-events: all;
+  user-select: none;
+}
+
+.footer__wordmark-letter {
+  display: inline-block;
+  font-size: clamp(90px, 19vw, 240px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--neutral-200);
+  text-stroke: 1.5px var(--neutral-200);
+  transition: -webkit-text-stroke-color 0.25s ease, transform 0.2s ease;
+  cursor: default;
+  transform-origin: bottom center;
+}
+
+.footer__wordmark-letter:hover {
+  -webkit-text-stroke-color: #00b258;
+  transform: scale(1.06) translateY(-4px);
+}
+
+@media (max-width: 540px) {
+  .footer__inner { padding-top: var(--space-12); }
+  .footer__nav { gap: var(--space-1) var(--space-4); }
+}
