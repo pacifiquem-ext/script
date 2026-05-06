@@ -7,6 +7,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import {
   ArrowRight01Icon,
   ArrowLeft01Icon,
+  ArrowUp01Icon,
   PlayIcon,
   SparklesIcon,
   Attachment01Icon,
@@ -56,6 +57,7 @@ function icon(def: any, size: number, className?: string) {
 export const IconArrowRight   = ({ size = 18, className = '' }) => icon(ArrowRight01Icon,       size, className);
 export const IconArrowRight2  = ({ size = 18, className = '' }) => icon(ArrowRight02Icon,       size, className);
 export const IconArrowLeft    = ({ size = 18, className = '' }) => icon(ArrowLeft01Icon,        size, className);
+export const IconArrowUp      = ({ size = 18, className = '' }) => icon(ArrowUp01Icon,          size, className);
 export const IconPlay         = ({ size = 18, className = '' }) => icon(PlayIcon,               size, className);
 export const IconSparkles     = ({ size = 18, className = '' }) => icon(SparklesIcon,           size, className);
 export const IconAttach       = ({ size = 18, className = '' }) => icon(Attachment01Icon,       size, className);

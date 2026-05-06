@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { IconArrowRight, IconAttach, IconSparkles, IconFile, IconDocFile } from '../../lib/icons';
-import './ChatPage.css';
+import { IconArrowRight, IconAttach, IconSparkles, IconFile, IconDocFile, IconZap, IconArrowUp, IconChevronDown, IconDocument } from '../../lib/icons';
+import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 
 interface MentionedFile {
   id: string;
@@ -43,16 +43,19 @@ function formatTime(d: Date) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function MentionChip({ file }: { file: MentionedFile }) {
+function MentionChip({ file, onClick }: { file: MentionedFile, onClick?: (file: MentionedFile) => void }) {
   return (
-    <span className="mention-chip">
-      <span className="mention-chip__dot" style={{ background: TYPE_BADGE[file.type] || '#737373' }} />
-      <span className="mention-chip__name">{file.name}</span>
+    <span
+      className={`inline-flex items-center gap-[5px] px-[5px] py-[1px] pr-[7px] bg-neutral-50 border border-neutral-200 rounded-full text-[12px] font-medium text-neutral-600 align-middle mx-[2px] whitespace-nowrap ${onClick ? 'cursor-pointer hover:border-neutral-300 hover:bg-white hover:shadow-sm' : ''}`}
+      onClick={() => onClick?.(file)}
+    >
+      <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: TYPE_BADGE[file.type] || '#737373' }} />
+      <span className="overflow-hidden text-ellipsis whitespace-nowrap">{file.name}</span>
     </span>
   );
 }
 
-function MessageBubble({ msg, onCopy }: { msg: Message; onCopy: (text: string) => void }) {
+function MessageBubble({ msg, onCopy, onMentionClick }: { msg: Message; onCopy: (text: string) => void; onMentionClick?: (file: MentionedFile) => void }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -71,7 +74,7 @@ function MessageBubble({ msg, onCopy }: { msg: Message; onCopy: (text: string) =
       const idx = text.indexOf(tag, lastIdx);
       if (idx === -1) return;
       if (idx > lastIdx) parts.push(<span key={`t${i}`}>{text.slice(lastIdx, idx)}</span>);
-      parts.push(<MentionChip key={`m${i}`} file={m} />);
+      parts.push(<MentionChip key={`m${i}`} file={m} onClick={onMentionClick} />);
       lastIdx = idx + tag.length;
     });
     if (lastIdx < text.length) parts.push(<span key="tail">{text.slice(lastIdx)}</span>);
@@ -80,47 +83,47 @@ function MessageBubble({ msg, onCopy }: { msg: Message; onCopy: (text: string) =
 
   if (msg.role === 'user') {
     return (
-      <div className="chat-message chat-message--user">
-        <div className="chat-message__meta chat-message__meta--user">
-          <span className="chat-message__time text-para-xs">{formatTime(msg.timestamp)}</span>
+      <div className="flex gap-3 items-end flex-row-reverse group">
+        <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 flex-row-reverse pr-0.5 order-2">
+          <span className="text-neutral-400 text-[11px]">{formatTime(msg.timestamp)}</span>
           <button
-            className="chat-message__action"
+            className="flex items-center justify-center w-[22px] h-[22px] bg-transparent border-none cursor-pointer text-neutral-400 rounded-6 transition-colors duration-200 p-0 hover:text-neutral-600 hover:bg-neutral-200"
             onClick={handleCopy}
             aria-label="Copy"
             title={copied ? 'Copied!' : 'Copy'}
           >
             {copied ? (
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
             ) : (
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M3 11V3a1 1 0 011-1h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" /><path d="M3 11V3a1 1 0 011-1h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
             )}
           </button>
         </div>
-        <div className="chat-message__bubble text-para-md">{renderContent()}</div>
-        <div className="chat-message__avatar chat-message__avatar--user">JB</div>
+        <div className="px-3.5 py-2.5 rounded-12 leading-[1.65] text-neutral-950 break-words text-para-md bg-neutral-50 shadow-[inset_0_0_0_1px_theme(colors.neutral.200)] rounded-br-4 max-w-full order-1">{renderContent()}</div>
+        <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 bg-neutral-200 text-neutral-600 text-[11px] font-semibold tracking-[0.02em] border-[1.5px] border-neutral-200">JB</div>
       </div>
     );
   }
 
   return (
-    <div className="chat-message chat-message--assistant">
-      <div className="chat-message__avatar chat-message__avatar--ai">
+    <div className="flex gap-3 items-end group">
+      <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 bg-neutral-950 text-white">
         <IconSparkles size={13} />
       </div>
-      <div className="chat-message__body">
-        <div className="chat-message__bubble text-para-md">{msg.content}</div>
-        <div className="chat-message__meta chat-message__meta--ai">
-          <span className="chat-message__time text-para-xs">{formatTime(msg.timestamp)}</span>
+      <div className="flex flex-col gap-1 max-w-[78%]">
+        <div className="px-3.5 py-2.5 rounded-12 leading-[1.65] text-neutral-950 break-words text-para-md bg-white shadow-[inset_0_0_0_1px_theme(colors.neutral.200)] rounded-bl-4">{msg.content}</div>
+        <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 pl-0.5">
+          <span className="text-neutral-400 text-[11px]">{formatTime(msg.timestamp)}</span>
           <button
-            className="chat-message__action"
+            className="flex items-center justify-center w-[22px] h-[22px] bg-transparent border-none cursor-pointer text-neutral-400 rounded-6 transition-colors duration-200 p-0 hover:text-neutral-600 hover:bg-neutral-200"
             onClick={handleCopy}
             aria-label="Copy"
             title={copied ? 'Copied!' : 'Copy'}
           >
             {copied ? (
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
             ) : (
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M3 11V3a1 1 0 011-1h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" /><path d="M3 11V3a1 1 0 011-1h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
             )}
           </button>
         </div>
@@ -136,6 +139,7 @@ export function ChatPage() {
   const [atQuery, setAtQuery] = useState<string | null>(null);
   const [atCursor, setAtCursor] = useState(0);
   const [mentionHighlight, setMentionHighlight] = useState(0);
+  const [previewFile, setPreviewFile] = useState<MentionedFile | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -223,26 +227,30 @@ export function ChatPage() {
   }, [loading]);
 
   const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text).catch(() => {});
+    navigator.clipboard.writeText(text).catch(() => { });
   };
 
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="chat-page">
-      <div className="chat-messages">
-        <div className="chat-messages__inner">
+    <div className="flex h-full overflow-hidden bg-white relative">
+      <div className="flex-1 flex flex-col min-w-0 relative h-full transition-all duration-300">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.neutral.200)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.neutral.200)_1px,transparent_1px)] bg-[size:64px_64px] pointer-events-none z-0" aria-hidden />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_110%_55%_at_50%_0%,transparent_0%,theme(colors.neutral.0)_72%)] pointer-events-none z-10" aria-hidden />
+
+        <div className="flex-1 overflow-y-auto p-[24px_16px] relative z-20">
+          <div className="max-w-[720px] mx-auto flex flex-col gap-5">
           {isEmpty ? (
-            <div className="chat-empty">
-              <div className="chat-empty__icon"><IconFile size={28} /></div>
-              <h2 className="text-h6 chat-empty__title">Ask about your documents</h2>
-              <p className="text-para-sm chat-empty__sub">
+            <div className="flex flex-col items-center text-center p-[80px_24px] gap-4">
+              <div className="w-14 h-14 bg-neutral-50 rounded-16 border border-neutral-200 flex items-center justify-center text-neutral-400"><IconFile size={28} /></div>
+              <h2 className="text-h6 text-neutral-950">Ask about your documents</h2>
+              <p className="text-para-sm text-neutral-600 max-w-[400px] leading-[1.7]">
                 Upload a document or open one from your library.<br />
                 Extract details, find information, and get answers instantly.
               </p>
-              <div className="chat-empty__prompts">
+              <div className="flex flex-wrap gap-2 justify-center w-full max-w-[560px] mt-2">
                 {EXAMPLE_PROMPTS.map((p, i) => (
-                  <button key={i} className="chat-empty__prompt text-para-sm" onClick={() => sendMessage(p, [])}>
+                  <button key={i} className="px-3.5 py-[7px] bg-white border border-neutral-200 rounded-full text-neutral-600 cursor-pointer font-sans text-[13px] transition-colors duration-200 text-para-sm hover:bg-neutral-50 hover:text-neutral-950 hover:border-neutral-300" onClick={() => sendMessage(p, [])}>
                     {p}
                   </button>
                 ))}
@@ -250,17 +258,19 @@ export function ChatPage() {
             </div>
           ) : (
             messages.map(msg => (
-              <MessageBubble key={msg.id} msg={msg} onCopy={handleCopy} />
+              <MessageBubble key={msg.id} msg={msg} onCopy={handleCopy} onMentionClick={setPreviewFile} />
             ))
           )}
           {loading && (
-            <div className="chat-message chat-message--assistant">
-              <div className="chat-message__avatar chat-message__avatar--ai">
+            <div className="flex gap-3 items-end">
+              <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 bg-neutral-950 text-white">
                 <IconSparkles size={13} />
               </div>
-              <div className="chat-message__body">
-                <div className="chat-message__bubble chat-message__bubble--loading">
-                  <span /><span /><span />
+              <div className="flex flex-col gap-1 max-w-[78%]">
+                <div className="flex items-center gap-1 px-4 py-3.5 bg-white shadow-[inset_0_0_0_1px_theme(colors.neutral.200)] rounded-12 rounded-bl-4">
+                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-[bounce_1.2s_infinite_ease-in-out]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-[bounce_1.2s_infinite_ease-in-out_0.2s]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-[bounce_1.2s_infinite_ease-in-out_0.4s]" />
                 </div>
               </div>
             </div>
@@ -269,65 +279,92 @@ export function ChatPage() {
         </div>
       </div>
 
-      <div className="chat-input-area">
-        <div className="chat-prompt-box-wrap">
+      <div className="p-[16px_16px_20px] bg-transparent flex flex-col items-center gap-2 relative z-20">
+        <div className="w-full max-w-[720px] relative flex flex-col">
           {atQuery !== null && filteredFiles.length > 0 && (
-            <div className="chat-mention-dropup">
-              <p className="text-subheading-md chat-mention-dropup__label">Files</p>
+            <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 bg-white rounded-12 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.xl)] p-2 max-h-[260px] overflow-y-auto animate-[fadeUp_0.15s_ease]">
+              <p className="text-subheading-md text-neutral-400 tracking-[0.06em] p-[4px_8px_6px]">Files</p>
               {filteredFiles.map((file, i) => (
                 <button
                   key={file.id}
-                  className={`chat-mention-item ${i === mentionHighlight ? 'chat-mention-item--active' : ''}`}
+                  className={`flex items-center gap-2.5 w-full p-[7px_8px] bg-transparent border-none cursor-pointer font-sans rounded-8 text-left transition-colors duration-200 ${i === mentionHighlight ? 'bg-neutral-50' : 'hover:bg-neutral-50'}`}
                   onMouseDown={e => { e.preventDefault(); insertMention(file); }}
                 >
-                  <span className="chat-mention-item__badge" style={{ background: TYPE_BADGE[file.type] || '#737373' }}>
+                  <span className="shrink-0 px-1.5 py-0.5 rounded-4 text-[9px] font-bold tracking-[0.05em] text-white" style={{ background: TYPE_BADGE[file.type] || '#737373' }}>
                     {file.type.toUpperCase()}
                   </span>
-                  <span className="text-para-sm chat-mention-item__name">{file.name}</span>
+                  <span className="text-para-sm text-neutral-950 overflow-hidden text-ellipsis whitespace-nowrap">{file.name}</span>
                 </button>
               ))}
             </div>
           )}
 
-          <div className="chat-prompt-box">
-            <textarea
-              ref={textareaRef}
-              className="chat-prompt-box__textarea text-para-md"
-              placeholder="Ask about your documents… use @ to tag a file"
-              value={input}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              rows={3}
-            />
-            <div className="chat-prompt-box__footer">
-              <div className="chat-prompt-box__footer-left">
-                <button className="chat-prompt-box__attach" aria-label="Attach">
-                  <IconAttach size={17} />
-                </button>
-                {/* Render active mentions as chips in the footer */}
-                {extractMentions(input).map(f => (
-                  <span key={f.id} className="input-mention-chip">
-                    <span className="input-mention-chip__dot" style={{ background: TYPE_BADGE[f.type] || '#737373' }} />
-                    <IconDocFile size={12} />
-                    <span className="input-mention-chip__name">{f.name}</span>
-                  </span>
-                ))}
-              </div>
-              <button
-                className={`chat-prompt-box__send ${input.trim() ? 'chat-prompt-box__send--active' : ''}`}
-                onClick={sendMessageFromInput}
-                disabled={!input.trim() || loading}
-                aria-label="Send"
-              >
-                <IconArrowRight size={17} />
+          <div className="w-full bg-neutral-50 rounded-[20px] p-[6px_6px_8px] flex flex-col gap-1.5 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.lg)] transition-shadow duration-200 focus-within:shadow-[0_0_0_1.5px_theme(colors.neutral.300),theme(boxShadow.lg)]">
+
+            <div className="flex items-center gap-2 px-3 pt-1 pb-1">
+              <IconZap size={14} className="text-neutral-400" />
+              <span className="text-[13px] text-neutral-600 font-medium">
+                You are remaining with <span className="text-primary-base font-semibold">1,450</span> credits
+              </span>
+              <span className="text-[13px] text-neutral-400">·</span>
+              <button className="bg-transparent border-none cursor-pointer text-[13px] font-semibold text-primary-base hover:text-primary-darker transition-colors p-0">
+                Upgrade
               </button>
+            </div>
+
+            <div className="bg-white rounded-[14px] shadow-sm border border-neutral-200 flex flex-col overflow-hidden relative">
+              <div className="p-[10px_16px_4px] flex items-center">
+                <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-neutral-200 rounded-8 hover:bg-neutral-50 transition-colors shadow-sm">
+                  <div className="w-5 h-5 rounded-full bg-primary-alpha-10 flex items-center justify-center text-primary-base shrink-0"><IconDocument size={12} /></div>
+                  <span className="text-[13px] font-medium text-neutral-950">General</span>
+                  <IconChevronDown size={14} className="text-neutral-400" />
+                </button>
+              </div>
+
+              <textarea
+                ref={textareaRef}
+                className="flex-1 border-none outline-none resize-none bg-transparent font-sans text-neutral-950 leading-[1.6] min-h-[60px] max-h-[200px] overflow-y-auto p-[8px_16px] placeholder:text-neutral-400 text-para-md"
+                placeholder="Describe your legal issue..."
+                value={input}
+                onChange={handleInput}
+                onKeyDown={handleKeyDown}
+                rows={2}
+              />
+              <div className="flex items-center justify-between p-[8px_12px_12px_12px]">
+                <div className="flex items-center gap-1">
+                  <button className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 rounded-8 transition-colors duration-200 hover:text-neutral-600 hover:bg-neutral-200" aria-label="Attach">
+                    <IconAttach size={17} />
+                  </button>
+                  {/* Render active mentions as chips in the footer */}
+                  {extractMentions(input).map(f => (
+                    <span key={f.id} className="inline-flex items-center gap-[5px] px-[8px] py-[3px] bg-white border border-neutral-200 rounded-full text-[11px] font-medium text-neutral-600 whitespace-nowrap max-w-[180px] overflow-hidden">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: TYPE_BADGE[f.type] || '#737373' }} />
+                      <IconDocFile size={12} />
+                      <span className="overflow-hidden text-ellipsis whitespace-nowrap">{f.name}</span>
+                    </span>
+                  ))}
+                </div>
+                <button
+                  className={`flex items-center justify-center w-8 h-8 border-none rounded-8 cursor-pointer transition-all duration-200 ${input.trim() ? 'bg-primary-base text-white hover:bg-primary-darker hover:scale-105' : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'}`}
+                  onClick={sendMessageFromInput}
+                  disabled={!input.trim() || loading}
+                  aria-label="Send"
+                >
+                  <IconArrowUp size={16} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-        <p className="text-para-xs chat-input-area__disclaimer">
-          Responses are based on your uploaded documents only.
-        </p>
+          <p className="text-[11px] text-neutral-400 text-center max-w-[700px] leading-[1.6] mt-4 mb-2">
+            Script AI only provides insights based on your uploaded documents.
+          </p>
+        </div>
       </div>
+
+      {previewFile && (
+        <DocumentCanvas file={{ ...previewFile, size: 'Unknown', date: 'Just now' }} onClose={() => setPreviewFile(null)} />
+      )}
     </div>
   );
 }
