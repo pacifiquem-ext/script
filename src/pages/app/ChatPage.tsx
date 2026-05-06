@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { IconArrowRight, IconAttach, IconSparkles, IconFile, IconDocFile, IconZap, IconArrowUp, IconChevronDown, IconDocument } from '../../lib/icons';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 
@@ -133,6 +134,7 @@ function MessageBubble({ msg, onCopy, onMentionClick }: { msg: Message; onCopy: 
 }
 
 export function ChatPage() {
+  const location = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -142,7 +144,23 @@ export function ChatPage() {
   const [previewFile, setPreviewFile] = useState<MentionedFile | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const initialMessageHandled = useRef(false);
 
+  // Handle initial message from Library page navigation
+  useEffect(() => {
+    if (initialMessageHandled.current) return;
+    const state = location.state as { initialMessage?: string; quotedFiles?: MentionedFile[] } | null;
+    if (state?.initialMessage) {
+      initialMessageHandled.current = true;
+      const mentions = state.quotedFiles || [];
+      setTimeout(() => {
+        sendMessage(state.initialMessage!, mentions);
+      }, 300);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
+  // Legacy query param support
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get('q');
@@ -240,122 +258,115 @@ export function ChatPage() {
 
         <div className="flex-1 overflow-y-auto p-[24px_16px] relative z-20">
           <div className="max-w-[720px] mx-auto flex flex-col gap-5">
-          {isEmpty ? (
-            <div className="flex flex-col items-center text-center p-[80px_24px] gap-4">
-              <div className="w-14 h-14 bg-neutral-50 rounded-16 border border-neutral-200 flex items-center justify-center text-neutral-400"><IconFile size={28} /></div>
-              <h2 className="text-h6 text-neutral-950">Ask about your documents</h2>
-              <p className="text-para-sm text-neutral-600 max-w-[400px] leading-[1.7]">
-                Upload a document or open one from your library.<br />
-                Extract details, find information, and get answers instantly.
-              </p>
-              <div className="flex flex-wrap gap-2 justify-center w-full max-w-[560px] mt-2">
-                {EXAMPLE_PROMPTS.map((p, i) => (
-                  <button key={i} className="px-3.5 py-[7px] bg-white border border-neutral-200 rounded-full text-neutral-600 cursor-pointer font-sans text-[13px] transition-colors duration-200 text-para-sm hover:bg-neutral-50 hover:text-neutral-950 hover:border-neutral-300" onClick={() => sendMessage(p, [])}>
-                    {p}
+            {isEmpty ? (
+              <div className="flex flex-col items-center text-center p-[80px_24px] gap-4">
+                <div className="w-14 h-14 bg-neutral-50 rounded-16 border border-neutral-200 flex items-center justify-center text-neutral-400"><IconFile size={28} /></div>
+                <h2 className="text-h6 text-neutral-950">Ask about your documents</h2>
+                <p className="text-para-sm text-neutral-600 max-w-[400px] leading-[1.7]">
+                  Upload a document or open one from your library.<br />
+                  Extract details, find information, and get answers instantly.
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center w-full max-w-[560px] mt-2">
+                  {EXAMPLE_PROMPTS.map((p, i) => (
+                    <button key={i} className="px-3.5 py-[7px] bg-white border border-neutral-200 rounded-full text-neutral-600 cursor-pointer font-sans text-[13px] transition-colors duration-200 text-para-sm hover:bg-neutral-50 hover:text-neutral-950 hover:border-neutral-300" onClick={() => sendMessage(p, [])}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              messages.map(msg => (
+                <MessageBubble key={msg.id} msg={msg} onCopy={handleCopy} onMentionClick={setPreviewFile} />
+              ))
+            )}
+            {loading && (
+              <div className="flex gap-3 items-end">
+                <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 bg-neutral-950 text-white">
+                  <IconSparkles size={13} />
+                </div>
+                <div className="flex flex-col gap-1 max-w-[78%]">
+                  <div className="flex items-center gap-1 px-4 py-3.5 bg-white shadow-[inset_0_0_0_1px_theme(colors.neutral.200)] rounded-12 rounded-bl-4">
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-[bounce_1.2s_infinite_ease-in-out]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-[bounce_1.2s_infinite_ease-in-out_0.2s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-[bounce_1.2s_infinite_ease-in-out_0.4s]" />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+
+        <div className="p-[16px_16px_20px] bg-transparent flex flex-col items-center gap-2 relative z-20">
+          <div className="w-full max-w-[720px] relative flex flex-col">
+            {atQuery !== null && filteredFiles.length > 0 && (
+              <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 bg-white rounded-12 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.xl)] p-2 max-h-[260px] overflow-y-auto animate-[fadeUp_0.15s_ease]">
+                <p className="text-subheading-md text-neutral-400 tracking-[0.06em] p-[4px_8px_6px]">Files</p>
+                {filteredFiles.map((file, i) => (
+                  <button
+                    key={file.id}
+                    className={`flex items-center gap-2.5 w-full p-[7px_8px] bg-transparent border-none cursor-pointer font-sans rounded-8 text-left transition-colors duration-200 ${i === mentionHighlight ? 'bg-neutral-50' : 'hover:bg-neutral-50'}`}
+                    onMouseDown={e => { e.preventDefault(); insertMention(file); }}
+                  >
+                    <span className="shrink-0 px-1.5 py-0.5 rounded-4 text-[9px] font-bold tracking-[0.05em] text-white" style={{ background: TYPE_BADGE[file.type] || '#737373' }}>
+                      {file.type.toUpperCase()}
+                    </span>
+                    <span className="text-para-sm text-neutral-950 overflow-hidden text-ellipsis whitespace-nowrap">{file.name}</span>
                   </button>
                 ))}
               </div>
-            </div>
-          ) : (
-            messages.map(msg => (
-              <MessageBubble key={msg.id} msg={msg} onCopy={handleCopy} onMentionClick={setPreviewFile} />
-            ))
-          )}
-          {loading && (
-            <div className="flex gap-3 items-end">
-              <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 bg-neutral-950 text-white">
-                <IconSparkles size={13} />
-              </div>
-              <div className="flex flex-col gap-1 max-w-[78%]">
-                <div className="flex items-center gap-1 px-4 py-3.5 bg-white shadow-[inset_0_0_0_1px_theme(colors.neutral.200)] rounded-12 rounded-bl-4">
-                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-[bounce_1.2s_infinite_ease-in-out]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-[bounce_1.2s_infinite_ease-in-out_0.2s]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-[bounce_1.2s_infinite_ease-in-out_0.4s]" />
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef} />
-        </div>
-      </div>
+            )}
 
-      <div className="p-[16px_16px_20px] bg-transparent flex flex-col items-center gap-2 relative z-20">
-        <div className="w-full max-w-[720px] relative flex flex-col">
-          {atQuery !== null && filteredFiles.length > 0 && (
-            <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 bg-white rounded-12 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.xl)] p-2 max-h-[260px] overflow-y-auto animate-[fadeUp_0.15s_ease]">
-              <p className="text-subheading-md text-neutral-400 tracking-[0.06em] p-[4px_8px_6px]">Files</p>
-              {filteredFiles.map((file, i) => (
-                <button
-                  key={file.id}
-                  className={`flex items-center gap-2.5 w-full p-[7px_8px] bg-transparent border-none cursor-pointer font-sans rounded-8 text-left transition-colors duration-200 ${i === mentionHighlight ? 'bg-neutral-50' : 'hover:bg-neutral-50'}`}
-                  onMouseDown={e => { e.preventDefault(); insertMention(file); }}
-                >
-                  <span className="shrink-0 px-1.5 py-0.5 rounded-4 text-[9px] font-bold tracking-[0.05em] text-white" style={{ background: TYPE_BADGE[file.type] || '#737373' }}>
-                    {file.type.toUpperCase()}
-                  </span>
-                  <span className="text-para-sm text-neutral-950 overflow-hidden text-ellipsis whitespace-nowrap">{file.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
+            <div className="w-full bg-neutral-50 rounded-[20px] p-[6px_6px_8px] flex flex-col gap-1.5 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.lg)] transition-shadow duration-200 focus-within:shadow-[0_0_0_1.5px_theme(colors.neutral.300),theme(boxShadow.lg)]">
 
-          <div className="w-full bg-neutral-50 rounded-[20px] p-[6px_6px_8px] flex flex-col gap-1.5 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.lg)] transition-shadow duration-200 focus-within:shadow-[0_0_0_1.5px_theme(colors.neutral.300),theme(boxShadow.lg)]">
-
-            <div className="flex items-center gap-2 px-3 pt-1 pb-1">
-              <IconZap size={14} className="text-neutral-400" />
-              <span className="text-[13px] text-neutral-600 font-medium">
-                You are remaining with <span className="text-primary-base font-semibold">1,450</span> credits
-              </span>
-              <span className="text-[13px] text-neutral-400">·</span>
-              <button className="bg-transparent border-none cursor-pointer text-[13px] font-semibold text-primary-base hover:text-primary-darker transition-colors p-0">
-                Upgrade
-              </button>
-            </div>
-
-            <div className="bg-white rounded-[14px] shadow-sm border border-neutral-200 flex flex-col overflow-hidden relative">
-              <div className="p-[10px_16px_4px] flex items-center">
-                <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-neutral-200 rounded-8 hover:bg-neutral-50 transition-colors shadow-sm">
-                  <div className="w-5 h-5 rounded-full bg-primary-alpha-10 flex items-center justify-center text-primary-base shrink-0"><IconDocument size={12} /></div>
-                  <span className="text-[13px] font-medium text-neutral-950">General</span>
-                  <IconChevronDown size={14} className="text-neutral-400" />
+              <div className="flex items-center gap-2 px-3 pt-1 pb-1">
+                <IconZap size={14} className="text-neutral-400" />
+                <span className="text-[13px] text-neutral-600 font-medium">
+                  You are remaining with <span className="text-primary-base font-semibold">1,450</span> credits
+                </span>
+                <span className="text-[13px] text-neutral-400">·</span>
+                <button className="bg-transparent border-none cursor-pointer text-[13px] font-semibold text-primary-base hover:text-primary-darker transition-colors p-0">
+                  Upgrade
                 </button>
               </div>
 
-              <textarea
-                ref={textareaRef}
-                className="flex-1 border-none outline-none resize-none bg-transparent font-sans text-neutral-950 leading-[1.6] min-h-[60px] max-h-[200px] overflow-y-auto p-[8px_16px] placeholder:text-neutral-400 text-para-md"
-                placeholder="Describe your legal issue..."
-                value={input}
-                onChange={handleInput}
-                onKeyDown={handleKeyDown}
-                rows={2}
-              />
-              <div className="flex items-center justify-between p-[8px_12px_12px_12px]">
-                <div className="flex items-center gap-1">
-                  <button className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 rounded-8 transition-colors duration-200 hover:text-neutral-600 hover:bg-neutral-200" aria-label="Attach">
-                    <IconAttach size={17} />
+              <div className="bg-white rounded-[14px] shadow-sm border border-neutral-200 flex flex-col overflow-hidden relative">
+
+                <textarea
+                  ref={textareaRef}
+                  className="flex-1 border-none outline-none resize-none bg-transparent font-sans text-neutral-950 leading-[1.6] min-h-[60px] max-h-[200px] overflow-y-auto p-[8px_16px] placeholder:text-neutral-400 text-para-md"
+                  placeholder="Describe your legal issue..."
+                  value={input}
+                  onChange={handleInput}
+                  onKeyDown={handleKeyDown}
+                  rows={2}
+                />
+                <div className="flex items-center justify-between p-[8px_12px_12px_12px]">
+                  <div className="flex items-center gap-1">
+                    <button className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 rounded-8 transition-colors duration-200 hover:text-neutral-600 hover:bg-neutral-200" aria-label="Attach">
+                      <IconAttach size={17} />
+                    </button>
+                    {/* Render active mentions as chips in the footer */}
+                    {extractMentions(input).map(f => (
+                      <span key={f.id} className="inline-flex items-center gap-[5px] px-[8px] py-[3px] bg-white border border-neutral-200 rounded-full text-[11px] font-medium text-neutral-600 whitespace-nowrap max-w-[180px] overflow-hidden">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: TYPE_BADGE[f.type] || '#737373' }} />
+                        <IconDocFile size={12} />
+                        <span className="overflow-hidden text-ellipsis whitespace-nowrap">{f.name}</span>
+                      </span>
+                    ))}
+                  </div>
+                  <button
+                    className={`flex items-center justify-center w-8 h-8 border-none rounded-8 cursor-pointer transition-all duration-200 ${input.trim() ? 'bg-primary-base text-white hover:bg-primary-darker hover:scale-105' : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'}`}
+                    onClick={sendMessageFromInput}
+                    disabled={!input.trim() || loading}
+                    aria-label="Send"
+                  >
+                    <IconArrowUp size={16} />
                   </button>
-                  {/* Render active mentions as chips in the footer */}
-                  {extractMentions(input).map(f => (
-                    <span key={f.id} className="inline-flex items-center gap-[5px] px-[8px] py-[3px] bg-white border border-neutral-200 rounded-full text-[11px] font-medium text-neutral-600 whitespace-nowrap max-w-[180px] overflow-hidden">
-                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: TYPE_BADGE[f.type] || '#737373' }} />
-                      <IconDocFile size={12} />
-                      <span className="overflow-hidden text-ellipsis whitespace-nowrap">{f.name}</span>
-                    </span>
-                  ))}
                 </div>
-                <button
-                  className={`flex items-center justify-center w-8 h-8 border-none rounded-8 cursor-pointer transition-all duration-200 ${input.trim() ? 'bg-primary-base text-white hover:bg-primary-darker hover:scale-105' : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'}`}
-                  onClick={sendMessageFromInput}
-                  disabled={!input.trim() || loading}
-                  aria-label="Send"
-                >
-                  <IconArrowUp size={16} />
-                </button>
               </div>
             </div>
           </div>
-        </div>
           <p className="text-[11px] text-neutral-400 text-center max-w-[700px] leading-[1.6] mt-4 mb-2">
             Script AI only provides insights based on your uploaded documents.
           </p>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { IconClose, IconFile, IconUpload, IconSearch, IconGrid, IconMenu, IconPlus } from '../../lib/icons';
+import { useNavigate } from 'react-router-dom';
+import { IconClose, IconFile, IconUpload, IconSearch, IconGrid, IconMenu, IconPlus, IconArrowUp, IconSparkles, IconAttach, IconDocFile, IconZap } from '../../lib/icons';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 
 interface FileItem {
@@ -99,6 +100,7 @@ function SmallFileIcon({ type }: { type: string }) {
 }
 
 export function LibraryPage() {
+  const navigate = useNavigate();
   const [folders, setFolders] = useState<FolderItem[]>(INITIAL_FOLDERS);
   const [openFolder, setOpenFolder] = useState<FolderItem | null>(null);
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
@@ -116,6 +118,70 @@ export function LibraryPage() {
 
   // Context Menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: any; type: 'file'|'folder' } | null>(null);
+
+  // Floating chat input state
+  const [chatInput, setChatInput] = useState('');
+  const [quotedFiles, setQuotedFiles] = useState<FileItem[]>([]);
+  const [chatDropActive, setChatDropActive] = useState(false);
+  const chatTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleChatInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setChatInput(e.target.value);
+    if (chatTextareaRef.current) {
+      chatTextareaRef.current.style.height = 'auto';
+      chatTextareaRef.current.style.height = `${Math.min(chatTextareaRef.current.scrollHeight, 120)}px`;
+    }
+  };
+
+  const handleChatSubmit = () => {
+    const trimmed = chatInput.trim();
+    if (!trimmed && quotedFiles.length === 0) return;
+    // Build the initial message with mentions
+    const mentions = quotedFiles.map(f => `@${f.name}`).join(' ');
+    const fullMessage = mentions ? `${mentions} ${trimmed}` : trimmed;
+    navigate('/app/chat', { state: { initialMessage: fullMessage, quotedFiles: quotedFiles.map(f => ({ id: f.id, name: f.name, type: f.type })) } });
+  };
+
+  const handleChatKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleChatSubmit();
+    }
+  };
+
+  const removeQuotedFile = (id: string) => {
+    setQuotedFiles(prev => prev.filter(f => f.id !== id));
+  };
+
+  const handleFileDragStart = (e: React.DragEvent, file: FileItem) => {
+    e.dataTransfer.setData('application/json', JSON.stringify(file));
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const handleChatDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setChatDropActive(true);
+  };
+
+  const handleChatDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setChatDropActive(false);
+  };
+
+  const handleChatDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setChatDropActive(false);
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      if (data && data.id && data.name) {
+        setQuotedFiles(prev => prev.some(f => f.id === data.id) ? prev : [...prev, data]);
+        chatTextareaRef.current?.focus();
+      }
+    } catch { /* ignore non-file drops */ }
+  };
 
   const allFiles = useMemo(() => folders.flatMap(f => f.files), [folders]);
   const sourceFiles = openFolder ? openFolder.files : allFiles;
@@ -181,8 +247,9 @@ export function LibraryPage() {
   const handleDrop = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); /* Handled in a real app */ };
 
   return (
+    <div className="h-full flex flex-col relative bg-white">
     <div 
-      className={`h-full overflow-y-auto p-[24px_24px_40px] flex flex-col gap-8 relative bg-white transition-colors duration-200 ${isDragging ? 'bg-primary-alpha-10' : ''}`}
+      className={`flex-1 overflow-y-auto p-[24px_24px_24px] flex flex-col gap-8 relative transition-colors duration-200 ${isDragging ? 'bg-primary-alpha-10' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -357,6 +424,8 @@ export function LibraryPage() {
               {displayFiles.map(file => (
                 <button 
                   key={file.id} 
+                  draggable
+                  onDragStart={(e) => handleFileDragStart(e, file)}
                   className="group flex flex-col items-center gap-2 p-[16px_12px] bg-transparent border-none cursor-pointer font-sans rounded-12 transition-colors duration-200 text-center hover:bg-neutral-50 relative" 
                   onClick={() => setPreviewFile(file)}
                   onContextMenu={(e) => handleContextMenu(e, file, 'file')}
@@ -381,7 +450,9 @@ export function LibraryPage() {
             <div className="flex flex-col border border-neutral-200 rounded-12 overflow-hidden bg-white">
               {displayFiles.map(file => (
                 <div 
-                  key={file.id} 
+                  key={file.id}
+                  draggable
+                  onDragStart={(e) => handleFileDragStart(e, file)}
                   className="group flex items-center gap-4 p-[12px_16px] border-b border-neutral-200 last:border-0 hover:bg-neutral-50 cursor-pointer transition-colors relative"
                   onClick={() => setPreviewFile(file)}
                   onContextMenu={(e) => handleContextMenu(e, file, 'file')}
@@ -482,6 +553,75 @@ export function LibraryPage() {
           </div>
         </div>
       )}
+
+      {/* End of scrollable content */}
+      </div>
+
+      {/* Chat Input pinned to bottom */}
+      <div 
+        className="shrink-0 flex flex-col items-center px-4 pt-3 pb-4 bg-white border-t border-neutral-100 z-[100]"
+        onDragOver={handleChatDragOver}
+        onDragLeave={handleChatDragLeave}
+        onDrop={handleChatDrop}
+      >
+        <div className="w-full max-w-[720px] mx-auto relative flex flex-col">
+
+          <div className={`w-full bg-neutral-50 rounded-[20px] p-[6px_6px_8px] flex flex-col gap-1.5 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.lg)] transition-all duration-200 focus-within:shadow-[0_0_0_1.5px_theme(colors.neutral.300),theme(boxShadow.lg)] ${chatDropActive ? 'ring-2 ring-primary-base' : ''}`}>
+
+              <div className="flex items-center gap-2 px-3 pt-1 pb-1">
+                <IconZap size={14} className="text-neutral-400" />
+                <span className="text-[13px] text-neutral-600 font-medium">
+                  You are remaining with <span className="text-primary-base font-semibold">1,450</span> credits
+                </span>
+                <span className="text-[13px] text-neutral-400">·</span>
+                <button className="bg-transparent border-none cursor-pointer text-[13px] font-semibold text-primary-base hover:text-primary-darker transition-colors p-0">
+                  Upgrade
+                </button>
+              </div>
+
+              <div className="bg-white rounded-[14px] shadow-sm border border-neutral-200 flex flex-col overflow-hidden relative">
+
+                <textarea
+                  ref={chatTextareaRef}
+                  className="flex-1 border-none outline-none resize-none bg-transparent font-sans text-neutral-950 leading-[1.6] min-h-[60px] max-h-[200px] overflow-y-auto p-[8px_16px] placeholder:text-neutral-400 text-para-md"
+                  placeholder={chatDropActive ? 'Drop a file here to quote it...' : 'Describe your legal issue...'}
+                  value={chatInput}
+                  onChange={handleChatInputChange}
+                  onKeyDown={handleChatKeyDown}
+                  rows={2}
+                />
+                <div className="flex items-center justify-between p-[8px_12px_12px_12px]">
+                  <div className="flex items-center gap-1">
+                    <button className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 rounded-8 transition-colors duration-200 hover:text-neutral-600 hover:bg-neutral-200" aria-label="Attach">
+                      <IconAttach size={17} />
+                    </button>
+                    {quotedFiles.map(f => (
+                      <span key={f.id} className="inline-flex items-center gap-[5px] px-[8px] py-[3px] bg-white border border-neutral-200 rounded-full text-[11px] font-medium text-neutral-600 whitespace-nowrap max-w-[180px] overflow-hidden animate-[fadeUp_0.15s_ease]">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: TYPE_COLOR[f.type] || '#737373' }} />
+                        <IconDocFile size={12} />
+                        <span className="overflow-hidden text-ellipsis whitespace-nowrap">{f.name}</span>
+                        <button className="ml-0.5 p-0.5 rounded-full hover:bg-neutral-200 transition-colors bg-transparent border-none cursor-pointer text-neutral-400 hover:text-neutral-700 flex items-center justify-center" onClick={() => removeQuotedFile(f.id)}>
+                          <IconClose size={8} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <button
+                    className={`flex items-center justify-center w-8 h-8 border-none rounded-8 cursor-pointer transition-all duration-200 ${chatInput.trim() || quotedFiles.length > 0 ? 'bg-primary-base text-white hover:bg-primary-darker hover:scale-105' : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'}`}
+                    onClick={handleChatSubmit}
+                    disabled={!chatInput.trim() && quotedFiles.length === 0}
+                    aria-label="Send"
+                  >
+                    <IconArrowUp size={16} />
+                  </button>
+                </div>
+              </div>
+          </div>
+        </div>
+        <p className="text-[11px] text-neutral-400 text-center max-w-[700px] leading-[1.6] mt-3 mb-0">
+          Script AI only provides insights based on your uploaded documents.
+        </p>
+      </div>
     </div>
   );
 }
