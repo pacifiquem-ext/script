@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { IconClose, IconFile, IconUpload, IconSearch, IconGrid, IconMenu, IconPlus, IconArrowUp, IconSparkles, IconAttach, IconDocFile, IconZap } from '../../lib/icons';
+import { IconClose, IconFile, IconUpload, IconSearch, IconGrid, IconMenu, IconPlus, IconArrowUp, IconSparkles, IconAttach, IconDocFile, IconZap, IconChevronDown, IconFolderSimple, IconCheck, IconLock, IconArrowRight } from '../../lib/icons';
+import { IconGoogleDrive, IconDropbox, IconOneDrive, IconBox } from '../../components/ui/BrandIcons';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
+import { Button } from '../../components/ui/Button';
 
 interface FileItem {
   id: string;
@@ -115,6 +117,64 @@ export function LibraryPage() {
 
   // Upload modal state
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadSource, setUploadSource] = useState<'local' | 'drive' | 'dropbox' | 'onedrive' | 'box' | 'url' | 'api'>('local');
+  const [isConnected, setIsConnected] = useState<Record<string, boolean>>({ drive: false, dropbox: false, onedrive: false, box: false });
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [cloudSearch, setCloudSearch] = useState('');
+  const [selectedCloudFiles, setSelectedCloudFiles] = useState<Set<string>>(new Set());
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+
+  // Mock cloud data
+  const CLOUD_FILES = useMemo(() => [
+    { id: 'c1', name: 'Legal Documents', type: 'folder', items: [
+      { id: 'c1-1', name: 'Employment_Agreement_Template.pdf', type: 'pdf', size: '1.2 MB' },
+      { id: 'c1-2', name: 'Standard_Terms_v2.doc', type: 'doc', size: '840 KB' },
+    ]},
+    { id: 'c2', name: 'Case 2026-X4', type: 'folder', items: [
+      { id: 'c2-1', name: 'Evidence_Photos.zip', type: 'zip', size: '45 MB' },
+      { id: 'c2-2', name: 'Witness_Statement_01.pdf', type: 'pdf', size: '2.1 MB' },
+      { id: 'c2-3', name: 'Witness_Statement_02.pdf', type: 'pdf', size: '1.8 MB' },
+    ]},
+    { id: 'c3', name: 'Retainer_Agreement.pdf', type: 'pdf', size: '450 KB' },
+    { id: 'c4', name: 'Client_Onboarding.xls', type: 'xls', size: '1.1 MB' },
+  ], []);
+
+  const handleConnect = (provider: string) => {
+    setIsConnecting(true);
+    setTimeout(() => {
+      setIsConnected(prev => ({ ...prev, [provider]: true }));
+      setIsConnecting(false);
+    }, 1500);
+  };
+
+  const toggleCloudFile = (id: string) => {
+    const newSelected = new Set(selectedCloudFiles);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelectedCloudFiles(newSelected);
+  };
+
+  const handleImport = () => {
+    setIsImporting(true);
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += Math.random() * 15;
+      if (progress >= 100) {
+        progress = 100;
+        setImportProgress(100);
+        clearInterval(interval);
+        setTimeout(() => {
+          setIsImporting(false);
+          setIsUploadModalOpen(false);
+          setImportProgress(0);
+          setSelectedCloudFiles(new Set());
+          // In a real app, we'd add the files to the library state here
+        }, 800);
+      }
+      setImportProgress(progress);
+    }, 200);
+  };
 
   // Context Menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: any; type: 'file'|'folder' } | null>(null);
@@ -512,43 +572,279 @@ export function LibraryPage() {
       {/* Upload Modal */}
       {isUploadModalOpen && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-[fadeIn_0.2s_ease]" onClick={() => setIsUploadModalOpen(false)} />
-          <div className="relative bg-white rounded-20 shadow-xl w-full max-w-[500px] flex flex-col overflow-hidden animate-[fadeUp_0.3s_cubic-bezier(0.16,1,0.3,1)]">
-            <div className="flex items-center justify-between p-5 border-b border-neutral-200">
-              <h2 className="text-h6 text-neutral-950">Upload files</h2>
-              <button className="p-1 text-neutral-400 hover:text-neutral-950 transition-colors bg-transparent border-none rounded-6" onClick={() => setIsUploadModalOpen(false)}>
-                <IconClose size={20} />
-              </button>
-            </div>
-            <div className="p-6 flex flex-col gap-5">
-              <div className="border-2 border-dashed border-neutral-200 rounded-16 p-10 flex flex-col items-center justify-center gap-3 text-center transition-colors hover:border-primary-base hover:bg-primary-alpha-10 group cursor-pointer">
-                <div className="w-12 h-12 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500 group-hover:bg-white group-hover:text-primary-base transition-colors shadow-sm">
-                  <IconUpload size={24} />
-                </div>
-                <div>
-                  <p className="text-label-md text-neutral-950"><span className="text-primary-base">Click to browse</span> or drag and drop</p>
-                  <p className="text-para-sm text-neutral-500 mt-1">PDF, DOC, XLS, CSV (max. 50MB)</p>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease]" onClick={() => setIsUploadModalOpen(false)} />
+          <div className="relative bg-white rounded-20 shadow-2xl w-full max-w-[840px] h-[min(640px,90vh)] flex overflow-hidden animate-[fadeUp_0.4s_cubic-bezier(0.16,1,0.3,1)]">
+            
+            {/* Sidebar */}
+            <div className="w-[200px] bg-neutral-50 border-r border-neutral-200 flex flex-col p-4 gap-6 shrink-0">
+              <div className="flex flex-col gap-1">
+                <h3 className="text-para-xs font-bold text-neutral-400 uppercase tracking-wider px-2">Sources</h3>
+                <div className="flex flex-col gap-0.5 mt-2">
+                  <button 
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-10 text-label-sm transition-all ${uploadSource === 'local' ? 'bg-white shadow-sm text-primary-base font-bold' : 'text-neutral-600 hover:bg-neutral-200/50'}`}
+                    onClick={() => setUploadSource('local')}
+                  >
+                    <IconUpload size={16} /> My Device
+                  </button>
+                  <button 
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-10 text-label-sm transition-all ${uploadSource === 'drive' ? 'bg-white shadow-sm text-primary-base font-bold' : 'text-neutral-600 hover:bg-neutral-200/50'}`}
+                    onClick={() => setUploadSource('drive')}
+                  >
+                    <IconGoogleDrive size={16} /> Google Drive
+                  </button>
+                  <button 
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-10 text-label-sm transition-all ${uploadSource === 'dropbox' ? 'bg-white shadow-sm text-primary-base font-bold' : 'text-neutral-600 hover:bg-neutral-200/50'}`}
+                    onClick={() => setUploadSource('dropbox')}
+                  >
+                    <IconDropbox size={16} /> Dropbox
+                  </button>
+                  <button 
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-10 text-label-sm transition-all ${uploadSource === 'onedrive' ? 'bg-white shadow-sm text-primary-base font-bold' : 'text-neutral-600 hover:bg-neutral-200/50'}`}
+                    onClick={() => setUploadSource('onedrive')}
+                  >
+                    <IconOneDrive size={16} /> OneDrive
+                  </button>
+                  <button 
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-10 text-label-sm transition-all ${uploadSource === 'box' ? 'bg-white shadow-sm text-primary-base font-bold' : 'text-neutral-600 hover:bg-neutral-200/50'}`}
+                    onClick={() => setUploadSource('box')}
+                  >
+                    <IconBox size={16} /> Box
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
-                <div className="h-px bg-neutral-200 flex-1" />
-                <span className="text-para-xs text-neutral-400 uppercase font-medium tracking-wider">Or</span>
-                <div className="h-px bg-neutral-200 flex-1" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <button className="flex items-center justify-center gap-2 p-3 bg-white border border-neutral-200 rounded-10 text-label-sm text-neutral-700 hover:bg-neutral-50 transition-colors">
-                  <IconFile size={16} /> Import from Drive
+              <div className="flex flex-col gap-1 mt-auto">
+                <button 
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-10 text-label-sm transition-all ${uploadSource === 'url' ? 'bg-white shadow-sm text-primary-base font-bold' : 'text-neutral-600 hover:bg-neutral-200/50'}`}
+                  onClick={() => setUploadSource('url')}
+                >
+                  <IconAttach size={16} /> Import via URL
                 </button>
-                <button className="flex items-center justify-center gap-2 p-3 bg-white border border-neutral-200 rounded-10 text-label-sm text-neutral-700 hover:bg-neutral-50 transition-colors">
-                  <IconFile size={16} /> Add via URL
+                <button 
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-10 text-label-sm transition-all ${uploadSource === 'api' ? 'bg-white shadow-sm text-primary-base font-bold' : 'text-neutral-600 hover:bg-neutral-200/50'}`}
+                  onClick={() => setUploadSource('api')}
+                >
+                  <IconZap size={16} /> API Integration
                 </button>
               </div>
             </div>
-            <div className="p-4 border-t border-neutral-200 bg-neutral-50 flex justify-end gap-3">
-              <button className="px-4 py-2 text-label-sm text-neutral-600 bg-white border border-neutral-200 rounded-8 hover:bg-neutral-50 transition-colors" onClick={() => setIsUploadModalOpen(false)}>Cancel</button>
-              <button className="px-4 py-2 text-label-sm text-white bg-primary-base border-none rounded-8 hover:bg-primary-darker transition-colors">Upload</button>
+
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col min-w-0 bg-white">
+              <div className="flex items-center justify-between p-5 border-b border-neutral-100">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-h6 text-neutral-950 font-bold capitalize">
+                    {uploadSource === 'local' ? 'Upload files' : uploadSource === 'api' ? 'API Integrations' : `${uploadSource} Import`}
+                  </h2>
+                  {uploadSource !== 'local' && uploadSource !== 'url' && uploadSource !== 'api' && isConnected[uploadSource] && (
+                    <span className="px-2 py-0.5 bg-green-50 text-[10px] text-green-600 font-bold rounded-full border border-green-100">CONNECTED</span>
+                  )}
+                </div>
+                <button className="p-1 text-neutral-400 hover:text-neutral-950 transition-colors bg-transparent border-none rounded-8 hover:bg-neutral-100" onClick={() => setIsUploadModalOpen(false)}>
+                  <IconClose size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 flex flex-col">
+                {uploadSource === 'local' ? (
+                  /* Local Upload View */
+                  <div className="flex flex-col gap-6">
+                    <div className="border-2 border-dashed border-neutral-200 rounded-20 p-12 flex flex-col items-center justify-center gap-4 text-center transition-all hover:border-primary-base hover:bg-primary-alpha-5 group cursor-pointer">
+                      <div className="w-16 h-16 rounded-20 bg-neutral-50 flex items-center justify-center text-neutral-400 group-hover:bg-white group-hover:text-primary-base transition-all shadow-sm group-hover:shadow-md group-hover:-translate-y-1">
+                        <IconUpload size={32} />
+                      </div>
+                      <div>
+                        <p className="text-label-lg text-neutral-950 font-bold"><span className="text-primary-base">Click to browse</span> or drag and drop</p>
+                        <p className="text-para-sm text-neutral-500 mt-1">PDF, DOC, XLS, CSV up to 50MB per file</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : uploadSource === 'url' ? (
+                  /* URL Import View */
+                  <div className="flex flex-col gap-4 max-w-[480px] mx-auto w-full pt-12">
+                    <div className="w-16 h-16 rounded-20 bg-primary-alpha-10 flex items-center justify-center text-primary-base mb-2 mx-auto">
+                      <IconAttach size={32} />
+                    </div>
+                    <div className="text-center mb-6">
+                      <h3 className="text-h6 text-neutral-950 font-bold">Import from Web</h3>
+                      <p className="text-para-sm text-neutral-500 mt-1">Paste a direct link to a PDF or document.</p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-label-sm text-neutral-700 font-medium">Document URL</label>
+                      <input 
+                        className="w-full h-11 px-4 bg-neutral-50 border border-neutral-200 rounded-12 outline-none focus:border-primary-base focus:bg-white transition-all text-para-sm"
+                        placeholder="https://example.com/document.pdf"
+                      />
+                    </div>
+                    <Button className="mt-4">Fetch Document</Button>
+                  </div>
+                ) : uploadSource === 'api' ? (
+                  /* API Integration View */
+                  <div className="flex flex-col gap-4 max-w-[480px] mx-auto w-full pt-12">
+                    <div className="w-16 h-16 rounded-20 bg-primary-alpha-10 flex items-center justify-center text-primary-base mb-2 mx-auto">
+                      <IconZap size={32} />
+                    </div>
+                    <div className="text-center mb-6">
+                      <h3 className="text-h6 text-neutral-950 font-bold">Secure API Access</h3>
+                      <p className="text-para-sm text-neutral-500 mt-1">
+                        Build custom integrations using our secure API. Generate keys to get started.
+                      </p>
+                    </div>
+                    <Button 
+                      variant="primary"
+                      size="sm"
+                      className="mt-4"
+                    >
+                      Generate API Key
+                    </Button>
+                  </div>
+                ) : (
+                  /* Cloud Provider View */
+                  <div className="h-full flex flex-col">
+                    {!isConnected[uploadSource] ? (
+                      /* Not Connected View */
+                      <div className="flex-1 flex flex-col items-center justify-center text-center gap-6 animate-[fadeIn_0.3s_ease]">
+                        <div className="relative">
+                          <div className="w-20 h-20 rounded-24 bg-neutral-50 flex items-center justify-center shadow-inner">
+                            {uploadSource === 'drive' && <IconGoogleDrive size={40} />}
+                            {uploadSource === 'dropbox' && <IconDropbox size={40} />}
+                            {uploadSource === 'onedrive' && <IconOneDrive size={40} />}
+                            {uploadSource === 'box' && <IconBox size={40} />}
+                          </div>
+                          <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md border border-neutral-100">
+                            <IconLock size={14} className="text-neutral-400" />
+                          </div>
+                        </div>
+                        <div className="max-w-[320px]">
+                          <h3 className="text-h6 text-neutral-950 font-bold">Connect your {uploadSource}</h3>
+                          <p className="text-para-sm text-neutral-500 mt-2 leading-relaxed">
+                            Access your {uploadSource} folders and import documents directly into your library.
+                          </p>
+                        </div>
+                        <Button 
+                          variant="primary"
+                          onClick={() => handleConnect(uploadSource)}
+                          loading={isConnecting}
+                          rightIcon={<IconArrowRight size={14} />}
+                        >
+                          Link {uploadSource} Account
+                        </Button>
+                      </div>
+                    ) : (
+                      /* Connected Browser View */
+                      <div className="flex-1 flex flex-col min-h-0 animate-[fadeIn_0.3s_ease]">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="relative flex-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"><IconSearch size={16} /></span>
+                            <input 
+                              className="w-full h-10 pl-10 pr-4 bg-neutral-50 border border-neutral-200 rounded-10 outline-none focus:border-primary-base focus:bg-white transition-all text-para-sm"
+                              placeholder={`Search in ${uploadSource}...`}
+                              value={cloudSearch}
+                              onChange={e => setCloudSearch(e.target.value)}
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5 p-1 bg-neutral-100 rounded-8">
+                            <button className="p-1.5 bg-white shadow-xs rounded-6 text-neutral-950"><IconGrid size={14} /></button>
+                            <button className="p-1.5 text-neutral-400 hover:text-neutral-600"><IconMenu size={14} /></button>
+                          </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto pr-2 flex flex-col gap-1">
+                          {CLOUD_FILES.filter(f => f.name.toLowerCase().includes(cloudSearch.toLowerCase())).map(item => (
+                            <div key={item.id} className="flex flex-col">
+                              <div 
+                                className={`group flex items-center gap-3 p-2.5 rounded-10 transition-colors cursor-pointer ${selectedCloudFiles.has(item.id) ? 'bg-primary-alpha-5' : 'hover:bg-neutral-50'}`}
+                                onClick={() => toggleCloudFile(item.id)}
+                              >
+                                <div className={`w-5 h-5 rounded-6 border flex items-center justify-center transition-all ${selectedCloudFiles.has(item.id) ? 'bg-primary-base border-primary-base text-white' : 'border-neutral-300 bg-white group-hover:border-neutral-400'}`}>
+                                  {selectedCloudFiles.has(item.id) && <IconCheck size={12} />}
+                                </div>
+                                {item.type === 'folder' ? (
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <IconFolderSimple size={18} className="text-neutral-500 shrink-0" />
+                                    <span className="text-label-sm text-neutral-950 font-bold truncate">{item.name}</span>
+                                    <IconChevronDown size={14} className="text-neutral-400 ml-auto" />
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <IconFile size={18} className="text-neutral-400 shrink-0" />
+                                    <span className="text-label-sm text-neutral-950 truncate">{item.name}</span>
+                                    <span className="text-para-xs text-neutral-400 ml-auto whitespace-nowrap">{item.size}</span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {item.type === 'folder' && item.items && (
+                                <div className="ml-8 mt-0.5 mb-1 flex flex-col gap-0.5 border-l border-neutral-100">
+                                  {item.items.map(subItem => (
+                                    <div 
+                                      key={subItem.id} 
+                                      className={`group flex items-center gap-3 p-2 rounded-8 transition-colors cursor-pointer ml-3 ${selectedCloudFiles.has(subItem.id) ? 'bg-primary-alpha-5' : 'hover:bg-neutral-50'}`}
+                                      onClick={(e) => { e.stopPropagation(); toggleCloudFile(subItem.id); }}
+                                    >
+                                      <div className={`w-4 h-4 rounded-4 border flex items-center justify-center transition-all ${selectedCloudFiles.has(subItem.id) ? 'bg-primary-base border-primary-base text-white' : 'border-neutral-300 bg-white group-hover:border-neutral-400'}`}>
+                                        {selectedCloudFiles.has(subItem.id) && <IconCheck size={10} />}
+                                      </div>
+                                      <IconDocFile size={16} className="text-neutral-400 shrink-0" />
+                                      <span className="text-para-sm text-neutral-700 truncate">{subItem.name}</span>
+                                      <span className="text-para-xs text-neutral-400 ml-auto whitespace-nowrap">{subItem.size}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-neutral-100 bg-neutral-50/50 flex flex-col gap-3">
+                {isImporting && (
+                  <div className="flex flex-col gap-2 animate-[fadeUp_0.2s_ease]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-para-xs font-bold text-primary-base">Importing {selectedCloudFiles.size} files...</span>
+                      <span className="text-para-xs font-bold text-neutral-950">{Math.round(importProgress)}%</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-neutral-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary-base transition-all duration-300 ease-out" style={{ width: `${importProgress}%` }} />
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {uploadSource !== 'local' && isConnected[uploadSource] && (
+                      <button className="text-para-xs text-neutral-400 hover:text-error-base transition-colors font-medium underline underline-offset-2" onClick={() => setIsConnected(prev => ({ ...prev, [uploadSource]: false }))}>
+                        Disconnect account
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button 
+                      variant="neutral" 
+                      mode="stroke"
+                      size="sm"
+                      onClick={() => setIsUploadModalOpen(false)}
+                      disabled={isImporting}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      variant="primary"
+                      size="sm"
+                      disabled={(uploadSource !== 'local' && selectedCloudFiles.size === 0)}
+                      loading={isImporting}
+                      onClick={uploadSource === 'local' ? undefined : handleImport}
+                    >
+                      {selectedCloudFiles.size > 0 ? `Import ${selectedCloudFiles.size} files` : 'Upload'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { 
   IconClose, IconUser, IconSettings, IconLock, IconGrid, 
-  IconSparkles, IconChevronDown, IconCheck, IconSearch, IconPlus 
+  IconSparkles, IconChevronDown, IconCheck, IconSearch, IconPlus, IconArrowRight
 } from '../../lib/icons';
+import { IconGoogleDrive, IconDropbox, IconOneDrive, IconBox } from '../../components/ui/BrandIcons';
+import { Button } from '../../components/ui/Button';
 
 interface Props {
   open: boolean;
@@ -157,24 +159,36 @@ export function SettingsModal({ open, onClose }: Props) {
                   <p className="text-[13px] text-neutral-500">Plan details and usage overview.</p>
                 </div>
                 <div className="flex-1 flex flex-col gap-6 w-full max-w-[500px]">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full border border-neutral-200 flex items-center justify-center text-primary-base shrink-0"><IconSparkles size={18} /></div>
-                      <div className="flex flex-col">
-                        <p className="text-[14px] font-medium text-neutral-950">Professional Plan</p>
-                        <p className="text-[12px] text-neutral-400 mt-0.5">Team plan for up to 10 members</p>
+                  <div className="p-5 bg-neutral-50 rounded-20 border border-neutral-200">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary-alpha-10 flex items-center justify-center text-primary-base shrink-0"><IconSparkles size={18} /></div>
+                        <div className="flex flex-col">
+                          <p className="text-[15px] font-bold text-neutral-950">Professional Organization</p>
+                          <p className="text-[12px] text-neutral-500 mt-0.5">Shared workspace for up to 10 members</p>
+                        </div>
+                      </div>
+                      <span className="text-[16px] font-bold text-neutral-950">$49<span className="text-neutral-400 font-normal text-[13px]">/mo</span></span>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[13px] font-medium text-neutral-700">Workspace Credit Usage</span>
+                          <span className="text-[13px] font-bold text-primary-base">1,450 / 2,000</span>
+                        </div>
+                        <SegmentedBar percentage={72.5} color="var(--primary-base)" />
+                      </div>
+                      <div className="flex items-center gap-3 pt-2">
+                        <Button variant="primary" size="sm">Upgrade Plan</Button>
+                        <Button variant="neutral" mode="stroke" size="sm">Purchase Credits</Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-[14px] font-medium text-neutral-950">$49 <span className="text-neutral-400 font-normal text-[13px]">/ month</span></span>
-                      <button className="px-4 py-1.5 border border-neutral-200 rounded-8 bg-white text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 transition-colors">Manage</button>
-                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-y-4 gap-x-8 mt-2 border-t border-neutral-100 pt-6">
-                    <div className="flex flex-col gap-1"><span className="text-[13px] text-neutral-500">Used seats</span></div><div className="flex flex-col gap-1"><span className="text-[14px] font-medium text-neutral-950">3/10 seats</span></div>
-                    <div className="flex flex-col gap-1"><span className="text-[13px] text-neutral-500">Plan renewal</span></div><div className="flex flex-col gap-1"><span className="text-[14px] font-medium text-neutral-950">June 20, 2025</span></div>
-                    <div className="flex flex-col gap-1"><span className="text-[13px] text-neutral-500">Status</span></div><div className="flex flex-col gap-1"><span className="text-[14px] font-medium text-neutral-950">Active</span></div>
-                    <div className="flex flex-col gap-1"><span className="text-[13px] text-neutral-500">Active today</span></div><div className="flex flex-col gap-1"><span className="text-[14px] font-medium text-neutral-950">3 members</span></div>
+
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-8 mt-2 px-1">
+                    <div className="flex flex-col gap-1"><span className="text-[13px] text-neutral-500">Seat usage</span></div><div className="flex flex-col gap-1"><span className="text-[14px] font-medium text-neutral-950">4 / 10 active seats</span></div>
+                    <div className="flex flex-col gap-1"><span className="text-[13px] text-neutral-500">Next renewal</span></div><div className="flex flex-col gap-1"><span className="text-[14px] font-medium text-neutral-950">June 20, 2025</span></div>
                   </div>
                 </div>
               </div>
@@ -410,26 +424,140 @@ export function SettingsModal({ open, onClose }: Props) {
                       <IconSearch size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                       <input type="text" placeholder="Search team members..." className="w-full pl-9 pr-3 py-2 bg-white border border-neutral-200 rounded-8 text-[13px] outline-none focus:border-primary-base focus:ring-1 focus:ring-primary-base transition-all" />
                     </div>
-                    <button className="flex items-center gap-2 px-3 py-2 border border-neutral-200 rounded-8 bg-white text-[13px] text-neutral-700 hover:bg-neutral-50 transition-colors">
-                      All roles <IconChevronDown size={14} className="text-neutral-400" />
-                    </button>
+                    <Button variant="primary" size="sm" leftIcon={<IconPlus size={14} />}>Invite Member</Button>
                   </div>
                   <div className="flex flex-col gap-0 border-t border-neutral-100 mt-2 pt-2">
                     {[
-                      { name: 'Sophia Williams', email: 'sophia@gmail.com', initial: 'S', color: 'bg-amber-100 text-amber-700' },
-                      { name: 'James Brown', email: 'james@gmail.com', initial: 'J', color: 'bg-neutral-200 text-neutral-700' },
-                      { name: 'Arthur Taylor', email: 'arthur@gmail.com', initial: 'A', color: 'bg-blue-100 text-blue-700' },
-                      { name: 'Emma Wright', email: 'emma@gmail.com', initial: 'E', color: 'bg-cyan-100 text-cyan-700' },
+                      { name: 'Sophia Williams', email: 'sophia@gmail.com', initial: 'S', color: 'bg-amber-100 text-amber-700', role: 'Admin', credits: 80 },
+                      { name: 'James Brown', email: 'james@gmail.com', initial: 'J', color: 'bg-neutral-200 text-neutral-700', role: 'Admin', credits: 100 },
+                      { name: 'Arthur Taylor', email: 'arthur@gmail.com', initial: 'A', color: 'bg-blue-100 text-blue-700', role: 'Member', credits: 45 },
+                      { name: 'Emma Wright', email: 'emma@gmail.com', initial: 'E', color: 'bg-cyan-100 text-cyan-700', role: 'Member', credits: 12 },
                     ].map((user, i) => (
-                      <div key={i} className="flex items-center justify-between py-3 border-b border-neutral-100 last:border-0">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${user.color}`}>{user.initial}</div>
-                          <span className="text-[13px] font-medium text-neutral-950">{user.name}</span>
+                      <div key={i} className="flex flex-col py-4 border-b border-neutral-100 last:border-0 gap-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${user.color}`}>{user.initial}</div>
+                            <div className="flex flex-col">
+                              <span className="text-[13px] font-medium text-neutral-950">{user.name}</span>
+                              <span className="text-[12px] text-neutral-500">{user.email}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button className="flex items-center gap-1.5 px-2.5 py-1.5 border border-neutral-100 rounded-6 bg-neutral-50 text-[12px] text-neutral-700 hover:bg-neutral-100 transition-colors">
+                              {user.role} <IconChevronDown size={12} className="text-neutral-400" />
+                            </button>
+                            <button className="p-1.5 text-neutral-400 hover:text-error-base transition-colors"><IconClose size={14} /></button>
+                          </div>
                         </div>
-                        <span className="text-[13px] text-neutral-500">{user.email}</span>
+                        <div className="flex items-center gap-4 pl-11">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">Credit Allocation</span>
+                              <span className="text-[12px] font-bold text-neutral-950">{user.credits}%</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden flex">
+                              <div className="h-full bg-primary-base" style={{ width: `${user.credits}%` }} />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+            </div>
+          </>
+        );
+
+      case 'integrations':
+        return (
+          <>
+            <div className="flex items-start justify-between p-[32px_40px_24px]">
+              <div>
+                <h2 className="text-[18px] font-semibold text-neutral-950 mb-1">Integrations</h2>
+                <p className="text-[14px] text-neutral-500">Connect your favorite tools to import documents.</p>
+              </div>
+              <button className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 rounded-8 transition-colors duration-200 shrink-0 hover:text-neutral-950 hover:bg-neutral-100" onClick={onClose}>
+                <IconClose size={18} />
+              </button>
+            </div>
+            <div className="px-[40px] pb-[40px] flex flex-col">
+              <div className="py-8 border-t border-neutral-200 flex flex-col gap-6">
+                <div className="flex flex-col gap-1 mb-2">
+                  <h3 className="text-[14px] font-semibold text-neutral-950">Cloud Storage</h3>
+                  <p className="text-[13px] text-neutral-500">Bulk import files from your storage providers.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-3">
+                  {[
+                    { id: 'drive', name: 'Google Drive', icon: <IconGoogleDrive size={24} />, description: 'Import documents from your Google Drive account.', connected: true },
+                    { id: 'dropbox', name: 'Dropbox', icon: <IconDropbox size={24} />, description: 'Sync folders and documents from Dropbox.', connected: false },
+                    { id: 'onedrive', name: 'OneDrive', icon: <IconOneDrive size={24} />, description: 'Access your Microsoft 365 documents.', connected: false },
+                    { id: 'box', name: 'Box', icon: <IconBox size={24} />, description: 'High-security document management integration.', connected: false },
+                  ].map((integration) => (
+                    <div key={integration.id} className="flex items-center justify-between p-4 bg-neutral-50 rounded-16 border border-neutral-200 hover:border-neutral-300 transition-all">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-12 bg-white flex items-center justify-center shadow-sm border border-neutral-100">
+                          {integration.icon}
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14px] font-bold text-neutral-950">{integration.name}</span>
+                            {integration.connected && (
+                              <span className="flex items-center gap-1 text-[10px] text-green-600 font-bold bg-green-50 px-1.5 py-0.5 rounded-full border border-green-100">
+                                <IconCheck size={10} /> CONNECTED
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[12px] text-neutral-500 mt-0.5">{integration.description}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {integration.connected ? (
+                          <Button 
+                            variant="error" 
+                            mode="lighter" 
+                            size="sm"
+                          >
+                            Disconnect
+                          </Button>
+                        ) : (
+                          <Button 
+                            variant="primary" 
+                            size="sm"
+                            rightIcon={<IconArrowRight size={14} />}
+                          >
+                            Connect
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="py-8 border-t border-neutral-200 flex flex-col gap-6">
+                <div className="flex flex-col gap-1 mb-2">
+                  <h3 className="text-[14px] font-semibold text-neutral-950">Developer Tools</h3>
+                  <p className="text-[13px] text-neutral-500">Automate your document workflows.</p>
+                </div>
+                
+                <div className="p-5 bg-neutral-950 rounded-20 text-white relative overflow-hidden">
+                  <div className="relative z-10">
+                    <h4 className="text-[15px] font-bold">API Access</h4>
+                    <p className="text-[13px] text-white/60 mt-1 max-w-[340px]">
+                      Build custom integrations using our secure API. Generate keys to get started.
+                    </p>
+                    <Button 
+                      variant="primary"
+                      size="sm"
+                      className="mt-4"
+                    >
+                      Generate API Key
+                    </Button>
+                  </div>
+                  <div className="absolute top-0 right-0 w-32 h-full bg-gradient-to-l from-primary-base/20 to-transparent pointer-events-none" />
+                  <IconSparkles size={120} className="absolute -bottom-10 -right-10 text-white/5 pointer-events-none rotate-12" />
                 </div>
               </div>
             </div>

@@ -23,7 +23,7 @@ const sizeStyles: Record<Size, string> = {
 
 const variantModeStyles: Record<Variant, Record<Mode, string>> = {
   primary: {
-    filled:  'bg-primary-gradient text-white hover:bg-primary-gradient-hover shadow-sm',
+    filled:  'bg-primary-base bg-primary-gradient text-white hover:bg-primary-gradient-hover shadow-sm',
     stroke:  'bg-white text-primary-base shadow-[inset_0_0_0_1px_theme(colors.neutral.950)] hover:bg-primary-alpha-10',
     lighter: 'bg-primary-alpha-10 text-primary-base hover:bg-white hover:shadow-[inset_0_0_0_1px_theme(colors.neutral.950)]',
     ghost:   'bg-transparent text-primary-base hover:bg-primary-alpha-10',
