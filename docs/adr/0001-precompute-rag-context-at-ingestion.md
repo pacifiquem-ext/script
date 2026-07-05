@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Precompute document text and chunk embeddings at ingestion; never re-read source files for RAG
@@ -32,11 +32,6 @@ time:
   progress for it (already required generally by `AGENTS.md` §2.2; this is the concrete case).
 - Changing the chunking strategy or embedding model later requires a backfill job to re-embed
   existing documents — budget for that as a maintenance capability, not a one-time script.
-- **Anthropic Claude has no first-party embeddings endpoint**, so chunk embedding requires a
-  second AI vendor beyond the one already decided in `AGENTS.md` §4. This is a real, hard-to-reverse
-  choice (vector dimensionality is baked into the schema and every stored embedding) and is
-  intentionally left as a pending decision — see `AGENTS.md` §13. Recommended default if asked to
-  decide: **Voyage AI**, Anthropic's own recommended embeddings partner — but confirm with the user
-  before implementing, don't assume it silently.
-- This decision, plus the `Document`/chunk schema it implies, still depends on the domain schema
-  being confirmed (`AGENTS.md` §13) — implement the pipeline once that schema is agreed, not before.
+  `Document.embeddingModel` / `embeddingDimensions` record what produced current chunks;
+  `needsEmbeddingBackfill()` in `@script/shared` detects drift from the active model config.
+- Chunk embeddings use **Voyage AI `voyage-3.5` at 1024 dimensions** (ADR 0002).
