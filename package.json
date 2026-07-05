@@ -7,8 +7,8 @@
   },
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "concurrently -n client,server -c blue,green \"pnpm --filter @script/client dev\" \"pnpm --filter @script/server dev\"",
-    "build": "pnpm --filter @script/server build && pnpm --filter @script/client build",
+    "dev": "pnpm --filter @script/shared build && concurrently -n client,server -c blue,green \"pnpm --filter @script/client dev\" \"pnpm --filter @script/server dev\"",
+    "build": "pnpm --filter @script/shared build && pnpm --filter @script/server build && pnpm --filter @script/client build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
