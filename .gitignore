@@ -11,6 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
+*.tsbuildinfo
+
+# Env files — never commit real secrets. Only .env.example files are tracked.
+.env
+.env.*
+!.env.example
+!.env.*.example
 
 # Editor directories and files
 .vscode/*
@@ -23,3 +30,7 @@ dist-ssr
 *.sln
 *.sw?
 config.bat
+
+# pnpm
+.pnpm-store/
+

@@ -1,0 +1,21 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
+}
+
+// Real domain models (User, Workspace, Folder, Document, ...) are intentionally
+// not defined yet — schema design is pending confirmation with the project
+// owner (see AGENTS.md §13, TODO.md). The model below exists only because
+// `prisma generate` refuses to emit a client with zero models — delete it the
+// moment real models are added.
+model Placeholder {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+}

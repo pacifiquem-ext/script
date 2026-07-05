@@ -1,37 +1,23 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "script",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+  "engines": {
+    "node": ">=20"
   },
-  "dependencies": {
-    "@hugeicons/core-free-icons": "^4.1.1",
-    "@hugeicons/react": "^1.1.6",
-    "lucide-react": "^1.11.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^7.14.2"
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "concurrently -n client,server -c blue,green \"pnpm --filter @script/client dev\" \"pnpm --filter @script/server dev\"",
+    "build": "pnpm --filter @script/server build && pnpm --filter @script/client build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@eslint/js": "^9.9.1",
-    "@types/node": "^25.6.0",
-    "@types/react": "^18.3.5",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.5.0",
-    "eslint": "^9.9.1",
-    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
-    "eslint-plugin-react-refresh": "^0.4.11",
-    "globals": "^15.9.0",
-    "postcss": "^8.5.14",
-    "tailwindcss": "^3.4.19",
-    "typescript": "^5.5.3",
-    "typescript-eslint": "^8.3.0",
-    "vite": "^5.4.2"
+    "concurrently": "^9.1.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.3"
   }
 }
