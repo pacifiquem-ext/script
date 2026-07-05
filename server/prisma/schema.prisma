@@ -10,12 +10,343 @@ datasource db {
   extensions = [vector]
 }
 
-// Real domain models (User, Workspace, Folder, Document, ...) are intentionally
-// not defined yet — schema design is pending confirmation with the project
-// owner (see AGENTS.md §13, TODO.md). The model below exists only because
-// `prisma generate` refuses to emit a client with zero models — delete it the
-// moment real models are added.
-model Placeholder {
+enum WorkspaceRole {
+  owner
+  admin
+  member
+}
+
+enum DocumentStatus {
+  pending
+  processing
+  ready
+  failed
+}
+
+enum DocumentSource {
+  local
+  url
+  drive
+  dropbox
+  onedrive
+  box
+}
+
+enum MessageRole {
+  user
+  assistant
+}
+
+enum IntegrationProvider {
+  drive
+  dropbox
+  onedrive
+  box
+}
+
+enum IntegrationStatus {
+  connected
+  disconnected
+  error
+}
+
+enum OtpPurpose {
+  signup_verify
+  password_reset
+  login
+}
+
+enum WorkspacePlan {
+  free
+  pro
+  team
+}
+
+enum CreditLedgerReason {
+  signup_grant
+  admin_adjust
+  chat_usage
+  ingestion_usage
+  purchase_pending
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  name            String
+  avatarStorageKey String?
+  emailVerifiedAt DateTime?
+  lastWorkspaceId String?
+  preferences     Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  lastWorkspace   Workspace?        @relation("UserLastWorkspace", fields: [lastWorkspaceId], references: [id], onDelete: SetNull)
+  memberships     WorkspaceMember[]
+  refreshTokens   RefreshToken[]
+  emailOtps       EmailOtp[]
+  documents       Document[]        @relation("DocumentCreatedBy")
+  conversations   Conversation[]
+  apiKeys         ApiKey[]          @relation("ApiKeyCreatedBy")
+  creditLedger    CreditLedgerEntry[]
+
+  @@index([lastWorkspaceId])
+}
+
+model RefreshToken {
+  id                String    @id @default(cuid())
+  userId            String
+  tokenHash         String    @unique
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?   @unique
+  userAgent         String?
+  ip                String?
+  createdAt         DateTime  @default(now())
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy RefreshToken? @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  replaces   RefreshToken? @relation("RefreshTokenRotation")
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model EmailOtp {
+  id         String     @id @default(cuid())
+  userId     String?
+  email      String
+  purpose    OtpPurpose
+  codeHash   String
+  attempts   Int        @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, purpose])
+  @@index([expiresAt])
+}
+
+model Workspace {
+  id        String        @id @default(cuid())
+  name      String
+  plan      WorkspacePlan @default(free)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  members           WorkspaceMember[]
+  folders           Folder[]
+  documents         Document[]
+  documentChunks    DocumentChunk[]
+  conversations     Conversation[]
+  integrations      Integration[]
+  apiKeys           ApiKey[]
+  creditBalance     CreditBalance?
+  creditLedger      CreditLedgerEntry[]
+  lastWorkspaceUsers User[] @relation("UserLastWorkspace")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(member)
+  creditShare Int?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Folder {
+  id          String   @id @default(cuid())
+  workspaceId String
+  parentId    String?
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parent    Folder?    @relation("FolderTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  Folder[]   @relation("FolderTree")
+  documents Document[]
+
+  @@index([workspaceId, parentId])
+}
+
+model Document {
+  id                  String         @id @default(cuid())
+  workspaceId         String
+  folderId            String?
+  name                String
+  mimeType            String
+  byteSize            Int
+  storageKey          String
+  source              DocumentSource
+  sourceUrl           String?
+  status              DocumentStatus @default(pending)
+  failureReason       String?
+  pageCount           Int?
+  extractedText       String?        @db.Text
+  embeddingModel      String?
+  embeddingDimensions Int?
+  createdById         String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  processedAt         DateTime?
+
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folder     Folder?            @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdBy  User?              @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  chunks     DocumentChunk[]
+  mentions   MessageMention[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, folderId])
+  @@index([workspaceId, createdAt])
+  @@index([createdById])
+  @@index([embeddingModel, embeddingDimensions, status])
+}
+
+model DocumentChunk {
+  id          String                 @id @default(cuid())
+  documentId  String
+  workspaceId String
+  position    Int
+  content     String                 @db.Text
+  embedding   Unsupported("vector(1024)")?
+  createdAt   DateTime               @default(now())
+
+  document  Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, position])
+  @@index([workspaceId, documentId])
+}
+
+model Conversation {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  title       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@index([workspaceId, updatedAt])
+  @@index([userId, updatedAt])
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String      @db.Text
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  mentions     MessageMention[]
+
+  @@index([conversationId, createdAt])
+}
+
+model MessageMention {
+  messageId  String
+  documentId String
+
+  message  Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, documentId])
+  @@index([documentId])
+}
+
+model Integration {
+  id                    String              @id @default(cuid())
+  workspaceId           String
+  provider              IntegrationProvider
+  accountEmail          String?
+  accessTokenEncrypted  String              @db.Text
+  refreshTokenEncrypted String?             @db.Text
+  tokenExpiresAt        DateTime?
+  scopes                String[]            @default([])
+  status                IntegrationStatus   @default(connected)
+  statusMessage         String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider, accountEmail])
+  @@index([workspaceId, provider])
+}
+
+model ApiKey {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  name         String
+  keyPrefix    String
+  keyHash      String    @unique
+  createdById  String?
+  lastUsedAt   DateTime?
+  useCount     Int       @default(0)
+  rateLimitRpm Int       @default(60)
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?             @relation("ApiKeyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  auditEvents ApiKeyAuditEvent[]
+
+  @@index([workspaceId, revokedAt])
+  @@index([keyPrefix])
+}
+
+model ApiKeyAuditEvent {
   id        String   @id @default(cuid())
+  apiKeyId  String
+  action    String
+  ip        String?
+  userAgent String?
   createdAt DateTime @default(now())
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId, createdAt])
+}
+
+model CreditBalance {
+  workspaceId String   @id
+  balance     Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model CreditLedgerEntry {
+  id          String             @id @default(cuid())
+  workspaceId String
+  userId      String?
+  delta       Int
+  reason      CreditLedgerReason
+  refType     String?
+  refId       String?
+  note        String?
+  createdAt   DateTime           @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([userId])
 }
