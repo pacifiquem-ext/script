@@ -86,6 +86,10 @@ Lives in `client/`. Built with **React 18**, **Vite** (SWC-based fast refresh), 
 
 - **Search & retrieval**: semantic search across the Library based on chat input, via Anthropic
   Claude (see `AGENTS.md` §4 and the `claude-api` skill).
+- **Ingestion, not query time, does the expensive work**: text extraction, chunking, and embedding
+  happen once per document at upload time in a background job; chat/query time is only
+  embed-the-query + a pgvector similarity search over precomputed chunks — never a re-read of the
+  source file. See [ADR 0001](docs/adr/0001-precompute-rag-context-at-ingestion.md).
 - **Context injection**: handle specific file references passed from the frontend's "drop into
   chat" action.
 - **Streaming**: chat responses stream to the client rather than waiting for a full completion.
