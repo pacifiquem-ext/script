@@ -1,37 +1,137 @@
+import { Suspense, lazy } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-
+import { GuestOnly } from '../components/auth/GuestOnly';
+import { RequireAuth } from '../components/auth/RequireAuth';
 import { LandingLayout } from '../components/layout/LandingLayout';
 import { AppLayout } from '../components/layout/AppLayout';
+import { LoadingState } from '../components/ui/LoadingState';
 import { LandingPage } from '../pages/landing/LandingPage';
-import { LoginPage } from '../pages/app/LoginPage';
-import { SignupPage } from '../pages/app/SignupPage';
-import { ForgotPasswordPage } from '../pages/app/ForgotPasswordPage';
-import { OtpPage } from '../pages/app/OtpPage';
-import { ResetPasswordPage } from '../pages/app/ResetPasswordPage';
-import { ResetSuccessPage } from '../pages/app/ResetSuccessPage';
-import { SignupSuccessPage } from '../pages/app/SignupSuccessPage';
-import { ChatPage } from '../pages/app/ChatPage';
-import { LibraryPage } from '../pages/app/LibraryPage';
+
+const LoginPage = lazy(() =>
+  import('../pages/app/LoginPage').then((m) => ({ default: m.LoginPage })),
+);
+const SignupPage = lazy(() =>
+  import('../pages/app/SignupPage').then((m) => ({ default: m.SignupPage })),
+);
+const ForgotPasswordPage = lazy(() =>
+  import('../pages/app/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })),
+);
+const OtpPage = lazy(() => import('../pages/app/OtpPage').then((m) => ({ default: m.OtpPage })));
+const ResetPasswordPage = lazy(() =>
+  import('../pages/app/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })),
+);
+const ResetSuccessPage = lazy(() =>
+  import('../pages/app/ResetSuccessPage').then((m) => ({ default: m.ResetSuccessPage })),
+);
+const SignupSuccessPage = lazy(() =>
+  import('../pages/app/SignupSuccessPage').then((m) => ({ default: m.SignupSuccessPage })),
+);
+const ChatPage = lazy(() => import('../pages/app/ChatPage').then((m) => ({ default: m.ChatPage })));
+const LibraryPage = lazy(() =>
+  import('../pages/app/LibraryPage').then((m) => ({ default: m.LibraryPage })),
+);
+
+function Lazy({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<LoadingState />}>{children}</Suspense>;
+}
 
 export const router = createBrowserRouter([
   {
     element: <LandingLayout />,
     children: [{ path: '/', element: <LandingPage /> }],
   },
-  { path: '/app/login', element: <LoginPage /> },
-  { path: '/app/signup', element: <SignupPage /> },
-  { path: '/app/forgot-password', element: <ForgotPasswordPage /> },
-  { path: '/app/verify-otp', element: <OtpPage /> },
-  { path: '/app/reset-password', element: <ResetPasswordPage /> },
-  { path: '/app/reset-success', element: <ResetSuccessPage /> },
-  { path: '/app/signup-success', element: <SignupSuccessPage /> },
+  {
+    path: '/app/login',
+    element: (
+      <GuestOnly>
+        <Lazy>
+          <LoginPage />
+        </Lazy>
+      </GuestOnly>
+    ),
+  },
+  {
+    path: '/app/signup',
+    element: (
+      <GuestOnly>
+        <Lazy>
+          <SignupPage />
+        </Lazy>
+      </GuestOnly>
+    ),
+  },
+  {
+    path: '/app/forgot-password',
+    element: (
+      <GuestOnly>
+        <Lazy>
+          <ForgotPasswordPage />
+        </Lazy>
+      </GuestOnly>
+    ),
+  },
+  {
+    path: '/app/verify-otp',
+    element: (
+      <GuestOnly>
+        <Lazy>
+          <OtpPage />
+        </Lazy>
+      </GuestOnly>
+    ),
+  },
+  {
+    path: '/app/reset-password',
+    element: (
+      <GuestOnly>
+        <Lazy>
+          <ResetPasswordPage />
+        </Lazy>
+      </GuestOnly>
+    ),
+  },
+  {
+    path: '/app/reset-success',
+    element: (
+      <Lazy>
+        <ResetSuccessPage />
+      </Lazy>
+    ),
+  },
+  {
+    path: '/app/signup-success',
+    element: (
+      <Lazy>
+        <SignupSuccessPage />
+      </Lazy>
+    ),
+  },
   {
     path: '/app',
-    element: <AppLayout />,
+    element: <RequireAuth />,
     children: [
-      { index: true, element: <Navigate to="/app/library" replace /> },
-      { path: 'chat', element: <ChatPage /> },
-      { path: 'library', element: <LibraryPage /> },
+      {
+        element: <AppLayout />,
+        children: [
+          { index: true, element: <Navigate to="/app/library" replace /> },
+          {
+            path: 'chat',
+            element: (
+              <Lazy>
+                <ChatPage />
+              </Lazy>
+            ),
+          },
+          {
+            path: 'library',
+            element: (
+              <Lazy>
+                <LibraryPage />
+              </Lazy>
+            ),
+          },
+        ],
+      },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },
