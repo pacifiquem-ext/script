@@ -51,6 +51,11 @@ vendor, this driver works unmodified against:
 
 ## Status
 
-Both drivers (`server/src/storage/uploadthing.ts`, `server/src/storage/s3.ts`) are currently
-**boilerplate stubs** that throw on use — see `TODO.md`. Implement `uploadthing.ts` first (it's
-the default), then `s3.ts` against a real Garage instance before shipping self-hosting support.
+Both drivers are implemented:
+
+- `server/src/storage/uploadthing.ts` uses the UploadThing `UTApi` with `UPLOADTHING_TOKEN`.
+- `server/src/storage/s3.ts` targets any S3-compatible endpoint (Garage recommended) via the AWS SDK.
+
+Unit tests mock the SDKs. Verify UploadThing with a real token via a manual upload once Library
+upload routes land; verify S3/Garage with the env block above before enabling `STORAGE_DRIVER=s3`
+in production.
