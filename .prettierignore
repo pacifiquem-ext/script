@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-ssr
+pnpm-lock.yaml
+*.tsbuildinfo
+client/.bolt
+
+# Vendored skill content — hashes in skills-lock.json are pinned to exact original bytes.
+.agents/
