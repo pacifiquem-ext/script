@@ -1,23 +1,45 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { loginBodySchema } from '@script/shared';
 import { IconMail, IconLockPassword, IconEye, IconEyeOff } from '../../lib/icons';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { apiRequest } from '../../lib/api-client';
+import { getErrorMessage } from '../../lib/form-errors';
+import { useAuth } from '../../contexts/useAuth';
 
 export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { refresh } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const body = loginBodySchema.parse({ email, password });
+      const result = await apiRequest<
+        | { requiresVerification: true; email: string }
+        | { requiresVerification: false; user: { id: string } }
+      >('/auth/login', { method: 'POST', body });
+      if (result.requiresVerification) {
+        navigate('/app/verify-otp', {
+          state: { email: result.email, purpose: 'signup_verify' },
+        });
+        return;
+      }
+      await refresh();
+      navigate('/app/library');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Unable to sign in'));
+    } finally {
       setLoading(false);
-      navigate('/app/chat');
-    }, 800);
+    }
   };
 
   return (
@@ -75,15 +97,7 @@ export function LoginPage() {
             }
             required
           />
-
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1.5 text-neutral-600 cursor-pointer select-none text-para-sm">
-              <input
-                type="checkbox"
-                className="w-[15px] h-[15px] accent-primary-base cursor-pointer"
-              />
-              <span>Remember me</span>
-            </label>
+          <div className="flex items-center justify-end">
             <Link
               to="/app/forgot-password"
               className="text-label-sm text-primary-base font-medium no-underline transition-colors hover:text-primary-darker"
@@ -91,7 +105,7 @@ export function LoginPage() {
               Forgot password?
             </Link>
           </div>
-
+          {error && <p className="text-para-sm text-error-base text-center">{error}</p>}
           <Button type="submit" size="md" loading={loading} className="self-center min-w-[200px]">
             Sign in
           </Button>

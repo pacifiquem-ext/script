@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { signUpBodySchema } from '@script/shared';
 import { IconMail, IconLockPassword, IconEye, IconEyeOff } from '../../lib/icons';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { apiRequest } from '../../lib/api-client';
+import { getErrorMessage } from '../../lib/form-errors';
 
 export function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -10,15 +13,28 @@ export function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const body = signUpBodySchema.parse({ name, email, password });
+      const result = await apiRequest<{ requiresVerification: true; email: string }>(
+        '/auth/signup',
+        {
+          method: 'POST',
+          body,
+        },
+      );
+      navigate('/app/verify-otp', { state: { email: result.email, purpose: 'signup_verify' } });
+    } catch (err) {
+      setError(getErrorMessage(err, 'Unable to create account'));
+    } finally {
       setLoading(false);
-      navigate('/app/signup-success');
-    }, 800);
+    }
   };
 
   return (
@@ -31,7 +47,6 @@ export function SignupPage() {
         className="absolute inset-0 bg-[radial-gradient(ellipse_100%_70%_at_50%_0%,transparent_0%,theme(colors.neutral.0)_75%)] pointer-events-none z-10"
         aria-hidden
       />
-
       <div className="w-full max-w-[400px] p-8 flex flex-col gap-6 relative z-20">
         <div className="flex justify-center">
           <Link to="/" className="flex items-center gap-2 no-underline">
@@ -41,12 +56,10 @@ export function SignupPage() {
             </span>
           </Link>
         </div>
-
         <div className="text-center flex flex-col gap-1">
           <h1 className="text-h5 text-neutral-950">Create an account</h1>
           <p className="text-para-sm text-neutral-600">Start organizing your documents today</p>
         </div>
-
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <Input
             label="Full name"
@@ -85,7 +98,7 @@ export function SignupPage() {
             hint="Must be at least 8 characters."
             required
           />
-
+          {error && <p className="text-para-sm text-error-base text-center">{error}</p>}
           <Button
             type="submit"
             size="md"
@@ -94,26 +107,7 @@ export function SignupPage() {
           >
             Create account
           </Button>
-
-          <p className="text-para-xs text-neutral-400 text-center mt-2">
-            By signing up, you agree to our{' '}
-            <a
-              href="/terms"
-              className="text-neutral-600 underline underline-offset-2 transition-colors hover:text-neutral-950"
-            >
-              Terms of Service
-            </a>{' '}
-            and{' '}
-            <a
-              href="/privacy"
-              className="text-neutral-600 underline underline-offset-2 transition-colors hover:text-neutral-950"
-            >
-              Privacy Policy
-            </a>
-            .
-          </p>
         </form>
-
         <p className="text-para-sm text-neutral-600 text-center">
           Already have an account?{' '}
           <Link

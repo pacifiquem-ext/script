@@ -1,8 +1,14 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { resetPasswordBodySchema } from '@script/shared';
 import { IconLockPassword, IconEye, IconEyeOff } from '../../lib/icons';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { apiRequest } from '../../lib/api-client';
+import { getErrorMessage } from '../../lib/form-errors';
+import { useAuth } from '../../contexts/useAuth';
+
+type LocationState = { email?: string; code?: string };
 
 export function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -10,15 +16,38 @@ export function ResetPasswordPage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const { refresh } = useAuth();
+  const state = (location.state as LocationState | null) ?? {};
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!state.email || !state.code) navigate('/app/forgot-password', { replace: true });
+  }, [navigate, state.code, state.email]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+    if (password !== confirm) {
+      setError('Passwords do not match');
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const body = resetPasswordBodySchema.parse({
+        email: state.email,
+        code: state.code,
+        password,
+      });
+      await apiRequest('/auth/reset-password', { method: 'POST', body });
+      await refresh();
       navigate('/app/reset-success');
-    }, 800);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Unable to reset password'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -31,7 +60,6 @@ export function ResetPasswordPage() {
         className="absolute inset-0 bg-[radial-gradient(ellipse_100%_70%_at_50%_0%,transparent_0%,theme(colors.neutral.0)_75%)] pointer-events-none z-10"
         aria-hidden
       />
-
       <div className="w-full max-w-[400px] p-8 flex flex-col gap-6 relative z-20">
         <div className="flex justify-center">
           <Link to="/" className="flex items-center gap-2 no-underline">
@@ -41,14 +69,12 @@ export function ResetPasswordPage() {
             </span>
           </Link>
         </div>
-
         <div className="text-center flex flex-col gap-1">
           <h1 className="text-h5 text-neutral-950">Set new password</h1>
           <p className="text-para-sm text-neutral-600">
             Choose a strong password for your account.
           </p>
         </div>
-
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <Input
             label="New password"
@@ -61,12 +87,13 @@ export function ResetPasswordPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="bg-transparent border-none cursor-pointer text-neutral-400 flex items-center p-0 transition-colors hover:text-neutral-600"
+                className="bg-transparent border-none cursor-pointer text-neutral-400 flex items-center p-0"
                 aria-label="Toggle password"
               >
                 {showPassword ? <IconEyeOff size={18} /> : <IconEye size={18} />}
               </button>
             }
+            required
           />
           <Input
             label="Confirm password"
@@ -79,14 +106,15 @@ export function ResetPasswordPage() {
               <button
                 type="button"
                 onClick={() => setShowConfirm((v) => !v)}
-                className="bg-transparent border-none cursor-pointer text-neutral-400 flex items-center p-0 transition-colors hover:text-neutral-600"
+                className="bg-transparent border-none cursor-pointer text-neutral-400 flex items-center p-0"
                 aria-label="Toggle confirm"
               >
                 {showConfirm ? <IconEyeOff size={18} /> : <IconEye size={18} />}
               </button>
             }
+            required
           />
-
+          {error && <p className="text-para-sm text-error-base text-center">{error}</p>}
           <Button
             type="submit"
             size="md"
