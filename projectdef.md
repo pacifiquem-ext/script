@@ -118,6 +118,5 @@ Lives in `client/`. Built with **React 18**, **Vite** (SWC-based fast refresh), 
 - `client/src/pages/app/SettingsModal.tsx` — account and integration management.
 - `client/src/components/ui/BrandIcons.tsx` — custom provider icons.
 
-Domain entities (User, Workspace, Folder, Document, Conversation, Message, Integration, ApiKey,
-Subscription/Credit) are catalogued in `AGENTS.md` §9 pending a confirmed Prisma schema
-(`AGENTS.md` §13).
+Domain entities are defined in `CONTEXT.md` and modeled in `server/prisma/schema.prisma`
+(shared enums in `@script/shared`).
