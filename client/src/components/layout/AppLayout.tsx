@@ -12,22 +12,15 @@ import {
   IconChevronDown,
 } from '../../lib/icons';
 import { SettingsModal } from '../../pages/app/SettingsModal';
-
-const ALL_CHATS = [
-  { group: 'Today', items: ['User research analysis', 'Competitive analysis', 'Meeting notes'] },
-  {
-    group: 'Yesterday',
-    items: [
-      'Market trends analysis',
-      'Usability testing results',
-      'Competitive analysis',
-      'Feature prioritization',
-      'User feedback',
-    ],
-  },
-];
-
-const ALL_CHAT_ITEMS = ALL_CHATS.flatMap((g) => g.items.map((name) => ({ name, group: g.group })));
+import { useAuth } from '../../contexts/useAuth';
+import {
+  initials,
+  useCreateWorkspace,
+  useSwitchWorkspace,
+  useWorkspaces,
+} from '../../lib/workspaces';
+import { useChatMutations, useConversations } from '../../lib/chat-api';
+import type { PublicConversation } from '@script/shared';
 
 export function AppLayout() {
   const [expanded, setExpanded] = useState(true);
@@ -36,7 +29,19 @@ export function AppLayout() {
   const [searchMode, setSearchMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const [currentWorkspace, setCurrentWorkspace] = useState('Personal Workspace');
+  const { user, logout } = useAuth();
+  const workspacesQuery = useWorkspaces(Boolean(user));
+  const switchWorkspace = useSwitchWorkspace();
+  const createWorkspace = useCreateWorkspace();
+  const workspaces = workspacesQuery.data ?? [];
+  const activeWorkspace =
+    workspaces.find((workspace) => workspace.id === user?.lastWorkspaceId) ?? workspaces[0] ?? null;
+  const displayName = user?.name ?? 'Account';
+  const displayEmail = user?.email ?? '';
+  const userInitials = initials(displayName);
+  const conversationsQuery = useConversations(Boolean(user));
+  const { createConversation } = useChatMutations();
+  const conversationGroups = conversationsQuery.data?.groups ?? [];
   const profileRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -66,8 +71,10 @@ export function AppLayout() {
 
   const isActive = (href: string) => location.pathname.startsWith(href);
 
-  const filteredChats = searchQuery
-    ? ALL_CHAT_ITEMS.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredChats: PublicConversation[] | null = searchQuery
+    ? (conversationsQuery.data?.conversations ?? []).filter((c: PublicConversation) =>
+        c.title.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
     : null;
 
   return (
@@ -89,7 +96,7 @@ export function AppLayout() {
                 <div className="flex-1 min-w-0 flex flex-col">
                   <div className="flex items-center gap-1">
                     <span className="text-[14px] font-semibold text-neutral-950 tracking-[-0.01em] whitespace-nowrap overflow-hidden text-ellipsis">
-                      {currentWorkspace}
+                      {activeWorkspace?.name ?? 'Workspace'}
                     </span>
                     <IconChevronDown size={14} className="text-neutral-400 shrink-0" />
                   </div>
@@ -99,29 +106,33 @@ export function AppLayout() {
               {workspaceOpen && (
                 <div className="absolute top-[calc(100%-8px)] left-2 right-2 bg-white rounded-12 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.xl)] p-1.5 z-50 animate-[fadeUp_0.15s_ease]">
                   <p className="text-subheading-sm text-neutral-400 px-2 pt-1.5 pb-1">Workspaces</p>
+                  {workspaces.map((workspace) => (
+                    <button
+                      key={workspace.id}
+                      className="flex items-center gap-2.5 w-full p-2 bg-transparent border-none cursor-pointer rounded-8 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-950 text-left"
+                      onClick={() => {
+                        void switchWorkspace
+                          .mutateAsync(workspace.id)
+                          .finally(() => setWorkspaceOpen(false));
+                      }}
+                    >
+                      <span className="w-6 h-6 rounded-6 bg-primary-alpha-10 text-primary-base flex items-center justify-center text-[10px] font-semibold shrink-0">
+                        {initials(workspace.name)}
+                      </span>
+                      <span className="text-para-sm flex-1 truncate">{workspace.name}</span>
+                    </button>
+                  ))}
                   <button
-                    className="flex items-center gap-2.5 w-full p-2 bg-transparent border-none cursor-pointer rounded-8 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-950 text-left"
+                    className="flex items-center gap-2.5 w-full p-2 bg-transparent border-none cursor-pointer rounded-8 text-primary-base transition-colors hover:bg-primary-alpha-10 text-left mt-1"
                     onClick={() => {
-                      setCurrentWorkspace('Personal Workspace');
-                      setWorkspaceOpen(false);
+                      const name = window.prompt('Workspace name');
+                      if (!name?.trim()) return;
+                      void createWorkspace
+                        .mutateAsync(name.trim())
+                        .finally(() => setWorkspaceOpen(false));
                     }}
                   >
-                    <span className="w-6 h-6 rounded-6 bg-neutral-200 text-neutral-950 flex items-center justify-center text-[10px] font-semibold shrink-0">
-                      PW
-                    </span>
-                    <span className="text-para-sm flex-1 truncate">Personal Workspace</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-2.5 w-full p-2 bg-transparent border-none cursor-pointer rounded-8 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-950 text-left"
-                    onClick={() => {
-                      setCurrentWorkspace('Acme Corp');
-                      setWorkspaceOpen(false);
-                    }}
-                  >
-                    <span className="w-6 h-6 rounded-6 bg-primary-alpha-10 text-primary-base flex items-center justify-center text-[10px] font-semibold shrink-0">
-                      AC
-                    </span>
-                    <span className="text-para-sm flex-1 truncate">Acme Corp</span>
+                    <span className="text-para-sm flex-1 truncate">New workspace</span>
                   </button>
                 </div>
               )}
@@ -179,7 +190,13 @@ export function AppLayout() {
         <div className="flex flex-col gap-0.5 p-[10px_8px_6px] shrink-0">
           <button
             className="flex items-center gap-2.5 p-[7px_8px] bg-transparent border-none cursor-pointer rounded-8 text-primary-base transition-colors hover:bg-primary-alpha-10 whitespace-nowrap overflow-hidden"
-            onClick={() => navigate('/app/chat')}
+            onClick={() => {
+              void createConversation
+                .mutateAsync(undefined)
+                .then((res: { conversation: PublicConversation }) => {
+                  navigate('/app/chat', { state: { conversationId: res.conversation.id } });
+                });
+            }}
             title="New chat"
           >
             <span className="flex items-center justify-center w-[26px] h-[26px] bg-primary-alpha-10 rounded-6 shrink-0">
@@ -228,31 +245,30 @@ export function AppLayout() {
                 <p className="text-neutral-400 p-[8px_8px] text-para-sm">No results found.</p>
               ) : (
                 <div className="mb-3">
-                  <p className="text-neutral-400 tracking-[0.06em] p-[8px_8px_4px] text-subheading-md">
-                    {filteredChats.length} result{filteredChats.length !== 1 ? 's' : ''}
-                  </p>
-                  {filteredChats.map((item, i) => (
+                  {filteredChats.map((item: PublicConversation) => (
                     <button
-                      key={i}
+                      key={item.id}
                       className="block w-full text-left p-[7px_8px] bg-transparent border-none cursor-pointer text-neutral-600 rounded-8 transition-colors overflow-hidden text-ellipsis whitespace-nowrap hover:text-neutral-950 hover:bg-neutral-50 text-para-sm"
+                      onClick={() => navigate('/app/chat', { state: { conversationId: item.id } })}
                     >
-                      {item.name}
+                      {item.title}
                     </button>
                   ))}
                 </div>
               )
             ) : (
-              ALL_CHATS.map((group) => (
+              conversationGroups.map((group: { group: string; items: PublicConversation[] }) => (
                 <div key={group.group} className="mb-3">
                   <p className="text-neutral-400 tracking-[0.06em] p-[8px_8px_4px] text-subheading-md">
                     {group.group}
                   </p>
-                  {group.items.map((item) => (
+                  {group.items.map((item: PublicConversation) => (
                     <button
-                      key={item}
+                      key={item.id}
                       className="block w-full text-left p-[7px_8px] bg-transparent border-none cursor-pointer text-neutral-600 rounded-8 transition-colors overflow-hidden text-ellipsis whitespace-nowrap hover:text-neutral-950 hover:bg-neutral-50 text-para-sm"
+                      onClick={() => navigate('/app/chat', { state: { conversationId: item.id } })}
                     >
-                      {item}
+                      {item.title}
                     </button>
                   ))}
                 </div>
@@ -270,16 +286,16 @@ export function AppLayout() {
               aria-label="Profile"
             >
               <span className="w-8 h-8 rounded-full bg-neutral-200 text-neutral-950 flex items-center justify-center text-[11px] font-semibold shrink-0 tracking-[0.02em]">
-                JB
+                {userInitials}
               </span>
               {expanded && (
                 <>
                   <div className="flex-1 flex flex-col items-start overflow-hidden min-w-0">
                     <span className="text-label-sm whitespace-nowrap overflow-hidden text-ellipsis max-w-full text-neutral-950">
-                      James Brown
+                      {displayName}
                     </span>
                     <span className="text-para-xs whitespace-nowrap overflow-hidden text-ellipsis max-w-full text-neutral-400">
-                      james@alignui.com
+                      {displayEmail}
                     </span>
                   </div>
                   <IconChevronDown size={14} className="text-neutral-950 shrink-0" />
@@ -293,14 +309,14 @@ export function AppLayout() {
               >
                 <div className="flex items-center gap-2.5 p-[4px_4px_8px]">
                   <span className="w-9 h-9 rounded-full bg-neutral-200 text-neutral-950 flex items-center justify-center text-xs font-semibold shrink-0 tracking-[0.02em]">
-                    JB
+                    {userInitials}
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-label-sm text-neutral-950 whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
-                      James Brown
+                      {displayName}
                     </p>
                     <p className="text-para-xs text-neutral-400 whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
-                      james@alignui.com
+                      {displayEmail}
                     </p>
                   </div>
                 </div>
@@ -317,7 +333,9 @@ export function AppLayout() {
                 </button>
                 <button
                   className="flex items-center gap-2.5 w-full p-[8px_8px] bg-transparent border-none cursor-pointer rounded-8 transition-colors text-error-base hover:text-error-base hover:bg-red-500/10"
-                  onClick={() => navigate('/app/login')}
+                  onClick={() => {
+                    void logout().then(() => navigate('/app/login'));
+                  }}
                 >
                   <IconLogout size={16} />
                   <span className="text-para-sm">Sign out</span>
