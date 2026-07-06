@@ -46,7 +46,7 @@ cp server/.env.example server/.env
 # fill in server/.env: Neon DATABASE_URL/DIRECT_URL (or Compose Postgres), storage credentials,
 # VOYAGE_API_KEY, ANTHROPIC_API_KEY — see ENV.md and docs/local-infra.md.
 
-pnpm deps:up      # Redis + Postgres(pgvector) + MinIO in Docker (REDIS_URL=redis://127.0.0.1:6379)
+pnpm deps:up      # Redis + Postgres(pgvector) + Garage in Docker (REDIS_URL=redis://127.0.0.1:6379)
 pnpm deps:redis   # ensure Redis is up and answers PONG
 pnpm dev          # client + API on the host (uses Compose Redis; ALLOW_INLINE_INGESTION=false)
 pnpm dev:app      # client + API + BullMQ worker on the host
@@ -71,13 +71,12 @@ Full rationale and the rules for extending any of this: `AGENTS.md`.
 ## Self-hosting
 
 Self-hostable dependencies run via Docker Compose by default: **Redis** (BullMQ), **Postgres +
-pgvector**, and **MinIO** (S3-compatible local object store; production self-hosters can point the
-same `STORAGE_DRIVER=s3` vars at **Garage** — `docs/storage.md`). Neon + UploadThing remain
-supported managed defaults. Full guide: [`docs/local-infra.md`](./docs/local-infra.md).
+pgvector**, and **Garage** (S3-compatible object store — `docs/storage.md`). Neon + UploadThing
+remain supported managed defaults. Full guide: [`docs/local-infra.md`](./docs/local-infra.md).
 
 ## Deploy topology
 
-- **Dependencies:** `pnpm deps:up` / `docker compose up -d` (Redis, Postgres, MinIO).
+- **Dependencies:** `pnpm deps:up` / `docker compose up -d` (Redis, Postgres, Garage).
 - **API + worker on host:** `pnpm dev:app` with `REDIS_URL=redis://127.0.0.1:6379`.
 - **API + worker in Docker:** `pnpm stack:up` (`docker compose --profile app up -d --build`).
 - **Web:** static Vite build (`client/dist`) on any static host (e.g. Vercel with `client/vercel.json`
