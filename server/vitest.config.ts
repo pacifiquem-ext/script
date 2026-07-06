@@ -18,6 +18,7 @@ export default defineConfig({
       STORAGE_DRIVER: process.env.STORAGE_DRIVER ?? 'uploadthing',
       UPLOADTHING_TOKEN: process.env.UPLOADTHING_TOKEN ?? 'test-token',
       JWT_SECRET: process.env.JWT_SECRET ?? 'test-jwt-secret-with-at-least-32-chars!!',
+      ALLOW_INLINE_INGESTION: 'true',
     },
     fileParallelism: false,
     testTimeout: 30_000,

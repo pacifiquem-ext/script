@@ -59,6 +59,7 @@ export async function exportAccountData(userId: string) {
         source: doc.source,
         sourceUrl: doc.sourceUrl,
         status: doc.status,
+        processingPhase: doc.processingPhase ?? null,
         failureReason: doc.failureReason,
         pageCount: doc.pageCount,
         createdAt: doc.createdAt.toISOString(),

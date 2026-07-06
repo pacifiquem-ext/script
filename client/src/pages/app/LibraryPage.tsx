@@ -249,6 +249,9 @@ export function LibraryPage() {
                         <p className="text-label-sm text-neutral-950 truncate">{doc.name}</p>
                         <p className="text-para-xs text-neutral-400 capitalize">
                           {doc.status}
+                          {doc.status === 'processing' && doc.processingPhase
+                            ? ` (${doc.processingPhase})`
+                            : ''}
                           {doc.failureReason ? ` — ${doc.failureReason}` : ''}
                         </p>
                       </button>

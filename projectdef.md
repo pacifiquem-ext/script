@@ -113,7 +113,7 @@ Lives in `client/`. Built with **React 18**, **Vite** (SWC-based fast refresh), 
 
 - `client/src/pages/app/LibraryPage.tsx` — main document management logic (currently mock data,
   see `AGENTS.md` §10).
-- `client/src/pages/app/ChatPage.tsx` — AI interaction layer (currently a canned response, see
+- `client/src/pages/app/ChatPage.tsx` — AI interaction layer (SSE streaming + citations; requires API keys, see
   `AGENTS.md` §10).
 - `client/src/pages/app/SettingsModal.tsx` — account and integration management.
 - `client/src/components/ui/BrandIcons.tsx` — custom provider icons.

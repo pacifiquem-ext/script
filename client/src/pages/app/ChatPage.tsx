@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import type { PublicDocument, PublicMessage } from '@script/shared';
+import type { MessageCitation, PublicDocument, PublicMessage } from '@script/shared';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -14,12 +14,15 @@ export function ChatPage() {
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [streaming, setStreaming] = useState('');
+  const [pendingUser, setPendingUser] = useState<string | null>(null);
+  const [liveCitations, setLiveCitations] = useState<MessageCitation[]>([]);
   const [loading, setLoading] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [selectedDocs, setSelectedDocs] = useState<PublicDocument[]>([]);
   const [atQuery, setAtQuery] = useState<string | null>(null);
   const [atIndex, setAtIndex] = useState(0);
   const handledInitial = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesQuery = useMessages(conversationId);
@@ -40,7 +43,7 @@ export function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streaming]);
+  }, [messages, streaming, pendingUser]);
 
   useEffect(() => {
     const state = location.state as { conversationId?: string } | null;
@@ -54,32 +57,63 @@ export function ChatPage() {
     return created.conversation.id;
   }, [conversationId, createConversation]);
 
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, []);
+
   const send = useCallback(
     async (content: string, documentIds: string[] = selectedDocs.map((d) => d.id)) => {
       const trimmed = content.trim();
       if (!trimmed || loading) return;
+      const pendingNotReady = documentIds.filter((id) => {
+        const doc = selectedDocs.find((d) => d.id === id) ?? readyDocs.find((d) => d.id === id);
+        return doc && doc.status !== 'ready';
+      });
+      if (pendingNotReady.length) {
+        setError('Wait for mentioned documents to finish processing before chatting.');
+        return;
+      }
       setError(null);
       setLoading(true);
       setStreaming('');
+      setLiveCitations([]);
+      setPendingUser(trimmed);
+      const controller = new AbortController();
+      abortRef.current = controller;
       try {
         const id = await ensureConversation();
-        await streamMessage(id, trimmed, documentIds, (delta) => {
-          setStreaming((prev) => prev + delta);
+        await streamMessage(id, trimmed, documentIds, {
+          signal: controller.signal,
+          onDelta: (delta) => setStreaming((prev) => prev + delta),
+          onCitations: (citations) => setLiveCitations(citations),
+          onDone: () => undefined,
         });
         setInput('');
         setStreaming('');
+        setPendingUser(null);
         setAtQuery(null);
         await queryClient.invalidateQueries({ queryKey: ['messages', id] });
         await queryClient.invalidateQueries({ queryKey: ['conversations'] });
         await queryClient.invalidateQueries({ queryKey: ['credits'] });
       } catch (err) {
-        setError(getErrorMessage(err, 'Failed to send message'));
+        if ((err as Error).name === 'AbortError') {
+          setError('Generation stopped.');
+        } else {
+          setError(getErrorMessage(err, 'Failed to send message'));
+        }
         setStreaming('');
+        setPendingUser(null);
+        if (conversationId) {
+          await queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+          await queryClient.invalidateQueries({ queryKey: ['credits'] });
+        }
       } finally {
+        abortRef.current = null;
         setLoading(false);
       }
     },
-    [ensureConversation, loading, queryClient, selectedDocs],
+    [conversationId, ensureConversation, loading, queryClient, readyDocs, selectedDocs],
   );
 
   useEffect(() => {
@@ -134,6 +168,7 @@ export function ChatPage() {
       source: 'local' as const,
       sourceUrl: null,
       status: 'ready' as const,
+      processingPhase: null,
       failureReason: null,
       pageCount: null,
       createdAt: new Date().toISOString(),
@@ -144,6 +179,29 @@ export function ChatPage() {
     setInput((prev) => `${prev}${prev.endsWith(' ') || !prev ? '' : ' '}@${doc.name} `);
   }
 
+  function renderCitations(citations: MessageCitation[]) {
+    if (!citations.length) return null;
+    return (
+      <div className="flex flex-wrap gap-1.5 mt-2">
+        {citations.map((citation) => (
+          <button
+            type="button"
+            key={citation.chunkId}
+            className="text-[11px] px-2 py-0.5 rounded-full border border-neutral-200 text-neutral-600 hover:border-primary-base hover:text-primary-base"
+            onClick={() => setPreviewId(citation.documentId)}
+            title={
+              citation.score != null
+                ? `${citation.documentName} · relevance ${(citation.score * 100).toFixed(0)}%`
+                : citation.documentName
+            }
+          >
+            {citation.documentName}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full overflow-hidden bg-white">
       <div
@@ -152,7 +210,14 @@ export function ChatPage() {
         onDrop={onDropChat}
       >
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
-          {messages.length === 0 && !streaming ? (
+          {messagesQuery.isLoading ? (
+            <EmptyState title="Loading conversation…" description="Fetching messages." />
+          ) : messagesQuery.isError ? (
+            <EmptyState
+              title="Couldn’t load messages"
+              description={getErrorMessage(messagesQuery.error, 'Try again in a moment.')}
+            />
+          ) : messages.length === 0 && !streaming && !pendingUser ? (
             <EmptyState
               title="Chat with your library"
               description="Type @ to mention ready documents, or drag a file chip from the list below."
@@ -168,11 +233,21 @@ export function ChatPage() {
               }`}
             >
               {message.content}
+              {message.partial ? (
+                <p className="mt-1 text-[11px] text-neutral-400">Stopped early</p>
+              ) : null}
+              {message.role === 'assistant' ? renderCitations(message.citations ?? []) : null}
             </div>
           ))}
-          {streaming && (
+          {pendingUser && (
+            <div className="max-w-[80%] ml-auto rounded-16 px-4 py-3 text-para-sm whitespace-pre-wrap bg-primary-alpha-10 text-neutral-950">
+              {pendingUser}
+            </div>
+          )}
+          {(streaming || loading) && (
             <div className="max-w-[80%] rounded-16 px-4 py-3 text-para-sm whitespace-pre-wrap bg-neutral-50 text-neutral-800">
-              {streaming}
+              {streaming || 'Thinking…'}
+              {renderCitations(liveCitations)}
             </div>
           )}
           <div ref={bottomRef} />
@@ -225,14 +300,20 @@ export function ChatPage() {
               );
             })}
           </div>
-          <div className="flex items-center justify-between text-para-xs text-neutral-500">
+          <div className="flex items-center justify-between text-para-xs text-neutral-500 gap-2">
             <span>
               Credits:{' '}
               <span className="text-primary-base font-semibold">
                 {credits.data?.balance?.toLocaleString() ?? '—'}
               </span>
             </span>
-            {error && <span className="text-error-base">{error}</span>}
+            {error && (
+              <span className="text-error-base text-right">
+                {error.toLowerCase().includes('insufficient credits')
+                  ? 'Insufficient credits for this reply.'
+                  : error}
+              </span>
+            )}
           </div>
           <div className="flex gap-2 flex-col sm:flex-row">
             <textarea
@@ -241,6 +322,7 @@ export function ChatPage() {
               placeholder="Ask about your documents… use @ to mention"
               value={input}
               aria-label="Chat message"
+              disabled={loading}
               onChange={(e) =>
                 onInputChange(e.target.value, e.target.selectionStart ?? e.target.value.length)
               }
@@ -272,9 +354,15 @@ export function ChatPage() {
                 }
               }}
             />
-            <Button size="sm" loading={loading} onClick={() => void send(input)}>
-              Send
-            </Button>
+            {loading ? (
+              <Button size="sm" variant="neutral" onClick={stopStreaming}>
+                Stop
+              </Button>
+            ) : (
+              <Button size="sm" loading={loading} onClick={() => void send(input)}>
+                Send
+              </Button>
+            )}
           </div>
         </div>
       </div>

@@ -46,6 +46,10 @@ const envSchema = z
     EMAIL_FROM: z.string().email().optional(),
     UNSTRUCTURED_API_KEY: z.string().optional(),
     UNSTRUCTURED_API_URL: z.string().url().optional(),
+    ALLOW_INLINE_INGESTION: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
   })
   .superRefine((value, ctx) => {
     if (value.STORAGE_DRIVER === 'uploadthing' && !value.UPLOADTHING_TOKEN) {
@@ -73,12 +77,35 @@ const envSchema = z
         }
       }
     }
-    if (value.NODE_ENV === 'production' && !value.TOKEN_ENCRYPTION_KEY) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['TOKEN_ENCRYPTION_KEY'],
-        message: 'TOKEN_ENCRYPTION_KEY is required in production (encrypt OAuth tokens at rest)',
-      });
+    if (value.NODE_ENV === 'production') {
+      if (!value.TOKEN_ENCRYPTION_KEY) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['TOKEN_ENCRYPTION_KEY'],
+          message: 'TOKEN_ENCRYPTION_KEY is required in production (encrypt OAuth tokens at rest)',
+        });
+      }
+      if (!value.VOYAGE_API_KEY) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['VOYAGE_API_KEY'],
+          message: 'VOYAGE_API_KEY is required in production',
+        });
+      }
+      if (!value.ANTHROPIC_API_KEY) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['ANTHROPIC_API_KEY'],
+          message: 'ANTHROPIC_API_KEY is required in production',
+        });
+      }
+      if (!value.REDIS_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['REDIS_URL'],
+          message: 'REDIS_URL is required in production (BullMQ worker topology)',
+        });
+      }
     }
   });
 
@@ -98,3 +125,21 @@ function loadEnv(): Env {
 }
 
 export const env = loadEnv();
+
+export function requireVoyageApiKey(): string {
+  if (!env.VOYAGE_API_KEY) {
+    throw new Error(
+      'VOYAGE_API_KEY is not configured. Set it in server/.env before running ingestion or chat retrieval.',
+    );
+  }
+  return env.VOYAGE_API_KEY;
+}
+
+export function requireAnthropicApiKey(): string {
+  if (!env.ANTHROPIC_API_KEY) {
+    throw new Error(
+      'ANTHROPIC_API_KEY is not configured. Set it in server/.env before using chat.',
+    );
+  }
+  return env.ANTHROPIC_API_KEY;
+}

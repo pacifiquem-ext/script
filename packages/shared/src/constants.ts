@@ -1,6 +1,20 @@
 export const EMBEDDING_PROVIDER = 'voyage' as const;
 export const EMBEDDING_MODEL = 'voyage-3.5' as const;
 export const EMBEDDING_DIMENSIONS = 1024 as const;
+export const VOYAGE_EMBED_BATCH_SIZE = 128 as const;
+
+export const CHAT_MODEL = 'claude-sonnet-4-20250514' as const;
+export const CHAT_MAX_TOKENS = 1200 as const;
+export const CHAT_TEMPERATURE = 0 as const;
+export const CHAT_HISTORY_MESSAGE_LIMIT = 20 as const;
+export const RAG_TOP_K = 8 as const;
+export const RAG_MIN_SIMILARITY = 0.2 as const;
+
+export const CHUNK_SIZE_CHARS = 1200 as const;
+export const CHUNK_OVERLAP_CHARS = 200 as const;
+
+export const CHAT_CREDIT_COST = 1 as const;
+export const INGESTION_CREDIT_COST = 1 as const;
 
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;

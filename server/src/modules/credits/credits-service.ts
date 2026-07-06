@@ -1,4 +1,4 @@
-import type { CreditLedgerReason } from '@prisma/client';
+import type { CreditLedgerReason, Prisma } from '@prisma/client';
 import { BadRequestError } from '../../common/errors';
 import { prisma } from '../../db/prisma';
 
@@ -28,10 +28,29 @@ export async function decrementCredits(input: {
   refType?: string;
   refId?: string;
   note?: string;
+  tx?: Prisma.TransactionClient;
 }) {
   if (input.cost <= 0) return getBalance(input.workspaceId);
 
-  return prisma.$transaction(async (tx) => {
+  const run = async (tx: Prisma.TransactionClient) => {
+    if (input.refType && input.refId) {
+      const existing = await tx.creditLedgerEntry.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          reason: input.reason,
+          refType: input.refType,
+          refId: input.refId,
+          delta: { lt: 0 },
+        },
+      });
+      if (existing) {
+        const row = await tx.creditBalance.findUnique({
+          where: { workspaceId: input.workspaceId },
+        });
+        return { balance: row?.balance ?? 0, charged: false as const };
+      }
+    }
+
     const row = await tx.creditBalance.findUnique({ where: { workspaceId: input.workspaceId } });
     if (!row || row.balance < input.cost) {
       throw new BadRequestError('Insufficient credits', {
@@ -54,6 +73,9 @@ export async function decrementCredits(input: {
         note: input.note,
       },
     });
-    return { balance: updated.balance };
-  });
+    return { balance: updated.balance, charged: true as const };
+  };
+
+  if (input.tx) return run(input.tx);
+  return prisma.$transaction(run);
 }

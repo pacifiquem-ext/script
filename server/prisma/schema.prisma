@@ -67,6 +67,7 @@ enum CreditLedgerReason {
   admin_adjust
   chat_usage
   ingestion_usage
+  embedding_backfill
   purchase_pending
 }
 
@@ -192,6 +193,7 @@ model Document {
   source              DocumentSource
   sourceUrl           String?
   status              DocumentStatus @default(pending)
+  processingPhase     String?
   failureReason       String?
   pageCount           Int?
   extractedText       String?        @db.Text
@@ -216,13 +218,16 @@ model Document {
 }
 
 model DocumentChunk {
-  id          String                 @id @default(cuid())
+  id          String                       @id @default(cuid())
   documentId  String
   workspaceId String
   position    Int
-  content     String                 @db.Text
+  content     String                       @db.Text
+  startOffset Int?
+  endOffset   Int?
+  pageNumber  Int?
   embedding   Unsupported("vector(1024)")?
-  createdAt   DateTime               @default(now())
+  createdAt   DateTime                     @default(now())
 
   document  Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -252,6 +257,8 @@ model Message {
   conversationId String
   role           MessageRole
   content        String      @db.Text
+  citations      Json?
+  partial        Boolean     @default(false)
   createdAt      DateTime    @default(now())
 
   conversation Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -349,4 +356,6 @@ model CreditLedgerEntry {
 
   @@index([workspaceId, createdAt])
   @@index([userId])
+  /// Partial unique index on negative usage rows enforced in SQL migration
+  /// CreditLedgerEntry_usage_idempotency_uidx (workspaceId, reason, refType, refId)
 }

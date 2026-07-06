@@ -2,15 +2,38 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Prisma } from '@prisma/client';
 import {
   CHAT_CREDIT_COST,
+  CHAT_HISTORY_MESSAGE_LIMIT,
+  CHAT_MAX_TOKENS,
+  CHAT_MODEL,
+  CHAT_TEMPERATURE,
+  RAG_MIN_SIMILARITY,
+  RAG_TOP_K,
+  paginate,
+  toSkipTake,
   type CreateConversationBody,
+  type ListConversationsQuery,
+  type ListMessagesQuery,
+  type MessageCitation,
   type SendMessageBody,
   type UpdateConversationBody,
 } from '@script/shared';
-import { BadRequestError, NotFoundError } from '../../common/errors';
-import { env } from '../../config/env';
+import {
+  BadRequestError,
+  ConfigurationError,
+  NotFoundError,
+} from '../../common/errors';
+import { env, requireAnthropicApiKey } from '../../config/env';
 import { prisma } from '../../db/prisma';
+import { logger } from '../../lib/logger';
 import { assertHasCredits, decrementCredits } from '../credits/credits-service';
 import { embedQuery, vectorLiteral } from '../jobs/embeddings';
+
+export type ChatStreamEvent =
+  | { type: 'user_message'; message: ReturnType<typeof mapMessage> }
+  | { type: 'citations'; citations: MessageCitation[] }
+  | { type: 'delta'; text: string }
+  | { type: 'done'; message: ReturnType<typeof mapMessage> }
+  | { type: 'error'; code: string; message: string };
 
 function groupKey(date: Date): string {
   const today = new Date();
@@ -31,11 +54,54 @@ function mapConversation(row: { id: string; title: string; createdAt: Date; upda
   };
 }
 
-export async function listConversations(workspaceId: string, userId: string) {
-  const rows = await prisma.conversation.findMany({
-    where: { workspaceId, userId },
-    orderBy: { updatedAt: 'desc' },
-  });
+function parseCitations(value: Prisma.JsonValue | null | undefined): MessageCitation[] {
+  if (!value || !Array.isArray(value)) return [];
+  return value as MessageCitation[];
+}
+
+function mapMessage(row: {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  citations?: Prisma.JsonValue | null;
+  partial: boolean;
+  createdAt: Date;
+  mentions?: Array<{ documentId: string }>;
+}) {
+  return {
+    id: row.id,
+    role: row.role,
+    content: row.content,
+    documentIds: row.mentions?.map((m) => m.documentId) ?? [],
+    citations: parseCitations(row.citations),
+    partial: row.partial,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export async function listConversations(
+  workspaceId: string,
+  userId: string,
+  query: ListConversationsQuery,
+) {
+  const where = {
+    workspaceId,
+    userId,
+    ...(query.q
+      ? { title: { contains: query.q, mode: 'insensitive' as const } }
+      : {}),
+  };
+  const { skip, take } = toSkipTake(query);
+  const [total, rows] = await Promise.all([
+    prisma.conversation.count({ where }),
+    prisma.conversation.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      skip,
+      take,
+    }),
+  ]);
+  const mapped = rows.map(mapConversation);
   const groups = new Map<string, ReturnType<typeof mapConversation>[]>();
   for (const row of rows) {
     const key = groupKey(row.updatedAt);
@@ -44,8 +110,9 @@ export async function listConversations(workspaceId: string, userId: string) {
     groups.set(key, list);
   }
   return {
+    ...paginate(mapped, total, query),
     groups: [...groups.entries()].map(([group, items]) => ({ group, items })),
-    conversations: rows.map(mapConversation),
+    conversations: mapped,
   };
 }
 
@@ -90,53 +157,177 @@ export async function deleteConversation(
   return { ok: true as const };
 }
 
-export async function listMessages(workspaceId: string, userId: string, conversationId: string) {
+export async function listMessages(
+  workspaceId: string,
+  userId: string,
+  conversationId: string,
+  query: ListMessagesQuery,
+) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, workspaceId, userId },
   });
   if (!conversation) throw new NotFoundError('Conversation');
-  const rows = await prisma.message.findMany({
-    where: { conversationId },
-    orderBy: { createdAt: 'asc' },
-    include: { mentions: true },
-  });
-  return {
-    messages: rows.map((row) => ({
-      id: row.id,
-      role: row.role,
-      content: row.content,
-      documentIds: row.mentions.map((m) => m.documentId),
-      createdAt: row.createdAt.toISOString(),
-    })),
-  };
+  const { skip, take } = toSkipTake(query);
+  const where = { conversationId };
+  const [total, rows] = await Promise.all([
+    prisma.message.count({ where }),
+    prisma.message.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      skip,
+      take,
+      include: { mentions: true },
+    }),
+  ]);
+  return paginate(
+    rows.map((row) => mapMessage(row)),
+    total,
+    query,
+  );
 }
 
-async function retrieveContext(workspaceId: string, query: string, documentIds: string[]) {
+type RetrievedChunk = {
+  id: string;
+  content: string;
+  document_id: string;
+  name: string;
+  position: number;
+  start_offset: number | null;
+  end_offset: number | null;
+  page_number: number | null;
+  score: number;
+};
+
+async function retrieveContext(
+  workspaceId: string,
+  query: string,
+  documentIds: string[],
+): Promise<RetrievedChunk[]> {
   const embedding = await embedQuery(query);
   const vector = vectorLiteral(embedding);
-  if (documentIds.length > 0) {
-    return prisma.$queryRaw<Array<{ content: string; document_id: string; name: string }>>`
-      SELECT c.content, c."documentId" as document_id, d.name
-      FROM "DocumentChunk" c
-      JOIN "Document" d ON d.id = c."documentId"
-      WHERE c."workspaceId" = ${workspaceId}
-        AND d.status = 'ready'
-        AND c.embedding IS NOT NULL
-        AND d.id IN (${Prisma.join(documentIds)})
-      ORDER BY c.embedding <=> ${vector}::vector
-      LIMIT 8
-    `;
+  const rows =
+    documentIds.length > 0
+      ? await prisma.$queryRaw<Array<Omit<RetrievedChunk, 'score'> & { distance: number }>>`
+          SELECT c.id, c.content, c."documentId" as document_id, d.name, c.position,
+                 c."startOffset" as start_offset, c."endOffset" as end_offset,
+                 c."pageNumber" as page_number,
+                 (c.embedding <=> ${vector}::vector) as distance
+          FROM "DocumentChunk" c
+          JOIN "Document" d ON d.id = c."documentId"
+          WHERE c."workspaceId" = ${workspaceId}
+            AND d.status = 'ready'
+            AND c.embedding IS NOT NULL
+            AND d.id IN (${Prisma.join(documentIds)})
+          ORDER BY c.embedding <=> ${vector}::vector
+          LIMIT ${RAG_TOP_K}
+        `
+      : await prisma.$queryRaw<Array<Omit<RetrievedChunk, 'score'> & { distance: number }>>`
+          SELECT c.id, c.content, c."documentId" as document_id, d.name, c.position,
+                 c."startOffset" as start_offset, c."endOffset" as end_offset,
+                 c."pageNumber" as page_number,
+                 (c.embedding <=> ${vector}::vector) as distance
+          FROM "DocumentChunk" c
+          JOIN "Document" d ON d.id = c."documentId"
+          WHERE c."workspaceId" = ${workspaceId}
+            AND d.status = 'ready'
+            AND c.embedding IS NOT NULL
+          ORDER BY c.embedding <=> ${vector}::vector
+          LIMIT ${RAG_TOP_K}
+        `;
+
+  return rows
+    .map((row) => ({
+      id: row.id,
+      content: row.content,
+      document_id: row.document_id,
+      name: row.name,
+      position: row.position,
+      start_offset: row.start_offset,
+      end_offset: row.end_offset,
+      page_number: row.page_number,
+      score: Math.max(0, Math.min(1, 1 - Number(row.distance))),
+    }))
+    .filter((row) => row.score >= RAG_MIN_SIMILARITY);
+}
+
+function toCitations(chunks: RetrievedChunk[]): MessageCitation[] {
+  return chunks.map((c) => ({
+    documentId: c.document_id,
+    documentName: c.name,
+    chunkId: c.id,
+    position: c.position,
+    score: Number(c.score.toFixed(4)),
+    startOffset: c.start_offset,
+    endOffset: c.end_offset,
+    pageNumber: c.page_number,
+  }));
+}
+
+export interface CompletionStreamer {
+  stream(input: {
+    system: string;
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+    signal?: AbortSignal;
+  }): AsyncGenerator<string>;
+}
+
+async function* anthropicStream(input: {
+  system: string;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  signal?: AbortSignal;
+}): AsyncGenerator<string> {
+  const apiKey = requireAnthropicApiKey();
+  const client = new Anthropic({ apiKey });
+  const stream = client.messages.stream({
+    model: CHAT_MODEL,
+    max_tokens: CHAT_MAX_TOKENS,
+    temperature: CHAT_TEMPERATURE,
+    system: input.system,
+    messages: input.messages,
+  });
+  const onAbort = () => {
+    stream.abort();
+  };
+  input.signal?.addEventListener('abort', onAbort, { once: true });
+  try {
+    for await (const event of stream) {
+      if (input.signal?.aborted) break;
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        yield event.delta.text;
+      }
+    }
+    const final = await stream.finalMessage();
+    logger.info(
+      {
+        model: CHAT_MODEL,
+        inputTokens: final.usage?.input_tokens,
+        outputTokens: final.usage?.output_tokens,
+      },
+      'claude completion finished',
+    );
+  } finally {
+    input.signal?.removeEventListener('abort', onAbort);
   }
-  return prisma.$queryRaw<Array<{ content: string; document_id: string; name: string }>>`
-    SELECT c.content, c."documentId" as document_id, d.name
-    FROM "DocumentChunk" c
-    JOIN "Document" d ON d.id = c."documentId"
-    WHERE c."workspaceId" = ${workspaceId}
-      AND d.status = 'ready'
-      AND c.embedding IS NOT NULL
-    ORDER BY c.embedding <=> ${vector}::vector
-    LIMIT 8
-  `;
+}
+
+const testStreamer: CompletionStreamer = {
+  async *stream({ messages }) {
+    const last = messages[messages.length - 1]?.content ?? '';
+    yield `Test assistant reply for: ${last.slice(0, 200)}`;
+  },
+};
+
+let completionStreamer: CompletionStreamer =
+  env.NODE_ENV === 'test' && !env.ANTHROPIC_API_KEY
+    ? testStreamer
+    : { stream: anthropicStream };
+
+export function setCompletionStreamerForTests(next: CompletionStreamer | null) {
+  if (env.NODE_ENV !== 'test') {
+    throw new Error('setCompletionStreamerForTests is only available in test');
+  }
+  completionStreamer =
+    next ?? (env.ANTHROPIC_API_KEY ? { stream: anthropicStream } : testStreamer);
 }
 
 export async function* streamAssistantReply(input: {
@@ -144,20 +335,40 @@ export async function* streamAssistantReply(input: {
   userId: string;
   conversationId: string;
   body: SendMessageBody;
-}): AsyncGenerator<string> {
+  signal?: AbortSignal;
+}): AsyncGenerator<ChatStreamEvent> {
+  if (env.NODE_ENV !== 'test' && !env.ANTHROPIC_API_KEY) {
+    throw new ConfigurationError(
+      'ANTHROPIC_API_KEY is required for chat. Add it to server/.env (see ENV.md).',
+    );
+  }
+  if (env.NODE_ENV !== 'test' && !env.VOYAGE_API_KEY) {
+    throw new ConfigurationError(
+      'VOYAGE_API_KEY is required for chat retrieval. Add it to server/.env (see ENV.md).',
+    );
+  }
+
   const conversation = await prisma.conversation.findFirst({
     where: { id: input.conversationId, workspaceId: input.workspaceId, userId: input.userId },
   });
   if (!conversation) throw new NotFoundError('Conversation');
   await assertHasCredits(input.workspaceId, CHAT_CREDIT_COST);
 
-  const documentIds = input.body.documentIds ?? [];
+  const documentIds = [...new Set(input.body.documentIds ?? [])];
   if (documentIds.length) {
-    const count = await prisma.document.count({
+    const docs = await prisma.document.findMany({
       where: { workspaceId: input.workspaceId, id: { in: documentIds } },
+      select: { id: true, status: true, name: true },
     });
-    if (count !== documentIds.length)
+    if (docs.length !== documentIds.length) {
       throw new BadRequestError('One or more documents are invalid');
+    }
+    const notReady = docs.filter((d) => d.status !== 'ready');
+    if (notReady.length) {
+      throw new BadRequestError('One or more mentioned documents are not ready', {
+        documents: notReady.map((d) => ({ id: d.id, name: d.name, status: d.status })),
+      });
+    }
   }
 
   const userMessage = await prisma.message.create({
@@ -169,56 +380,126 @@ export async function* streamAssistantReply(input: {
         create: documentIds.map((documentId) => ({ documentId })),
       },
     },
+    include: { mentions: true },
+  });
+  yield { type: 'user_message', message: mapMessage(userMessage) };
+
+  const started = Date.now();
+  let contexts: RetrievedChunk[] = [];
+  try {
+    contexts = await retrieveContext(input.workspaceId, input.body.content, documentIds);
+  } catch (error) {
+    await prisma.message.delete({ where: { id: userMessage.id } }).catch(() => undefined);
+    throw error;
+  }
+  const citations = toCitations(contexts);
+  yield { type: 'citations', citations };
+  logger.info(
+    {
+      workspaceId: input.workspaceId,
+      conversationId: conversation.id,
+      hitCount: contexts.length,
+      retrievalMs: Date.now() - started,
+    },
+    'rag retrieval complete',
+  );
+
+  const history = await prisma.message.findMany({
+    where: { conversationId: conversation.id, id: { not: userMessage.id } },
+    orderBy: { createdAt: 'desc' },
+    take: CHAT_HISTORY_MESSAGE_LIMIT,
+  });
+  history.reverse();
+
+  const contextBlock = contexts
+    .map((c, i) => `[${i + 1}] ${c.name} (chunk ${c.position})\n${c.content}`)
+    .join('\n\n');
+  const system =
+    'You are script, an AI assistant for workspace documents. Use only the provided context chunks. Cite sources by their bracket numbers when relevant. If context is insufficient, say so clearly.';
+
+  const modelMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  for (const msg of history) {
+    if (msg.role === 'user' || msg.role === 'assistant') {
+      modelMessages.push({ role: msg.role, content: msg.content });
+    }
+  }
+  modelMessages.push({
+    role: 'user',
+    content: `Context:\n${contextBlock || '(no context)'}\n\nQuestion: ${input.body.content}`,
   });
 
-  const contexts = await retrieveContext(input.workspaceId, input.body.content, documentIds);
-  const contextBlock = contexts.map((c, i) => `[${i + 1}] ${c.name}\n${c.content}`).join('\n\n');
-
   let full = '';
-  if (!env.ANTHROPIC_API_KEY) {
-    full = contexts.length
-      ? `I found ${contexts.length} relevant chunk(s). ${contexts[0]?.content.slice(0, 500) ?? ''}`
-      : 'No indexed documents are ready yet. Upload and wait for processing, then ask again.';
-    yield full;
-  } else {
-    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-    const stream = await client.messages.stream({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1200,
-      system:
-        'You are script, an AI assistant for workspace documents. Use only the provided context chunks. If context is insufficient, say so.',
-      messages: [
-        {
-          role: 'user',
-          content: `Context:\n${contextBlock || '(no context)'}\n\nQuestion: ${input.body.content}`,
-        },
-      ],
-    });
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        full += event.delta.text;
-        yield event.delta.text;
+  let aborted = Boolean(input.signal?.aborted);
+  try {
+    for await (const text of completionStreamer.stream({
+      system,
+      messages: modelMessages,
+      signal: input.signal,
+    })) {
+      if (input.signal?.aborted) {
+        aborted = true;
+        break;
       }
+      full += text;
+      yield { type: 'delta', text };
+    }
+    aborted = aborted || Boolean(input.signal?.aborted);
+  } catch (error) {
+    if (input.signal?.aborted) {
+      aborted = true;
+    } else {
+      const partial = await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'assistant',
+          content: full || 'Chat failed before a response was generated.',
+          citations: citations as unknown as Prisma.InputJsonValue,
+          partial: true,
+        },
+        include: { mentions: true },
+      });
+      yield {
+        type: 'error',
+        code: 'CHAT_FAILED',
+        message: error instanceof Error ? error.message : 'Chat failed',
+      };
+      yield { type: 'done', message: mapMessage(partial) };
+      return;
     }
   }
 
-  await prisma.message.create({
-    data: { conversationId: conversation.id, role: 'assistant', content: full },
+  const assistant = await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      role: 'assistant',
+      content: full || (aborted ? '' : 'No response generated.'),
+      citations: citations as unknown as Prisma.InputJsonValue,
+      partial: aborted,
+    },
+    include: { mentions: true },
   });
+
   await prisma.conversation.update({
     where: { id: conversation.id },
     data: {
       updatedAt: new Date(),
       title:
-        conversation.title === 'New chat' ? input.body.content.slice(0, 80) : conversation.title,
+        conversation.title === 'New chat'
+          ? input.body.content.slice(0, 80)
+          : conversation.title,
     },
   });
-  await decrementCredits({
-    workspaceId: input.workspaceId,
-    userId: input.userId,
-    cost: CHAT_CREDIT_COST,
-    reason: 'chat_usage',
-    refType: 'message',
-    refId: userMessage.id,
-  });
+
+  if (full && !aborted) {
+    await decrementCredits({
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      cost: CHAT_CREDIT_COST,
+      reason: 'chat_usage',
+      refType: 'message',
+      refId: assistant.id,
+    });
+  }
+
+  yield { type: 'done', message: mapMessage(assistant) };
 }
