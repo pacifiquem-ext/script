@@ -1,23 +1,25 @@
 import type { FastifyInstance } from 'fastify';
+import Redis from 'ioredis';
 import { env } from '../config/env';
 import { prisma } from '../db/prisma';
 import { storage } from '../storage';
 
 async function pingRedis(url: string): Promise<boolean> {
-  const parsed = new URL(url);
-  const port = Number(parsed.port || (parsed.protocol === 'rediss:' ? 6380 : 6379));
-  const net = await import('node:net');
-  return new Promise((resolve) => {
-    const socket = net.connect({ host: parsed.hostname, port }, () => {
-      socket.end();
-      resolve(true);
-    });
-    socket.setTimeout(1500, () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.on('error', () => resolve(false));
+  const client = new Redis(url, {
+    maxRetriesPerRequest: 1,
+    connectTimeout: 1500,
+    lazyConnect: true,
+    enableOfflineQueue: false,
   });
+  try {
+    await client.connect();
+    const pong = await client.ping();
+    return pong === 'PONG';
+  } catch {
+    return false;
+  } finally {
+    client.disconnect();
+  }
 }
 
 async function pingStorage(): Promise<boolean> {

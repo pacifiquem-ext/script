@@ -8,12 +8,21 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "pnpm --filter @script/shared build && concurrently -n client,server -c blue,green \"pnpm --filter @script/client dev\" \"pnpm --filter @script/server dev\"",
+    "dev:app": "pnpm --filter @script/shared build && concurrently -n client,server,worker -c blue,green,magenta \"pnpm --filter @script/client dev\" \"pnpm --filter @script/server dev\" \"pnpm --filter @script/server worker\"",
     "build": "pnpm --filter @script/shared build && pnpm --filter @script/server build && pnpm --filter @script/client build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "deps:up": "docker compose up -d redis postgres minio minio-init",
+    "deps:down": "docker compose stop redis postgres minio minio-init",
+    "deps:ps": "docker compose ps",
+    "deps:logs": "docker compose logs -f redis postgres minio",
+    "deps:reset": "docker compose down -v --remove-orphans",
+    "deps:redis": "docker compose up -d redis && docker compose exec redis redis-cli ping",
+    "stack:up": "docker compose --profile app up -d --build",
+    "stack:down": "docker compose --profile app down --remove-orphans"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
