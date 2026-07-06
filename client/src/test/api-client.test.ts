@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiClientError } from '@script/shared';
-import { getApiBaseUrl } from './api-client';
+import { getApiBaseUrl } from '../lib/api-client';
 
 describe('api client', () => {
   it('exposes configured API base URL', () => {

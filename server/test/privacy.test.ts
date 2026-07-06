@@ -3,6 +3,7 @@ import { buildApp } from '../src/app';
 import { prisma } from '../src/db/prisma';
 import { sha256 } from '../src/lib/crypto';
 import { hashPassword } from '../src/lib/password';
+import { originHeaders } from './helpers';
 
 const app = buildApp();
 
@@ -21,7 +22,7 @@ async function signupSession(email: string, password: string) {
   await app.inject({
     method: 'POST',
     url: '/auth/signup',
-    headers: { origin: 'http://localhost:5173' },
+    headers: originHeaders(),
     payload: { name: 'Privacy User', email, password },
   });
   const otp = await prisma.emailOtp.findFirst({ where: { email }, orderBy: { createdAt: 'desc' } });
@@ -33,7 +34,7 @@ async function signupSession(email: string, password: string) {
     await app.inject({
       method: 'POST',
       url: '/auth/verify-otp',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       payload: { email, code: '123456', purpose: 'signup_verify' },
     }),
     cookies,
@@ -56,7 +57,7 @@ describe('privacy routes', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/me/export',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
     });
     expect(res.statusCode).toBe(200);
@@ -78,7 +79,7 @@ describe('privacy routes', () => {
     const bad = await app.inject({
       method: 'DELETE',
       url: '/me',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
       payload: { email: 'other@example.com', password },
     });
@@ -87,7 +88,7 @@ describe('privacy routes', () => {
     const wrongPassword = await app.inject({
       method: 'DELETE',
       url: '/me',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
       payload: { email, password: 'nope-nope' },
     });
@@ -96,7 +97,7 @@ describe('privacy routes', () => {
     const ok = await app.inject({
       method: 'DELETE',
       url: '/me',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
       payload: { email, password },
     });
@@ -129,7 +130,7 @@ describe('privacy routes', () => {
     const res = await app.inject({
       method: 'DELETE',
       url: '/me',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies: ownerCookies,
       payload: { email: ownerEmail, password },
     });

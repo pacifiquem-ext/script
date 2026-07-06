@@ -318,16 +318,13 @@ const testStreamer: CompletionStreamer = {
 };
 
 let completionStreamer: CompletionStreamer =
-  env.NODE_ENV === 'test' && !env.ANTHROPIC_API_KEY
-    ? testStreamer
-    : { stream: anthropicStream };
+  env.NODE_ENV === 'test' ? testStreamer : { stream: anthropicStream };
 
 export function setCompletionStreamerForTests(next: CompletionStreamer | null) {
   if (env.NODE_ENV !== 'test') {
     throw new Error('setCompletionStreamerForTests is only available in test');
   }
-  completionStreamer =
-    next ?? (env.ANTHROPIC_API_KEY ? { stream: anthropicStream } : testStreamer);
+  completionStreamer = next ?? testStreamer;
 }
 
 export async function* streamAssistantReply(input: {

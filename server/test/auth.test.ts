@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../src/db/prisma';
 import { buildApp } from '../src/app';
 import { sha256 } from '../src/lib/crypto';
+import { originHeaders } from './helpers';
 
 const app = buildApp();
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -27,9 +28,6 @@ function absorbSetCookie(response: { headers: Record<string, unknown> }) {
   }
 }
 
-function originHeaders() {
-  return { origin: 'http://localhost:5173' };
-}
 
 describe('auth routes', () => {
   beforeAll(async () => {

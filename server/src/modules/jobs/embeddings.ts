@@ -112,14 +112,13 @@ const testEmbedder: Embedder = {
   embedQuery: async (text) => testEmbed(text),
 };
 
-let embedder: Embedder =
-  env.NODE_ENV === 'test' && !env.VOYAGE_API_KEY ? testEmbedder : voyageEmbedder;
+let embedder: Embedder = env.NODE_ENV === 'test' ? testEmbedder : voyageEmbedder;
 
 export function setEmbedderForTests(next: Embedder | null) {
   if (env.NODE_ENV !== 'test') {
     throw new Error('setEmbedderForTests is only available in test');
   }
-  embedder = next ?? (env.VOYAGE_API_KEY ? voyageEmbedder : testEmbedder);
+  embedder = next ?? testEmbedder;
 }
 
 export async function embedTexts(
