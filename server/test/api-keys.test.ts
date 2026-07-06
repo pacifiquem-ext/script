@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app';
 import { prisma } from '../src/db/prisma';
 import { sha256 } from '../src/lib/crypto';
+import { originHeaders } from './helpers';
 
 const app = buildApp();
 const email = `keys-${Date.now()}@example.com`;
@@ -26,7 +27,7 @@ describe('api keys', () => {
     await app.inject({
       method: 'POST',
       url: '/auth/signup',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       payload: { name: 'Key User', email, password: 'password123' },
     });
     const otp = await prisma.emailOtp.findFirst({
@@ -41,7 +42,7 @@ describe('api keys', () => {
       await app.inject({
         method: 'POST',
         url: '/auth/verify-otp',
-        headers: { origin: 'http://localhost:5173' },
+        headers: originHeaders(),
         payload: { email, code: '123456', purpose: 'signup_verify' },
       }),
     );
@@ -56,7 +57,7 @@ describe('api keys', () => {
     const created = await app.inject({
       method: 'POST',
       url: '/api-keys',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
       payload: { name: 'CI key' },
     });
@@ -67,7 +68,7 @@ describe('api keys', () => {
     const listed = await app.inject({
       method: 'GET',
       url: '/api-keys',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
     });
     expect(listed.json().apiKeys.some((k: { id: string }) => k.id === apiKeyId)).toBe(true);
@@ -83,7 +84,7 @@ describe('api keys', () => {
     const audit = await app.inject({
       method: 'GET',
       url: `/api-keys/${apiKeyId}/audit`,
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
     });
     expect(audit.statusCode).toBe(200);
@@ -92,7 +93,7 @@ describe('api keys', () => {
     const revoked = await app.inject({
       method: 'DELETE',
       url: `/api-keys/${apiKeyId}`,
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
     });
     expect(revoked.statusCode).toBe(200);

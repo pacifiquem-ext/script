@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+const emptyToUndefined = (value: unknown) =>
+  value === undefined || value === null || value === '' ? undefined : value;
+
+const optionalString = z.preprocess(emptyToUndefined, z.string().min(1).optional());
+const optionalEmail = z.preprocess(emptyToUndefined, z.string().email().optional());
+const optionalUrl = z.preprocess(emptyToUndefined, z.string().url().optional());
+const optionalSecret = z.preprocess(
+  emptyToUndefined,
+  z.string().min(32, 'must be at least 32 characters').optional(),
+);
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -13,21 +24,18 @@ const envSchema = z
     DATABASE_URL: z
       .string()
       .min(1, 'DATABASE_URL is required (Neon Postgres pooled connection string)'),
-    DIRECT_URL: z.string().optional(),
+    DIRECT_URL: optionalString,
 
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
-    TOKEN_ENCRYPTION_KEY: z
-      .string()
-      .min(32, 'TOKEN_ENCRYPTION_KEY must be at least 32 characters')
-      .optional(),
+    TOKEN_ENCRYPTION_KEY: optionalSecret,
 
     STORAGE_DRIVER: z.enum(['uploadthing', 's3']).default('uploadthing'),
-    UPLOADTHING_TOKEN: z.string().optional(),
-    S3_ENDPOINT: z.string().optional(),
-    S3_REGION: z.string().optional(),
-    S3_BUCKET: z.string().optional(),
-    S3_ACCESS_KEY_ID: z.string().optional(),
-    S3_SECRET_ACCESS_KEY: z.string().optional(),
+    UPLOADTHING_TOKEN: optionalString,
+    S3_ENDPOINT: optionalString,
+    S3_REGION: optionalString,
+    S3_BUCKET: optionalString,
+    S3_ACCESS_KEY_ID: optionalString,
+    S3_SECRET_ACCESS_KEY: optionalString,
     S3_FORCE_PATH_STYLE: z
       .enum(['true', 'false'])
       .default('true')
@@ -39,13 +47,13 @@ const envSchema = z
       .positive()
       .default(25 * 1024 * 1024),
 
-    REDIS_URL: z.string().optional(),
-    ANTHROPIC_API_KEY: z.string().optional(),
-    VOYAGE_API_KEY: z.string().optional(),
-    RESEND_API_KEY: z.string().optional(),
-    EMAIL_FROM: z.string().email().optional(),
-    UNSTRUCTURED_API_KEY: z.string().optional(),
-    UNSTRUCTURED_API_URL: z.string().url().optional(),
+    REDIS_URL: optionalString,
+    ANTHROPIC_API_KEY: optionalString,
+    VOYAGE_API_KEY: optionalString,
+    RESEND_API_KEY: optionalString,
+    EMAIL_FROM: optionalEmail,
+    UNSTRUCTURED_API_KEY: optionalString,
+    UNSTRUCTURED_API_URL: optionalUrl,
     ALLOW_INLINE_INGESTION: z
       .enum(['true', 'false'])
       .default('false')

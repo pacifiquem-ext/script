@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app';
 import { prisma } from '../src/db/prisma';
 import { sha256 } from '../src/lib/crypto';
+import { originHeaders } from './helpers';
 
 const app = buildApp();
 const email = `lib-${Date.now()}@example.com`;
@@ -23,7 +24,7 @@ describe('library routes', () => {
     await app.inject({
       method: 'POST',
       url: '/auth/signup',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       payload: { name: 'Lib User', email, password: 'password123' },
     });
     const otp = await prisma.emailOtp.findFirst({
@@ -37,7 +38,7 @@ describe('library routes', () => {
     const verified = await app.inject({
       method: 'POST',
       url: '/auth/verify-otp',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       payload: { email, code: '123456', purpose: 'signup_verify' },
     });
     absorb(verified);
@@ -52,7 +53,7 @@ describe('library routes', () => {
     const created = await app.inject({
       method: 'POST',
       url: '/folders',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
       payload: { name: 'Contracts' },
     });
@@ -60,7 +61,7 @@ describe('library routes', () => {
     const listed = await app.inject({
       method: 'GET',
       url: '/folders',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
     });
     expect(listed.statusCode).toBe(200);
@@ -71,7 +72,7 @@ describe('library routes', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/credits',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
     });
     expect(res.statusCode).toBe(200);

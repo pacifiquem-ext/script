@@ -22,20 +22,32 @@ export async function sendOtpEmail(input: {
   const subject = `Your script code: ${input.code}`;
   const text = `Your code to ${purposeLabel(input.purpose)} is ${input.code}. It expires in 10 minutes.`;
 
-  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+  if (!canSendViaResend()) {
     logger.info({ to: input.to, purpose: input.purpose, code: input.code }, 'OTP email (dev log)');
     return;
   }
 
-  const resend = new Resend(env.RESEND_API_KEY);
+  const resend = new Resend(env.RESEND_API_KEY!);
   const result = await resend.emails.send({
-    from: env.EMAIL_FROM,
+    from: env.EMAIL_FROM!,
     to: input.to,
     subject,
     text,
   });
   if (result.error) {
     logger.error({ err: result.error }, 'failed to send OTP email');
-    throw result.error;
+    const error = new Error(result.error.message);
+    (error as Error & { code?: string }).code = 'BAD_REQUEST';
+    throw error;
   }
+}
+
+function canSendViaResend(): boolean {
+  if (env.NODE_ENV === 'test') return false;
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return false;
+  const from = env.EMAIL_FROM.toLowerCase();
+  if (from.endsWith('.invalid') || from.includes('localhost') || from.endsWith('.local')) {
+    return false;
+  }
+  return true;
 }

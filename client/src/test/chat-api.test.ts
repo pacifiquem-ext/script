@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { streamMessage } from './chat-api';
+import { streamMessage } from '../lib/chat-api';
 
 function sseBody(events: unknown[]) {
   const payload = events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('');
@@ -20,7 +20,10 @@ describe('streamMessage', () => {
       vi.fn(async () => ({
         ok: true,
         body: sseBody([
-          { type: 'citations', citations: [{ documentId: 'd1', documentName: 'A', chunkId: 'c1', position: 0 }] },
+          {
+            type: 'citations',
+            citations: [{ documentId: 'd1', documentName: 'A', chunkId: 'c1', position: 0 }],
+          },
           { type: 'delta', text: 'Hi' },
           { type: 'delta', text: ' there' },
           {

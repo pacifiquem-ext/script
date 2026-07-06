@@ -1,8 +1,8 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { Alert } from './Alert';
-import { FieldHint } from './FieldHint';
+import { Alert } from '../components/ui/Alert';
+import { FieldHint } from '../components/ui/FieldHint';
 
 vi.mock('sonner', () => ({
   toast: {

@@ -8,6 +8,8 @@ export default defineConfig({
     },
   },
   test: {
+    include: ['src/test/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['node_modules', 'dist', 'src/components/**', 'src/lib/**', 'src/pages/**'],
     environment: 'jsdom',
     passWithNoTests: false,
   },

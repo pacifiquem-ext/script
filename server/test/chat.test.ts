@@ -3,6 +3,7 @@ import { buildApp } from '../src/app';
 import { prisma } from '../src/db/prisma';
 import { sha256 } from '../src/lib/crypto';
 import { embedTexts, vectorLiteral } from '../src/modules/jobs/embeddings';
+import { originHeaders } from './helpers';
 
 const app = buildApp();
 const email = `chat-${Date.now()}@example.com`;
@@ -27,7 +28,7 @@ async function signupAndVerify(address: string, jar: Record<string, string>) {
   await app.inject({
     method: 'POST',
     url: '/auth/signup',
-    headers: { origin: 'http://localhost:5173' },
+    headers: originHeaders(),
     payload: { name: 'Chat User', email: address, password: 'password123' },
   });
   const otp = await prisma.emailOtp.findFirst({
@@ -43,7 +44,7 @@ async function signupAndVerify(address: string, jar: Record<string, string>) {
     await app.inject({
       method: 'POST',
       url: '/auth/verify-otp',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies: jar,
       payload: { email: address, code: '123456', purpose: 'signup_verify' },
     }),
@@ -62,14 +63,14 @@ describe('chat routes', () => {
     const me = await app.inject({
       method: 'GET',
       url: '/auth/me',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
     });
     workspaceId = me.json().user.lastWorkspaceId;
     const otherMe = await app.inject({
       method: 'GET',
       url: '/auth/me',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies: otherCookies,
     });
     otherWorkspaceId = otherMe.json().user.lastWorkspaceId;
@@ -77,7 +78,7 @@ describe('chat routes', () => {
     const created = await app.inject({
       method: 'POST',
       url: '/conversations',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
       payload: { title: 'Test' },
     });
@@ -157,7 +158,7 @@ describe('chat routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: `/conversations/${conversationId}/messages/sync`,
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
       payload: { content: 'What is the alpha plan?', documentIds: [] },
     });
@@ -171,7 +172,7 @@ describe('chat routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: `/conversations/${conversationId}/messages`,
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
       payload: { content: 'Stream please', documentIds: [] },
     });
@@ -184,7 +185,7 @@ describe('chat routes', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/conversations?q=Test&page=1&pageSize=20',
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
     });
     expect(res.statusCode).toBe(200);
@@ -196,7 +197,7 @@ describe('chat routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: `/conversations/${conversationId}/messages/sync`,
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
       payload: { content: 'Beta confidential other workspace only', documentIds: [] },
     });
@@ -225,7 +226,7 @@ describe('chat routes', () => {
     const res = await app.inject({
       method: 'POST',
       url: `/conversations/${conversationId}/messages/sync`,
-      headers: { origin: 'http://localhost:5173' },
+      headers: originHeaders(),
       cookies,
       payload: { content: 'Use pending doc', documentIds: [pending.id] },
     });
