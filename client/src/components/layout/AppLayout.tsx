@@ -10,6 +10,8 @@ import {
   IconSettings,
   IconLogout,
   IconChevronDown,
+  IconEdit,
+  IconDelete,
 } from '../../lib/icons';
 import { SettingsModal } from '../../pages/app/SettingsModal';
 import { useAuth } from '../../contexts/useAuth';
@@ -21,6 +23,14 @@ import {
 } from '../../lib/workspaces';
 import { useChatMutations, useConversations } from '../../lib/chat-api';
 import type { PublicConversation } from '@script/shared';
+import { Alert } from '../ui/Alert';
+import { CompactButton } from '../ui/CompactButton';
+import { ConfirmModal } from '../ui/ConfirmModal';
+import { FormModal } from '../ui/FormModal';
+import { notify } from '../ui/toast-alert';
+import { getErrorMessage } from '../../lib/form-errors';
+import { LoadingState } from '../ui/LoadingState';
+import { EmptyState } from '../ui/EmptyState';
 
 export function AppLayout() {
   const [expanded, setExpanded] = useState(true);
@@ -48,6 +58,10 @@ export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const activeConversationId = (location.state as { conversationId?: string } | null)?.conversationId;
+  const [renameTarget, setRenameTarget] = useState<PublicConversation | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PublicConversation | null>(null);
+  const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
+  const [modalBusy, setModalBusy] = useState(false);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -73,25 +87,49 @@ export function AppLayout() {
   const isActive = (href: string) => location.pathname.startsWith(href);
   const searchResults = searchMode && searchQuery.trim() ? conversationsQuery.data?.conversations ?? [] : null;
 
-  async function handleRename(item: PublicConversation) {
-    const title = window.prompt('Rename chat', item.title);
-    if (!title?.trim() || title.trim() === item.title) return;
+  async function submitRename(title: string) {
+    if (!renameTarget) return;
+    setModalBusy(true);
     try {
-      await renameConversation.mutateAsync({ id: item.id, title: title.trim() });
-    } catch {
-      window.alert('Could not rename chat.');
+      await renameConversation.mutateAsync({ id: renameTarget.id, title });
+      notify.success('Chat renamed');
+      setRenameTarget(null);
+    } catch (err) {
+      notify.error(getErrorMessage(err, 'Could not rename chat.'));
+    } finally {
+      setModalBusy(false);
     }
   }
 
-  async function handleDelete(item: PublicConversation) {
-    if (!window.confirm(`Delete “${item.title}”? This cannot be undone.`)) return;
+  async function submitDelete() {
+    if (!deleteTarget) return;
+    setModalBusy(true);
     try {
-      await deleteConversation.mutateAsync(item.id);
-      if (activeConversationId === item.id) {
+      const id = deleteTarget.id;
+      await deleteConversation.mutateAsync(id);
+      notify.success('Chat deleted');
+      setDeleteTarget(null);
+      if (activeConversationId === id) {
         navigate('/app/chat', { replace: true, state: {} });
       }
-    } catch {
-      window.alert('Could not delete chat.');
+    } catch (err) {
+      notify.error(getErrorMessage(err, 'Could not delete chat.'));
+    } finally {
+      setModalBusy(false);
+    }
+  }
+
+  async function submitWorkspace(name: string) {
+    setModalBusy(true);
+    try {
+      await createWorkspace.mutateAsync(name);
+      notify.success('Workspace created');
+      setWorkspaceModalOpen(false);
+      setWorkspaceOpen(false);
+    } catch (err) {
+      notify.error(getErrorMessage(err, 'Could not create workspace.'));
+    } finally {
+      setModalBusy(false);
     }
   }
 
@@ -100,7 +138,7 @@ export function AppLayout() {
     return (
       <div
         key={item.id}
-        className={`group flex items-center gap-1 rounded-8 pr-1 ${active ? 'bg-neutral-200' : 'hover:bg-neutral-50'}`}
+        className={`group flex items-center gap-0.5 rounded-8 pr-1 ${active ? 'bg-neutral-200' : 'hover:bg-neutral-50'}`}
       >
         <button
           type="button"
@@ -110,22 +148,21 @@ export function AppLayout() {
         >
           {item.title}
         </button>
-        <button
-          type="button"
-          className="opacity-0 group-hover:opacity-100 text-[11px] text-neutral-400 hover:text-neutral-800 bg-transparent border-none cursor-pointer px-1"
+        <CompactButton
+          className="opacity-0 group-hover:opacity-100 focus:opacity-100"
           aria-label={`Rename ${item.title}`}
-          onClick={() => void handleRename(item)}
+          onClick={() => setRenameTarget(item)}
         >
-          Edit
-        </button>
-        <button
-          type="button"
-          className="opacity-0 group-hover:opacity-100 text-[11px] text-error-base bg-transparent border-none cursor-pointer px-1"
+          <IconEdit size={14} />
+        </CompactButton>
+        <CompactButton
+          destructive
+          className="opacity-0 group-hover:opacity-100 focus:opacity-100"
           aria-label={`Delete ${item.title}`}
-          onClick={() => void handleDelete(item)}
+          onClick={() => setDeleteTarget(item)}
         >
-          Del
-        </button>
+          <IconDelete size={14} />
+        </CompactButton>
       </div>
     );
   }
@@ -178,11 +215,8 @@ export function AppLayout() {
                   <button
                     className="flex items-center gap-2.5 w-full p-2 bg-transparent border-none cursor-pointer rounded-8 text-primary-base transition-colors hover:bg-primary-alpha-10 text-left mt-1"
                     onClick={() => {
-                      const name = window.prompt('Workspace name');
-                      if (!name?.trim()) return;
-                      void createWorkspace
-                        .mutateAsync(name.trim())
-                        .finally(() => setWorkspaceOpen(false));
+                      setWorkspaceOpen(false);
+                      setWorkspaceModalOpen(true);
                     }}
                   >
                     <span className="text-para-sm flex-1 truncate">New workspace</span>
@@ -294,17 +328,40 @@ export function AppLayout() {
         {expanded && (
           <div className="flex-1 overflow-y-auto p-[4px_8px_8px]">
             {conversationsQuery.isLoading ? (
-              <p className="text-neutral-400 p-[8px_8px] text-para-sm">Loading chats…</p>
+              <div className="p-2">
+                <LoadingState label="Loading chats…" />
+              </div>
             ) : conversationsQuery.isError ? (
-              <p className="text-error-base p-[8px_8px] text-para-sm">Couldn’t load chats.</p>
+              <div className="p-2">
+                <Alert
+                  status="error"
+                  variant="stroke"
+                  compact
+                  title="Couldn’t load chats"
+                  description={getErrorMessage(conversationsQuery.error, 'Try again in a moment.')}
+                  action={
+                    <button
+                      type="button"
+                      className="text-para-xs text-primary-base bg-transparent border-none cursor-pointer p-0 underline"
+                      onClick={() => void conversationsQuery.refetch()}
+                    >
+                      Retry
+                    </button>
+                  }
+                />
+              </div>
             ) : searchResults !== null ? (
               searchResults.length === 0 ? (
-                <p className="text-neutral-400 p-[8px_8px] text-para-sm">No results found.</p>
+                <div className="p-2">
+                  <EmptyState title="No results found" description="Try a different search term." />
+                </div>
               ) : (
                 <div className="mb-3">{searchResults.map(renderConversationRow)}</div>
               )
             ) : conversationGroups.length === 0 ? (
-              <p className="text-neutral-400 p-[8px_8px] text-para-sm">No conversations yet.</p>
+              <div className="p-2">
+                <EmptyState title="No conversations yet" description="Start a new chat to begin." />
+              </div>
             ) : (
               conversationGroups.map((group: { group: string; items: PublicConversation[] }) => (
                 <div key={group.group} className="mb-3">
@@ -392,6 +449,52 @@ export function AppLayout() {
       </main>
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      <FormModal
+        open={Boolean(renameTarget)}
+        onOpenChange={(open) => {
+          if (!open && !modalBusy) setRenameTarget(null);
+        }}
+        title="Rename chat"
+        description="Choose a clear title for this conversation."
+        label="Title"
+        initialValue={renameTarget?.title ?? ''}
+        confirmLabel="Save"
+        loading={modalBusy}
+        validate={(value) =>
+          value.length > 200 ? 'Title must be 200 characters or fewer' : null
+        }
+        onSubmit={submitRename}
+      />
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !modalBusy) setDeleteTarget(null);
+        }}
+        title="Delete chat?"
+        description={
+          deleteTarget
+            ? `“${deleteTarget.title}” and its messages will be permanently removed.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        destructive
+        loading={modalBusy}
+        onConfirm={submitDelete}
+      />
+      <FormModal
+        open={workspaceModalOpen}
+        onOpenChange={(open) => {
+          if (!open && !modalBusy) setWorkspaceModalOpen(false);
+        }}
+        title="New workspace"
+        description="Workspaces keep documents, chats, and credits separate."
+        label="Workspace name"
+        placeholder="e.g. Product research"
+        confirmLabel="Create"
+        loading={modalBusy}
+        onSubmit={submitWorkspace}
+      />
     </div>
   );
 }

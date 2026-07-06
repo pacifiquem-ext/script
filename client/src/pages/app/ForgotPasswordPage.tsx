@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { apiRequest } from '../../lib/api-client';
 import { getErrorMessage } from '../../lib/form-errors';
+import { Alert } from '../../components/ui/Alert';
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -63,7 +64,9 @@ export function ForgotPasswordPage() {
             leftIcon={<IconMail size={18} />}
             required
           />
-          {error && <p className="text-para-sm text-error-base text-center">{error}</p>}
+          {error && (
+            <Alert status="error" variant="stroke" compact description={error} onDismiss={() => setError(null)} />
+          )}
           <Button
             type="submit"
             size="md"

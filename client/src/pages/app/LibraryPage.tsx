@@ -11,6 +11,9 @@ import { IconFolderSimple, IconPlus, IconUpload, IconFile, IconSearch } from '..
 import { useCredits } from '../../lib/chat-api';
 import { getErrorMessage } from '../../lib/form-errors';
 import { useDocument, useDocuments, useFolders, useLibraryMutations } from '../../lib/library-api';
+import { Alert } from '../../components/ui/Alert';
+import { FormModal } from '../../components/ui/FormModal';
+import { notify } from '../../components/ui/toast-alert';
 
 export function LibraryPage() {
   const navigate = useNavigate();
@@ -21,6 +24,8 @@ export function LibraryPage() {
   const [error, setError] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [dragActive, setDragActive] = useState(false);
+  const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [folderBusy, setFolderBusy] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const foldersQuery = useFolders(parentId);
   const documentsQuery = useDocuments(selectedFolderId);
@@ -46,8 +51,11 @@ export function LibraryPage() {
       for (const file of files) {
         await mutations.uploadFile.mutateAsync({ file, folderId: selectedFolderId });
       }
+      notify.success(files.length === 1 ? 'File uploaded' : `${files.length} files uploaded`);
     } catch (err) {
-      setError(getErrorMessage(err, 'Upload failed'));
+      const message = getErrorMessage(err, 'Upload failed');
+      setError(message);
+      notify.error(message);
     }
   }
 
@@ -88,13 +96,7 @@ export function LibraryPage() {
           <Button
             size="xs"
             aria-label="Create folder"
-            onClick={() => {
-              const name = window.prompt('Folder name');
-              if (!name?.trim()) return;
-              void mutations.createFolder
-                .mutateAsync({ name: name.trim(), parentId })
-                .catch((err) => setError(getErrorMessage(err)));
-            }}
+            onClick={() => setFolderModalOpen(true)}
           >
             <IconPlus size={14} /> New
           </Button>
@@ -169,19 +171,33 @@ export function LibraryPage() {
               setError(null);
               void mutations.importUrl
                 .mutateAsync({ url: url.trim(), folderId: selectedFolderId })
-                .then(() => setUrl(''))
-                .catch((err) => setError(getErrorMessage(err)));
+                .then(() => {
+                  setUrl('');
+                  notify.success('Import started');
+                })
+                .catch((err) => {
+                  const message = getErrorMessage(err);
+                  setError(message);
+                  notify.error(message);
+                });
             }}
           >
             Import URL
           </Button>
         </div>
 
-        {error && (
+        {error ? (
           <div className="px-4 pt-3">
-            <ErrorState message={error} onRetry={() => setError(null)} />
+            <Alert
+              status="error"
+              variant="stroke"
+              title="Library error"
+              description={error}
+              onDismiss={() => setError(null)}
+              compact
+            />
           </div>
-        )}
+        ) : null}
 
         {foldersQuery.isLoading || documentsQuery.isLoading ? (
           <LoadingState label="Loading library…" />
@@ -320,6 +336,32 @@ export function LibraryPage() {
           onClose={() => setPreviewId(null)}
         />
       )}
+      <FormModal
+        open={folderModalOpen}
+        onOpenChange={(open) => {
+          if (!open && !folderBusy) setFolderModalOpen(false);
+        }}
+        title="New folder"
+        description="Organize documents inside your library."
+        label="Folder name"
+        placeholder="e.g. Contracts"
+        confirmLabel="Create"
+        loading={folderBusy}
+        onSubmit={async (name) => {
+          setFolderBusy(true);
+          try {
+            await mutations.createFolder.mutateAsync({ name, parentId });
+            notify.success('Folder created');
+            setFolderModalOpen(false);
+          } catch (err) {
+            const message = getErrorMessage(err, 'Could not create folder');
+            setError(message);
+            notify.error(message);
+          } finally {
+            setFolderBusy(false);
+          }
+        }}
+      />
     </div>
   );
 }

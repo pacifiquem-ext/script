@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom';
 import type { MessageCitation, PublicDocument, PublicMessage } from '@script/shared';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
+import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { notify } from '../../components/ui/toast-alert';
 import { streamMessage, useChatMutations, useCredits, useMessages } from '../../lib/chat-api';
 import { useDocument, useDocuments } from '../../lib/library-api';
 import { getErrorMessage } from '../../lib/form-errors';
@@ -71,7 +73,9 @@ export function ChatPage() {
         return doc && doc.status !== 'ready';
       });
       if (pendingNotReady.length) {
-        setError('Wait for mentioned documents to finish processing before chatting.');
+        const message = 'Wait for mentioned documents to finish processing before chatting.';
+        setError(message);
+        notify.warning(message, 'Documents not ready');
         return;
       }
       setError(null);
@@ -99,8 +103,11 @@ export function ChatPage() {
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           setError('Generation stopped.');
+          notify.info('Generation stopped.', 'Stopped');
         } else {
-          setError(getErrorMessage(err, 'Failed to send message'));
+          const message = getErrorMessage(err, 'Failed to send message');
+          setError(message);
+          notify.error(message);
         }
         setStreaming('');
         setPendingUser(null);
@@ -307,14 +314,25 @@ export function ChatPage() {
                 {credits.data?.balance?.toLocaleString() ?? '—'}
               </span>
             </span>
-            {error && (
-              <span className="text-error-base text-right">
-                {error.toLowerCase().includes('insufficient credits')
-                  ? 'Insufficient credits for this reply.'
-                  : error}
-              </span>
-            )}
           </div>
+          {error ? (
+            <Alert
+              status="error"
+              variant="stroke"
+              compact
+              title={
+                error.toLowerCase().includes('insufficient credits')
+                  ? 'Insufficient credits'
+                  : 'Chat error'
+              }
+              description={
+                error.toLowerCase().includes('insufficient credits')
+                  ? 'Insufficient credits for this reply.'
+                  : error
+              }
+              onDismiss={() => setError(null)}
+            />
+          ) : null}
           <div className="flex gap-2 flex-col sm:flex-row">
             <textarea
               ref={textareaRef}

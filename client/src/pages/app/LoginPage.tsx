@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/Input';
 import { apiRequest } from '../../lib/api-client';
 import { getErrorMessage } from '../../lib/form-errors';
 import { useAuth } from '../../contexts/useAuth';
+import { Alert } from '../../components/ui/Alert';
 
 export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -105,7 +106,9 @@ export function LoginPage() {
               Forgot password?
             </Link>
           </div>
-          {error && <p className="text-para-sm text-error-base text-center">{error}</p>}
+          {error && (
+            <Alert status="error" variant="stroke" compact description={error} onDismiss={() => setError(null)} />
+          )}
           <Button type="submit" size="md" loading={loading} className="self-center min-w-[200px]">
             Sign in
           </Button>

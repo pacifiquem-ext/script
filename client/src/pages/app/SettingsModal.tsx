@@ -21,8 +21,11 @@ import {
   IconOneDrive,
   IconBox,
 } from '../../components/ui/BrandIcons';
+import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
+import { FormModal } from '../../components/ui/FormModal';
 import { Input } from '../../components/ui/Input';
+import { notify } from '../../components/ui/toast-alert';
 import { useAuth } from '../../contexts/useAuth';
 import { useWorkspaceMembers, useWorkspaces } from '../../lib/workspaces';
 import { apiRequest } from '../../lib/api-client';
@@ -133,6 +136,12 @@ export function SettingsModal({ open, onClose }: Props) {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [apiKeyName, setApiKeyName] = useState('');
   const [apiKeySecret, setApiKeySecret] = useState<string | null>(null);
+  const [creditShareMember, setCreditShareMember] = useState<{
+    id: string;
+    name: string;
+    creditShare: number | null;
+  } | null>(null);
+  const [creditShareBusy, setCreditShareBusy] = useState(false);
   const apiKeysQuery = useQuery({
     queryKey: ['api-keys'],
     enabled: open && (activeItem === 'advanced' || activeItem === 'integrations'),
@@ -669,7 +678,9 @@ export function SettingsModal({ open, onClose }: Props) {
                   Invite Member
                 </Button>
               </div>
-              {inviteError && <p className="text-[12px] text-error-base">{inviteError}</p>}
+              {inviteError && (
+                <Alert status="error" variant="stroke" compact description={inviteError} onDismiss={() => setInviteError(null)} />
+              )}
               <p className="text-[13px] text-neutral-500">{members.length} members</p>
               {members.map((member) => (
                 <div
@@ -686,19 +697,14 @@ export function SettingsModal({ open, onClose }: Props) {
                     </span>
                     <button
                       type="button"
-                      className="text-[11px] text-primary-base"
-                      onClick={() => {
-                        const value = window.prompt(
-                          'Credit share % (0-100, empty to clear)',
-                          member.creditShare?.toString() ?? '',
-                        );
-                        if (value === null) return;
-                        const creditShare = value.trim() === '' ? null : Number(value);
-                        void apiRequest(`/workspaces/current/members/${member.id}/credit-share`, {
-                          method: 'PATCH',
-                          body: { creditShare },
-                        }).then(() => membersQuery.refetch());
-                      }}
+                      className="text-[11px] text-primary-base bg-transparent border-none cursor-pointer"
+                      onClick={() =>
+                        setCreditShareMember({
+                          id: member.id,
+                          name: member.name,
+                          creditShare: member.creditShare ?? null,
+                        })
+                      }
                     >
                       {member.creditShare == null ? 'Set share' : `${member.creditShare}%`}
                     </button>
@@ -1042,10 +1048,10 @@ export function SettingsModal({ open, onClose }: Props) {
                           className="h-9 px-3 border border-neutral-200 rounded-8 text-[13px] outline-none focus:border-primary-base"
                         />
                         {passwordError && (
-                          <p className="text-[12px] text-error-base">{passwordError}</p>
+                          <Alert status="error" variant="stroke" compact description={passwordError} onDismiss={() => setPasswordError(null)} />
                         )}
                         {passwordMessage && (
-                          <p className="text-[12px] text-success-base">{passwordMessage}</p>
+                          <Alert status="success" variant="lighter" compact description={passwordMessage} onDismiss={() => setPasswordMessage(null)} />
                         )}
                         <Button
                           variant="neutral"
@@ -1071,11 +1077,18 @@ export function SettingsModal({ open, onClose }: Props) {
                               </span>
                               {!session.current && (
                                 <button
-                                  className="text-error-base shrink-0"
+                                  className="text-error-base shrink-0 bg-transparent border-none cursor-pointer text-[12px]"
                                   onClick={() =>
                                     void apiRequest(`/me/sessions/${session.id}`, {
                                       method: 'DELETE',
-                                    }).then(() => sessionsQuery.refetch())
+                                    })
+                                      .then(() => {
+                                        notify.success('Session revoked');
+                                        return sessionsQuery.refetch();
+                                      })
+                                      .catch((err) =>
+                                        notify.error(getErrorMessage(err, 'Could not revoke session')),
+                                      )
                                   }
                                 >
                                   Revoke
@@ -1238,8 +1251,12 @@ export function SettingsModal({ open, onClose }: Props) {
                   Delete my account
                 </Button>
               </section>
-              {privacyMessage && <p className="text-[12px] text-success-base">{privacyMessage}</p>}
-              {privacyError && <p className="text-[12px] text-error-base">{privacyError}</p>}
+              {privacyMessage && (
+                <Alert status="success" variant="lighter" compact description={privacyMessage} onDismiss={() => setPrivacyMessage(null)} />
+              )}
+              {privacyError && (
+                <Alert status="error" variant="stroke" compact description={privacyError} onDismiss={() => setPrivacyError(null)} />
+              )}
             </div>
           </>
         );
@@ -1326,6 +1343,51 @@ export function SettingsModal({ open, onClose }: Props) {
           {renderContent()}
         </div>
       </div>
+
+      <FormModal
+        open={Boolean(creditShareMember)}
+        onOpenChange={(open) => {
+          if (!open && !creditShareBusy) setCreditShareMember(null);
+        }}
+        title="Credit share"
+        description={
+          creditShareMember
+            ? `Set ${creditShareMember.name}'s share of workspace credits (0–100). Leave empty to clear.`
+            : undefined
+        }
+        label="Share percent"
+        placeholder="e.g. 25"
+        initialValue={creditShareMember?.creditShare?.toString() ?? ''}
+        confirmLabel="Save share"
+        loading={creditShareBusy}
+        allowEmpty
+        validate={(value) => {
+          if (!value) return null;
+          const n = Number(value);
+          if (!Number.isFinite(n) || n < 0 || n > 100 || !Number.isInteger(n)) {
+            return 'Enter a whole number from 0 to 100, or leave empty to clear';
+          }
+          return null;
+        }}
+        onSubmit={async (value) => {
+          if (!creditShareMember) return;
+          setCreditShareBusy(true);
+          try {
+            const creditShare = value.trim() === '' ? null : Number(value);
+            await apiRequest(`/workspaces/current/members/${creditShareMember.id}/credit-share`, {
+              method: 'PATCH',
+              body: { creditShare },
+            });
+            await membersQuery.refetch();
+            notify.success('Credit share updated');
+            setCreditShareMember(null);
+          } catch (err) {
+            notify.error(getErrorMessage(err, 'Could not update credit share'));
+          } finally {
+            setCreditShareBusy(false);
+          }
+        }}
+      />
     </>
   );
 }
