@@ -43,21 +43,20 @@ pnpm install
 
 cp client/.env.example client/.env
 cp server/.env.example server/.env
-# fill in server/.env: Neon DATABASE_URL/DIRECT_URL, storage credentials,
-# VOYAGE_API_KEY, ANTHROPIC_API_KEY — see ENV.md.
-# Dev without Redis: ALLOW_INLINE_INGESTION=true (already documented in server/.env.example).
-# Production requires REDIS_URL and `pnpm --filter @script/server worker`.
+# fill in server/.env: Neon DATABASE_URL/DIRECT_URL (or Compose Postgres), storage credentials,
+# VOYAGE_API_KEY, ANTHROPIC_API_KEY — see ENV.md and docs/local-infra.md.
 
-pnpm dev          # runs client (Vite) + server (Fastify) together
-pnpm build        # builds both
-pnpm test         # runs both test suites
-pnpm lint         # lints both packages
-pnpm typecheck    # type-checks both packages
-pnpm format       # formats the whole repo with Prettier
+pnpm deps:up      # Redis + Postgres(pgvector) + MinIO in Docker (REDIS_URL=redis://127.0.0.1:6379)
+pnpm deps:redis   # ensure Redis is up and answers PONG
+pnpm dev          # client + API on the host (uses Compose Redis; ALLOW_INLINE_INGESTION=false)
+pnpm dev:app      # client + API + BullMQ worker on the host
+pnpm stack:up     # optional: build/run API+worker in Docker too (--profile app)
+pnpm build && pnpm test && pnpm lint && pnpm typecheck
+pnpm format
 ```
 
-Server health checks once running: `GET http://localhost:4000/health` (liveness),
-`GET http://localhost:4000/health/ready` (checks the database connection).
+Server health: `GET http://localhost:4000/health` (liveness),
+`GET http://localhost:4000/health/ready` (database + Redis PING + storage).
 Chat/ingestion return `503 CONFIGURATION_ERROR` until Voyage and Anthropic keys are set.
 After adding Voyage, backfill any older documents via `POST /jobs/embeddings/backfill`.
 
@@ -71,15 +70,16 @@ Full rationale and the rules for extending any of this: `AGENTS.md`.
 
 ## Self-hosting
 
-This app is designed to be self-hostable without depending on any single vendor account beyond
-Neon for the database. File storage defaults to a managed provider but can run entirely on
-self-hosted, S3-compatible storage (Garage) — see `docs/storage.md`.
+Self-hostable dependencies run via Docker Compose by default: **Redis** (BullMQ), **Postgres +
+pgvector**, and **MinIO** (S3-compatible local object store; production self-hosters can point the
+same `STORAGE_DRIVER=s3` vars at **Garage** — `docs/storage.md`). Neon + UploadThing remain
+supported managed defaults. Full guide: [`docs/local-infra.md`](./docs/local-infra.md).
 
 ## Deploy topology
 
-- **API + worker:** Node server (`pnpm --filter @script/server start`) and optional worker
-  (`pnpm --filter @script/server worker:start`) behind your reverse proxy. Use
-  `docker compose up` for Postgres (pgvector), Redis, API, and worker.
+- **Dependencies:** `pnpm deps:up` / `docker compose up -d` (Redis, Postgres, MinIO).
+- **API + worker on host:** `pnpm dev:app` with `REDIS_URL=redis://127.0.0.1:6379`.
+- **API + worker in Docker:** `pnpm stack:up` (`docker compose --profile app up -d --build`).
 - **Web:** static Vite build (`client/dist`) on any static host (e.g. Vercel with `client/vercel.json`
   SPA rewrites) with `VITE_API_URL` pointing at the API origin and `VITE_AUTH_GUARD=true`.
 - Run `prisma migrate deploy` on release using `DIRECT_URL`.

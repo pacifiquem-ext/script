@@ -32,11 +32,17 @@ vendor, this driver works unmodified against:
   self-hosting this app who wants storage they fully own, with no external account required.
 - MinIO, AWS S3, Cloudflare R2, or any other S3-compatible provider.
 
-### Running Garage for self-hosting
+### Local S3 via Docker Compose (MinIO)
+
+For day-to-day self-hosted object storage on a laptop, Compose runs **MinIO** and creates the
+`script-documents` bucket (`pnpm deps:up`). Point `server/.env` at the published API port — see
+[`docs/local-infra.md`](./local-infra.md) and `.env.docker.example`. Console UI: http://127.0.0.1:9001.
+
+### Running Garage for production self-hosting
 
 1. Deploy Garage (single binary or Docker — see the [Garage quickstart](https://garagehq.deuxfleurs.fr/documentation/quick-start/)).
 2. Create a bucket and an access key through `garage` CLI.
-3. Set in `server/.env`:
+3. Set in `server/.env` (same keys as MinIO; only endpoint/credentials change):
    ```
    STORAGE_DRIVER=s3
    S3_ENDPOINT=http://<your-garage-host>:3900
@@ -46,8 +52,8 @@ vendor, this driver works unmodified against:
    S3_SECRET_ACCESS_KEY=<garage secret key>
    S3_FORCE_PATH_STYLE=true
    ```
-4. Restart the server. No application code changes are required to move between the managed and
-   self-hosted paths — only these env vars.
+4. Restart the server. No application code changes are required to move between managed UploadThing,
+   Compose MinIO, and Garage — only these env vars.
 
 ## Status
 
