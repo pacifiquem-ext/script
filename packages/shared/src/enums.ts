@@ -6,6 +6,16 @@ export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
 export const documentStatusSchema = z.enum(['pending', 'processing', 'ready', 'failed']);
 export type DocumentStatus = z.infer<typeof documentStatusSchema>;
 
+export const documentProcessingPhaseSchema = z.enum([
+  'queued',
+  'downloading',
+  'extracting',
+  'chunking',
+  'embedding',
+  'persisting',
+]);
+export type DocumentProcessingPhase = z.infer<typeof documentProcessingPhaseSchema>;
+
 export const documentSourceSchema = z.enum(['local', 'url', 'drive', 'dropbox', 'onedrive', 'box']);
 export type DocumentSource = z.infer<typeof documentSourceSchema>;
 
@@ -29,6 +39,7 @@ export const creditLedgerReasonSchema = z.enum([
   'admin_adjust',
   'chat_usage',
   'ingestion_usage',
+  'embedding_backfill',
   'purchase_pending',
 ]);
 export type CreditLedgerReason = z.infer<typeof creditLedgerReasonSchema>;

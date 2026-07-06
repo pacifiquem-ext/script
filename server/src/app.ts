@@ -16,6 +16,7 @@ import { chatRoutes } from './modules/chat/routes';
 import { apiKeyRoutes } from './modules/api-keys/routes';
 import { userRoutes } from './modules/users/routes';
 import { creditsRoutes } from './modules/credits/routes';
+import { jobsRoutes } from './modules/jobs/routes';
 import { registerIngestionProcessors } from './modules/jobs/ingestion';
 
 export function buildApp() {
@@ -37,6 +38,7 @@ export function buildApp() {
     await instance.register(apiKeyRoutes);
     await instance.register(userRoutes);
     await instance.register(creditsRoutes);
+    await instance.register(jobsRoutes);
   });
   return app;
 }

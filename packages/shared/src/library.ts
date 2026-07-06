@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { documentSourceSchema, documentStatusSchema } from './enums';
+import { documentProcessingPhaseSchema, documentSourceSchema, documentStatusSchema } from './enums';
 import { paginationQuerySchema } from './pagination';
 
 export const createFolderBodySchema = z.object({
@@ -53,6 +53,7 @@ export const publicDocumentSchema = z.object({
   source: documentSourceSchema,
   sourceUrl: z.string().nullable(),
   status: documentStatusSchema,
+  processingPhase: documentProcessingPhaseSchema.nullable(),
   failureReason: z.string().nullable(),
   pageCount: z.number().int().nullable(),
   downloadUrl: z.string().nullable().optional(),

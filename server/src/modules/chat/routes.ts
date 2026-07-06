@@ -1,17 +1,25 @@
 import type { FastifyInstance } from 'fastify';
 import {
   createConversationBodySchema,
+  listConversationsQuerySchema,
+  listMessagesQuerySchema,
   sendMessageBodySchema,
   updateConversationBodySchema,
 } from '@script/shared';
 import { isAppError } from '../../common/errors';
+import { chatMessageRateLimitConfig } from '../../config/rate-limits';
 import { requireWorkspace } from '../../plugins/auth';
 import * as chat from './chat-service';
+
+function writeEvent(reply: { raw: NodeJS.WritableStream }, payload: unknown) {
+  reply.raw.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
 
 export async function chatRoutes(app: FastifyInstance) {
   app.get('/conversations', async (request) => {
     const { user, workspace } = await requireWorkspace(request);
-    return chat.listConversations(workspace.id, user.id);
+    const query = listConversationsQuerySchema.parse(request.query ?? {});
+    return chat.listConversations(workspace.id, user.id, query);
   });
 
   app.post('/conversations', async (request) => {
@@ -43,51 +51,79 @@ export async function chatRoutes(app: FastifyInstance) {
   app.get('/conversations/:conversationId/messages', async (request) => {
     const { user, workspace } = await requireWorkspace(request);
     const { conversationId } = request.params as { conversationId: string };
-    return chat.listMessages(workspace.id, user.id, conversationId);
+    const query = listMessagesQuerySchema.parse(request.query ?? {});
+    return chat.listMessages(workspace.id, user.id, conversationId, query);
   });
 
-  app.post('/conversations/:conversationId/messages/sync', async (request) => {
-    const { user, workspace } = await requireWorkspace(request);
-    const { conversationId } = request.params as { conversationId: string };
-    const body = sendMessageBodySchema.parse(request.body);
-    let content = '';
-    for await (const chunk of chat.streamAssistantReply({
-      workspaceId: workspace.id,
-      userId: user.id,
-      conversationId,
-      body,
-    })) {
-      content += chunk;
-    }
-    return { message: { role: 'assistant', content } };
-  });
-
-  app.post('/conversations/:conversationId/messages', async (request, reply) => {
-    const { user, workspace } = await requireWorkspace(request);
-    const { conversationId } = request.params as { conversationId: string };
-    const body = sendMessageBodySchema.parse(request.body);
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-    });
-    try {
-      for await (const chunk of chat.streamAssistantReply({
+  app.post(
+    '/conversations/:conversationId/messages/sync',
+    { config: { rateLimit: chatMessageRateLimitConfig } },
+    async (request) => {
+      const { user, workspace } = await requireWorkspace(request);
+      const { conversationId } = request.params as { conversationId: string };
+      const body = sendMessageBodySchema.parse(request.body);
+      let message: unknown = null;
+      let content = '';
+      let citations: unknown[] = [];
+      for await (const event of chat.streamAssistantReply({
         workspaceId: workspace.id,
         userId: user.id,
         conversationId,
         body,
       })) {
-        reply.raw.write(`data: ${JSON.stringify({ type: 'delta', text: chunk })}\n\n`);
+        if (event.type === 'delta') content += event.text;
+        if (event.type === 'citations') citations = event.citations;
+        if (event.type === 'done') message = event.message;
+        if (event.type === 'error') {
+          const err = new Error(event.message) as Error & { code?: string };
+          err.code = event.code;
+          throw err;
+        }
       }
-      reply.raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
-    } catch (error) {
-      const message = isAppError(error) ? error.message : 'Chat failed';
-      const code = isAppError(error) ? error.code : 'INTERNAL_SERVER_ERROR';
-      reply.raw.write(`data: ${JSON.stringify({ type: 'error', code, message })}\n\n`);
-    } finally {
-      reply.raw.end();
-    }
-    return reply;
-  });
+      return {
+        message: message ?? { role: 'assistant', content, citations, partial: false },
+      };
+    },
+  );
+
+  app.post(
+    '/conversations/:conversationId/messages',
+    { config: { rateLimit: chatMessageRateLimitConfig } },
+    async (request, reply) => {
+      const { user, workspace } = await requireWorkspace(request);
+      const { conversationId } = request.params as { conversationId: string };
+      const body = sendMessageBodySchema.parse(request.body);
+      const controller = new AbortController();
+      const onClose = () => controller.abort();
+      request.raw.on('close', onClose);
+
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+      });
+
+      try {
+        for await (const event of chat.streamAssistantReply({
+          workspaceId: workspace.id,
+          userId: user.id,
+          conversationId,
+          body,
+          signal: controller.signal,
+        })) {
+          if (controller.signal.aborted) break;
+          writeEvent(reply, event);
+        }
+      } catch (error) {
+        const message = isAppError(error) ? error.message : 'Chat failed';
+        const code = isAppError(error) ? error.code : 'INTERNAL_SERVER_ERROR';
+        writeEvent(reply, { type: 'error', code, message });
+      } finally {
+        request.raw.off('close', onClose);
+        reply.raw.end();
+      }
+      return reply;
+    },
+  );
 }

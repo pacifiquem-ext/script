@@ -40,6 +40,18 @@ export class ConflictError extends AppError {
   }
 }
 
+export class ServiceUnavailableError extends AppError {
+  constructor(message = 'Service unavailable', details?: unknown) {
+    super(message, 503, 'SERVICE_UNAVAILABLE', details);
+  }
+}
+
+export class ConfigurationError extends AppError {
+  constructor(message: string, details?: unknown) {
+    super(message, 503, 'CONFIGURATION_ERROR', details);
+  }
+}
+
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
 }

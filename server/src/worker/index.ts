@@ -6,11 +6,11 @@ import { closeQueues, getRedisConnection } from '../modules/jobs/queue';
 import { env } from '../config/env';
 
 async function main() {
-  if (env.NODE_ENV === 'production' && !env.VOYAGE_API_KEY) {
-    throw new Error('VOYAGE_API_KEY is required for the worker in production');
+  if (!env.VOYAGE_API_KEY) {
+    throw new Error('VOYAGE_API_KEY is required for the ingestion worker');
   }
   if (!getRedisConnection()) {
-    logger.warn('REDIS_URL unset — worker idles; API process uses inline ingestion fallback');
+    throw new Error('REDIS_URL is required for the ingestion worker');
   }
   await ensureVectorIndexes();
   registerIngestionProcessors();

@@ -31,6 +31,7 @@ export async function toPublicDocument(doc: Document, withUrl = false): Promise<
     source: doc.source,
     sourceUrl: doc.sourceUrl,
     status: doc.status,
+    processingPhase: (doc.processingPhase as PublicDocument['processingPhase']) ?? null,
     failureReason: doc.failureReason,
     pageCount: doc.pageCount,
     downloadUrl,

@@ -21,9 +21,17 @@ const ALLOWED_MIME = new Set([
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
   'text/plain',
   'text/markdown',
   'text/csv',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'image/bmp',
+  'image/tiff',
 ]);
 
 export async function listFolders(workspaceId: string, parentId?: string | null) {

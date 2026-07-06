@@ -43,7 +43,10 @@ pnpm install
 
 cp client/.env.example client/.env
 cp server/.env.example server/.env
-# fill in server/.env: Neon DATABASE_URL/DIRECT_URL, storage driver credentials — see ENV.md
+# fill in server/.env: Neon DATABASE_URL/DIRECT_URL, storage credentials,
+# VOYAGE_API_KEY, ANTHROPIC_API_KEY — see ENV.md.
+# Dev without Redis: ALLOW_INLINE_INGESTION=true (already documented in server/.env.example).
+# Production requires REDIS_URL and `pnpm --filter @script/server worker`.
 
 pnpm dev          # runs client (Vite) + server (Fastify) together
 pnpm build        # builds both
@@ -55,6 +58,8 @@ pnpm format       # formats the whole repo with Prettier
 
 Server health checks once running: `GET http://localhost:4000/health` (liveness),
 `GET http://localhost:4000/health/ready` (checks the database connection).
+Chat/ingestion return `503 CONFIGURATION_ERROR` until Voyage and Anthropic keys are set.
+After adding Voyage, backfill any older documents via `POST /jobs/embeddings/backfill`.
 
 ## Stack
 

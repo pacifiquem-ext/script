@@ -3,21 +3,40 @@ import {
   EMBEDDING_MODEL,
   INGESTION_CREDIT_COST,
   needsEmbeddingBackfill,
+  type BackfillBody,
 } from '@script/shared';
 import { prisma } from '../../db/prisma';
 import { logger } from '../../lib/logger';
 import { storage } from '../../storage';
 import { decrementCredits } from '../credits/credits-service';
-import { chunkText, extractText } from './extract';
+import { chunkText, extractText, type TextChunk } from './extract';
 import { embedTexts, vectorLiteral } from './embeddings';
 import {
   BACKFILL_QUEUE,
   INGESTION_QUEUE,
   createWorker,
+  enqueueBackfill,
+  enqueueIngestion,
   registerInlineHandler,
   type BackfillJobData,
   type IngestionJobData,
 } from './queue';
+
+type Phase =
+  | 'queued'
+  | 'downloading'
+  | 'extracting'
+  | 'chunking'
+  | 'embedding'
+  | 'persisting'
+  | null;
+
+async function setPhase(documentId: string, processingPhase: Phase, extra: Record<string, unknown> = {}) {
+  await prisma.document.update({
+    where: { id: documentId },
+    data: { processingPhase, ...extra },
+  });
+}
 
 async function downloadDocumentBuffer(storageKey: string, sourceUrl: string | null) {
   if (sourceUrl?.startsWith('http')) {
@@ -31,71 +50,125 @@ async function downloadDocumentBuffer(storageKey: string, sourceUrl: string | nu
   return Buffer.from(await response.arrayBuffer());
 }
 
+async function persistChunks(
+  documentId: string,
+  workspaceId: string,
+  chunks: TextChunk[],
+  embeddings: number[][],
+) {
+  await prisma.$transaction(async (tx) => {
+    await tx.documentChunk.deleteMany({ where: { documentId } });
+    if (chunks.length === 0) return;
+    await tx.documentChunk.createMany({
+      data: chunks.map((chunk, i) => ({
+        documentId,
+        workspaceId,
+        position: i,
+        content: chunk.content,
+        startOffset: chunk.startOffset,
+        endOffset: chunk.endOffset,
+        pageNumber: chunk.pageNumber,
+      })),
+    });
+    const rows = await tx.documentChunk.findMany({
+      where: { documentId },
+      select: { id: true, position: true },
+      orderBy: { position: 'asc' },
+    });
+    for (const row of rows) {
+      const embedding = embeddings[row.position];
+      if (!embedding) throw new Error(`Missing embedding for chunk position ${row.position}`);
+      await tx.$executeRawUnsafe(
+        `UPDATE "DocumentChunk" SET embedding = $1::vector WHERE id = $2`,
+        vectorLiteral(embedding),
+        row.id,
+      );
+    }
+  });
+}
+
 export async function processIngestion(data: IngestionJobData): Promise<void> {
   const document = await prisma.document.findUnique({ where: { id: data.documentId } });
   if (!document || document.workspaceId !== data.workspaceId) return;
 
+  const mode = data.mode ?? 'ingest';
+  const isBackfill = mode === 'backfill';
+
   await prisma.document.update({
     where: { id: document.id },
-    data: { status: 'processing', failureReason: null },
+    data: { status: 'processing', failureReason: null, processingPhase: 'queued' },
   });
 
   try {
-    await decrementCredits({
-      workspaceId: data.workspaceId,
-      userId: data.userId,
-      cost: INGESTION_CREDIT_COST,
-      reason: 'ingestion_usage',
-      refType: 'document',
-      refId: document.id,
-    });
+    let text = document.extractedText?.trim() || '';
+    let pageCount = document.pageCount;
 
-    const buffer = await downloadDocumentBuffer(document.storageKey, document.sourceUrl);
-    const { text, pageCount } = await extractText(buffer, document.mimeType, document.name);
+    if (!isBackfill || !text) {
+      await setPhase(document.id, 'downloading');
+      const buffer = await downloadDocumentBuffer(document.storageKey, document.sourceUrl);
+      await setPhase(document.id, 'extracting');
+      const extracted = await extractText(buffer, document.mimeType, document.name);
+      text = extracted.text;
+      pageCount = extracted.pageCount;
+    } else {
+      await setPhase(document.id, 'extracting');
+    }
+
     if (!text) throw new Error('No text could be extracted from document');
 
+    await setPhase(document.id, 'chunking');
     const chunks = chunkText(text);
-    const embeddings = await embedTexts(chunks);
+    if (chunks.length === 0) throw new Error('Chunking produced no content');
 
-    await prisma.$transaction(async (tx) => {
-      await tx.documentChunk.deleteMany({ where: { documentId: document.id } });
-      for (let i = 0; i < chunks.length; i += 1) {
-        const id = await tx.documentChunk.create({
-          data: {
-            documentId: document.id,
-            workspaceId: document.workspaceId,
-            position: i,
-            content: chunks[i]!,
-          },
-          select: { id: true },
-        });
-        const embedding = embeddings[i]!;
-        await tx.$executeRawUnsafe(
-          `UPDATE "DocumentChunk" SET embedding = $1::vector WHERE id = $2`,
-          vectorLiteral(embedding),
-          id.id,
-        );
-      }
-      await tx.document.update({
-        where: { id: document.id },
-        data: {
-          status: 'ready',
-          extractedText: text,
-          pageCount,
-          embeddingModel: EMBEDDING_MODEL,
-          embeddingDimensions: EMBEDDING_DIMENSIONS,
-          processedAt: new Date(),
-          failureReason: null,
-        },
+    await setPhase(document.id, 'embedding');
+    const embeddings = await embedTexts(
+      chunks.map((c) => c.content),
+      'document',
+    );
+    if (embeddings.length !== chunks.length) {
+      throw new Error(`Embedding count mismatch: ${embeddings.length} vs ${chunks.length}`);
+    }
+
+    await setPhase(document.id, 'persisting');
+    await persistChunks(document.id, document.workspaceId, chunks, embeddings);
+
+    if (!isBackfill) {
+      await decrementCredits({
+        workspaceId: data.workspaceId,
+        userId: data.userId,
+        cost: INGESTION_CREDIT_COST,
+        reason: 'ingestion_usage',
+        refType: 'document',
+        refId: document.id,
       });
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Ingestion failed';
-    logger.error({ err: error, documentId: document.id }, 'ingestion failed');
+    }
+
     await prisma.document.update({
       where: { id: document.id },
-      data: { status: 'failed', failureReason: message },
+      data: {
+        status: 'ready',
+        processingPhase: null,
+        extractedText: text,
+        pageCount,
+        embeddingModel: EMBEDDING_MODEL,
+        embeddingDimensions: EMBEDDING_DIMENSIONS,
+        processedAt: new Date(),
+        failureReason: null,
+      },
     });
+
+    logger.info(
+      { documentId: document.id, chunkCount: chunks.length, mode },
+      'ingestion completed',
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Ingestion failed';
+    logger.error({ err: error, documentId: document.id, mode }, 'ingestion failed');
+    await prisma.document.update({
+      where: { id: document.id },
+      data: { status: 'failed', failureReason: message, processingPhase: null },
+    });
+    throw error;
   }
 }
 
@@ -117,8 +190,19 @@ async function processBackfill(data: BackfillJobData): Promise<void> {
     ) {
       continue;
     }
-    await processIngestion({ documentId: doc.id, workspaceId: doc.workspaceId });
+    await processIngestion({
+      documentId: doc.id,
+      workspaceId: doc.workspaceId,
+      userId: doc.createdById ?? undefined,
+      mode: 'backfill',
+    });
   }
+}
+
+export async function requestBackfill(body: BackfillBody, actorUserId: string) {
+  await enqueueBackfill(body);
+  logger.info({ body, actorUserId }, 'embedding backfill enqueued');
+  return { ok: true as const, enqueued: body };
 }
 
 export function registerIngestionProcessors(): void {
@@ -138,3 +222,5 @@ export function registerIngestionProcessors(): void {
     logger.error({ err, jobId: job?.id }, 'backfill worker job failed');
   });
 }
+
+export { enqueueIngestion };

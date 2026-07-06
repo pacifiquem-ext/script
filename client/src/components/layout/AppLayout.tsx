@@ -39,14 +39,15 @@ export function AppLayout() {
   const displayName = user?.name ?? 'Account';
   const displayEmail = user?.email ?? '';
   const userInitials = initials(displayName);
-  const conversationsQuery = useConversations(Boolean(user));
-  const { createConversation } = useChatMutations();
+  const conversationsQuery = useConversations(Boolean(user), searchMode ? searchQuery : undefined);
+  const { createConversation, renameConversation, deleteConversation } = useChatMutations();
   const conversationGroups = conversationsQuery.data?.groups ?? [];
   const profileRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const activeConversationId = (location.state as { conversationId?: string } | null)?.conversationId;
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -70,12 +71,64 @@ export function AppLayout() {
   }, [searchMode]);
 
   const isActive = (href: string) => location.pathname.startsWith(href);
+  const searchResults = searchMode && searchQuery.trim() ? conversationsQuery.data?.conversations ?? [] : null;
 
-  const filteredChats: PublicConversation[] | null = searchQuery
-    ? (conversationsQuery.data?.conversations ?? []).filter((c: PublicConversation) =>
-        c.title.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : null;
+  async function handleRename(item: PublicConversation) {
+    const title = window.prompt('Rename chat', item.title);
+    if (!title?.trim() || title.trim() === item.title) return;
+    try {
+      await renameConversation.mutateAsync({ id: item.id, title: title.trim() });
+    } catch {
+      window.alert('Could not rename chat.');
+    }
+  }
+
+  async function handleDelete(item: PublicConversation) {
+    if (!window.confirm(`Delete “${item.title}”? This cannot be undone.`)) return;
+    try {
+      await deleteConversation.mutateAsync(item.id);
+      if (activeConversationId === item.id) {
+        navigate('/app/chat', { replace: true, state: {} });
+      }
+    } catch {
+      window.alert('Could not delete chat.');
+    }
+  }
+
+  function renderConversationRow(item: PublicConversation) {
+    const active = activeConversationId === item.id && isActive('/app/chat');
+    return (
+      <div
+        key={item.id}
+        className={`group flex items-center gap-1 rounded-8 pr-1 ${active ? 'bg-neutral-200' : 'hover:bg-neutral-50'}`}
+      >
+        <button
+          type="button"
+          className={`flex-1 min-w-0 text-left p-[7px_8px] bg-transparent border-none cursor-pointer rounded-8 transition-colors overflow-hidden text-ellipsis whitespace-nowrap text-para-sm ${active ? 'text-neutral-950' : 'text-neutral-600 hover:text-neutral-950'}`}
+          onClick={() => navigate('/app/chat', { state: { conversationId: item.id } })}
+          title={item.title}
+        >
+          {item.title}
+        </button>
+        <button
+          type="button"
+          className="opacity-0 group-hover:opacity-100 text-[11px] text-neutral-400 hover:text-neutral-800 bg-transparent border-none cursor-pointer px-1"
+          aria-label={`Rename ${item.title}`}
+          onClick={() => void handleRename(item)}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          className="opacity-0 group-hover:opacity-100 text-[11px] text-error-base bg-transparent border-none cursor-pointer px-1"
+          aria-label={`Delete ${item.title}`}
+          onClick={() => void handleDelete(item)}
+        >
+          Del
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-white">
@@ -240,37 +293,25 @@ export function AppLayout() {
         {/* History / search results */}
         {expanded && (
           <div className="flex-1 overflow-y-auto p-[4px_8px_8px]">
-            {filteredChats !== null ? (
-              filteredChats.length === 0 ? (
+            {conversationsQuery.isLoading ? (
+              <p className="text-neutral-400 p-[8px_8px] text-para-sm">Loading chats…</p>
+            ) : conversationsQuery.isError ? (
+              <p className="text-error-base p-[8px_8px] text-para-sm">Couldn’t load chats.</p>
+            ) : searchResults !== null ? (
+              searchResults.length === 0 ? (
                 <p className="text-neutral-400 p-[8px_8px] text-para-sm">No results found.</p>
               ) : (
-                <div className="mb-3">
-                  {filteredChats.map((item: PublicConversation) => (
-                    <button
-                      key={item.id}
-                      className="block w-full text-left p-[7px_8px] bg-transparent border-none cursor-pointer text-neutral-600 rounded-8 transition-colors overflow-hidden text-ellipsis whitespace-nowrap hover:text-neutral-950 hover:bg-neutral-50 text-para-sm"
-                      onClick={() => navigate('/app/chat', { state: { conversationId: item.id } })}
-                    >
-                      {item.title}
-                    </button>
-                  ))}
-                </div>
+                <div className="mb-3">{searchResults.map(renderConversationRow)}</div>
               )
+            ) : conversationGroups.length === 0 ? (
+              <p className="text-neutral-400 p-[8px_8px] text-para-sm">No conversations yet.</p>
             ) : (
               conversationGroups.map((group: { group: string; items: PublicConversation[] }) => (
                 <div key={group.group} className="mb-3">
                   <p className="text-neutral-400 tracking-[0.06em] p-[8px_8px_4px] text-subheading-md">
                     {group.group}
                   </p>
-                  {group.items.map((item: PublicConversation) => (
-                    <button
-                      key={item.id}
-                      className="block w-full text-left p-[7px_8px] bg-transparent border-none cursor-pointer text-neutral-600 rounded-8 transition-colors overflow-hidden text-ellipsis whitespace-nowrap hover:text-neutral-950 hover:bg-neutral-50 text-para-sm"
-                      onClick={() => navigate('/app/chat', { state: { conversationId: item.id } })}
-                    >
-                      {item.title}
-                    </button>
-                  ))}
+                  {group.items.map(renderConversationRow)}
                 </div>
               ))
             )}
