@@ -1,4 +1,5 @@
 import React from 'react';
+import { FieldHint } from './FieldHint';
 
 interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
   label?: string;
@@ -23,6 +24,8 @@ export function Input({
   ...props
 }: InputProps) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
+  const hintId = inputId ? `${inputId}-hint` : undefined;
+  const errorId = inputId ? `${inputId}-error` : undefined;
 
   const sizeStyles = {
     md: 'h-10 px-3 rounded-10',
@@ -50,6 +53,8 @@ export function Input({
         )}
         <input
           id={inputId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : hint ? hintId : undefined}
           className={`flex-1 border-none outline-none bg-transparent font-sans text-sm leading-5 font-normal text-neutral-950 min-w-0 placeholder:text-neutral-400 focus:outline-none focus:shadow-none ${className}`}
           {...props}
         />
@@ -59,8 +64,10 @@ export function Input({
           </span>
         )}
       </div>
-      {error && <p className="text-error-base text-para-xs">{error}</p>}
-      {hint && !error && <p className="text-neutral-400 text-para-xs">{hint}</p>}
+      <FieldHint id={errorId} error>
+        {error}
+      </FieldHint>
+      {!error ? <FieldHint id={hintId}>{hint}</FieldHint> : null}
     </div>
   );
 }

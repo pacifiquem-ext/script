@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/Input';
 import { apiRequest } from '../../lib/api-client';
 import { getErrorMessage } from '../../lib/form-errors';
 import { useAuth } from '../../contexts/useAuth';
+import { Alert } from '../../components/ui/Alert';
 
 type LocationState = { email?: string; code?: string };
 
@@ -114,7 +115,9 @@ export function ResetPasswordPage() {
             }
             required
           />
-          {error && <p className="text-para-sm text-error-base text-center">{error}</p>}
+          {error && (
+            <Alert status="error" variant="stroke" compact description={error} onDismiss={() => setError(null)} />
+          )}
           <Button
             type="submit"
             size="md"

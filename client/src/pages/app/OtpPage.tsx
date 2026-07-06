@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { apiRequest } from '../../lib/api-client';
 import { getErrorMessage } from '../../lib/form-errors';
 import { useAuth } from '../../contexts/useAuth';
+import { Alert } from '../../components/ui/Alert';
 
 const OTP_LENGTH = 6;
 
@@ -139,7 +140,9 @@ export function OtpPage() {
               />
             ))}
           </div>
-          {error && <p className="text-para-sm text-error-base text-center">{error}</p>}
+          {error && (
+            <Alert status="error" variant="stroke" compact description={error} onDismiss={() => setError(null)} />
+          )}
           <Button
             type="submit"
             size="md"

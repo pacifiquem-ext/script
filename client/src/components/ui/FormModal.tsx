@@ -1,0 +1,96 @@
+import React, { useEffect, useId, useState } from 'react';
+import { Button } from './Button';
+import { Input } from './Input';
+import { Modal, ModalContent, ModalFooter, ModalHeader } from './Modal';
+
+export function FormModal({
+  open,
+  onOpenChange,
+  title,
+  description,
+  label,
+  placeholder,
+  initialValue = '',
+  confirmLabel = 'Save',
+  cancelLabel = 'Cancel',
+  loading = false,
+  allowEmpty = false,
+  validate,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description?: string;
+  label: string;
+  placeholder?: string;
+  initialValue?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  loading?: boolean;
+  allowEmpty?: boolean;
+  validate?: (value: string) => string | null;
+  onSubmit: (value: string) => void | Promise<void>;
+}) {
+  const inputId = useId();
+  const [value, setValue] = useState(initialValue);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setValue(initialValue);
+      setError(null);
+    }
+  }, [open, initialValue]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = value.trim();
+    const validationError =
+      validate?.(trimmed) ?? (!allowEmpty && !trimmed ? `${label} is required` : null);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setError(null);
+    await onSubmit(trimmed);
+  }
+
+  return (
+    <Modal open={open} onOpenChange={onOpenChange}>
+      <ModalContent showClose={!loading}>
+        <ModalHeader title={title} description={description} />
+        <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
+          <Input
+            id={inputId}
+            label={label}
+            placeholder={placeholder}
+            value={value}
+            error={error ?? undefined}
+            autoFocus
+            disabled={loading}
+            onChange={(e) => {
+              setValue(e.target.value);
+              if (error) setError(null);
+            }}
+          />
+          <ModalFooter className="mt-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="neutral"
+              mode="stroke"
+              disabled={loading}
+              onClick={() => onOpenChange(false)}
+            >
+              {cancelLabel}
+            </Button>
+            <Button type="submit" size="sm" loading={loading}>
+              {confirmLabel}
+            </Button>
+          </ModalFooter>
+        </form>
+      </ModalContent>
+    </Modal>
+  );
+}
