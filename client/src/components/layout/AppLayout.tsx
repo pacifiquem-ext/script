@@ -57,7 +57,8 @@ export function AppLayout() {
   const searchRef = useRef<HTMLInputElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const activeConversationId = (location.state as { conversationId?: string } | null)?.conversationId;
+  const activeConversationId = (location.state as { conversationId?: string } | null)
+    ?.conversationId;
   const [renameTarget, setRenameTarget] = useState<PublicConversation | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PublicConversation | null>(null);
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
@@ -85,7 +86,8 @@ export function AppLayout() {
   }, [searchMode]);
 
   const isActive = (href: string) => location.pathname.startsWith(href);
-  const searchResults = searchMode && searchQuery.trim() ? conversationsQuery.data?.conversations ?? [] : null;
+  const searchResults =
+    searchMode && searchQuery.trim() ? (conversationsQuery.data?.conversations ?? []) : null;
 
   async function submitRename(title: string) {
     if (!renameTarget) return;
@@ -461,9 +463,7 @@ export function AppLayout() {
         initialValue={renameTarget?.title ?? ''}
         confirmLabel="Save"
         loading={modalBusy}
-        validate={(value) =>
-          value.length > 200 ? 'Title must be 200 characters or fewer' : null
-        }
+        validate={(value) => (value.length > 200 ? 'Title must be 200 characters or fewer' : null)}
         onSubmit={submitRename}
       />
       <ConfirmModal

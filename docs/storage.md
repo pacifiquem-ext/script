@@ -32,36 +32,38 @@ vendor, this driver works unmodified against:
   self-hosting this app who wants storage they fully own, with no external account required.
 - MinIO, AWS S3, Cloudflare R2, or any other S3-compatible provider.
 
-### Local S3 via Docker Compose (MinIO)
+### Local / self-hosted Garage via Docker Compose
 
-For day-to-day self-hosted object storage on a laptop, Compose runs **MinIO** and creates the
-`script-documents` bucket (`pnpm deps:up`). Point `server/.env` at the published API port — see
-[`docs/local-infra.md`](./local-infra.md) and `.env.docker.example`. Console UI: http://127.0.0.1:9001.
+This project’s recommended self-hosted store is **[Garage](https://garagehq.deuxfleurs.fr)**.
+`pnpm deps:up` starts `dxflrs/garage:v2.3.0` in single-node mode with
+`--single-node --default-bucket`, using `docker/garage/garage.toml` and `GARAGE_DEFAULT_*`
+credentials (see [`docs/local-infra.md`](./local-infra.md) and `.env.docker.example`).
 
-### Running Garage for production self-hosting
+```
+STORAGE_DRIVER=s3
+S3_ENDPOINT=http://127.0.0.1:3900
+S3_REGION=garage
+S3_BUCKET=script-documents
+S3_ACCESS_KEY_ID=GK7f3a9c2e1b8d4f0a6c5e9b2d8f1a3c7e
+S3_SECRET_ACCESS_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+S3_FORCE_PATH_STYLE=true
+```
 
-1. Deploy Garage (single binary or Docker — see the [Garage quickstart](https://garagehq.deuxfleurs.fr/documentation/quick-start/)).
-2. Create a bucket and an access key through `garage` CLI.
-3. Set in `server/.env` (same keys as MinIO; only endpoint/credentials change):
-   ```
-   STORAGE_DRIVER=s3
-   S3_ENDPOINT=http://<your-garage-host>:3900
-   S3_REGION=garage
-   S3_BUCKET=script-documents
-   S3_ACCESS_KEY_ID=<garage access key>
-   S3_SECRET_ACCESS_KEY=<garage secret key>
-   S3_FORCE_PATH_STYLE=true
-   ```
-4. Restart the server. No application code changes are required to move between managed UploadThing,
-   Compose MinIO, and Garage — only these env vars.
+Inside the Compose network use `http://garage:3900`. Verify with
+`docker compose exec garage /garage status` and `/garage bucket list`.
+
+For a multi-node production cluster, follow the
+[Garage real-world cookbook](https://garagehq.deuxfleurs.fr/documentation/cookbook/real-world/) and
+point the same `S3_*` variables at that endpoint (rotate dev secrets first). No application code
+changes are required to move between managed UploadThing and Garage — only these env vars.
 
 ## Status
 
 Both drivers are implemented:
 
 - `server/src/storage/uploadthing.ts` uses the UploadThing `UTApi` with `UPLOADTHING_TOKEN`.
-- `server/src/storage/s3.ts` targets any S3-compatible endpoint (Garage recommended) via the AWS SDK.
+- `server/src/storage/s3.ts` targets any S3-compatible endpoint (**Garage** is the project default
+  self-host option, wired in `docker-compose.yml`) via the AWS SDK.
 
-Unit tests mock the SDKs. Verify UploadThing with a real token via a manual upload once Library
-upload routes land; verify S3/Garage with the env block above before enabling `STORAGE_DRIVER=s3`
-in production.
+Unit tests mock the SDKs. Verify UploadThing with a real token for the managed path; verify Garage
+with `pnpm deps:garage` and the env block above before enabling `STORAGE_DRIVER=s3` in production.

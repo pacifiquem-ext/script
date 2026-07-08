@@ -123,7 +123,9 @@ export function Alert({
       </span>
       <div className="min-w-0 flex-1 flex flex-col gap-1">
         {title ? <p className="text-label-sm">{title}</p> : null}
-        {description ? <div className={cn('text-para-sm', title ? 'opacity-90' : '')}>{description}</div> : null}
+        {description ? (
+          <div className={cn('text-para-sm', title ? 'opacity-90' : '')}>{description}</div>
+        ) : null}
         {action ? <div className="mt-1">{action}</div> : null}
       </div>
       {onDismiss ? (
@@ -132,7 +134,10 @@ export function Alert({
           size="xs"
           variant="neutral"
           mode="ghost"
-          className={cn('shrink-0 !px-1', variant === 'filled' ? 'text-white hover:bg-white/10' : '')}
+          className={cn(
+            'shrink-0 !px-1',
+            variant === 'filled' ? 'text-white hover:bg-white/10' : '',
+          )}
           aria-label="Dismiss"
           onClick={onDismiss}
         >

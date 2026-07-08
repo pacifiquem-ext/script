@@ -1,9 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type {
-  MessageCitation,
-  PublicConversation,
-  PublicMessage,
-} from '@script/shared';
+import type { MessageCitation, PublicConversation, PublicMessage } from '@script/shared';
 import { apiRequest, getApiBaseUrl } from './api-client';
 import { queryKeys } from './query-client';
 
@@ -81,8 +77,7 @@ export async function streamMessage(
   documentIds: string[],
   handlers: StreamHandlers | ((text: string) => void),
 ): Promise<PublicMessage | null> {
-  const opts: StreamHandlers =
-    typeof handlers === 'function' ? { onDelta: handlers } : handlers;
+  const opts: StreamHandlers = typeof handlers === 'function' ? { onDelta: handlers } : handlers;
   const response = await fetch(`${getApiBaseUrl()}/conversations/${conversationId}/messages`, {
     method: 'POST',
     credentials: 'include',

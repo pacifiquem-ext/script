@@ -63,7 +63,9 @@ export function ModalHeader({
     <div className={cn('pr-8 mb-4 flex flex-col gap-1', className)}>
       <Dialog.Title className="text-label-sm text-neutral-950">{title}</Dialog.Title>
       {description ? (
-        <Dialog.Description className="text-para-sm text-neutral-500">{description}</Dialog.Description>
+        <Dialog.Description className="text-para-sm text-neutral-500">
+          {description}
+        </Dialog.Description>
       ) : (
         <Dialog.Description className="sr-only">{title}</Dialog.Description>
       )}
@@ -71,6 +73,16 @@ export function ModalHeader({
   );
 }
 
-export function ModalFooter({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('mt-5 flex flex-wrap items-center justify-end gap-2', className)}>{children}</div>;
+export function ModalFooter({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('mt-5 flex flex-wrap items-center justify-end gap-2', className)}>
+      {children}
+    </div>
+  );
 }

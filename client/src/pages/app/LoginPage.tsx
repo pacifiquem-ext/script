@@ -107,7 +107,13 @@ export function LoginPage() {
             </Link>
           </div>
           {error && (
-            <Alert status="error" variant="stroke" compact description={error} onDismiss={() => setError(null)} />
+            <Alert
+              status="error"
+              variant="stroke"
+              compact
+              description={error}
+              onDismiss={() => setError(null)}
+            />
           )}
           <Button type="submit" size="md" loading={loading} className="self-center min-w-[200px]">
             Sign in

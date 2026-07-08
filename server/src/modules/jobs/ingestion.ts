@@ -23,15 +23,13 @@ import {
 } from './queue';
 
 type Phase =
-  | 'queued'
-  | 'downloading'
-  | 'extracting'
-  | 'chunking'
-  | 'embedding'
-  | 'persisting'
-  | null;
+  'queued' | 'downloading' | 'extracting' | 'chunking' | 'embedding' | 'persisting' | null;
 
-async function setPhase(documentId: string, processingPhase: Phase, extra: Record<string, unknown> = {}) {
+async function setPhase(
+  documentId: string,
+  processingPhase: Phase,
+  extra: Record<string, unknown> = {},
+) {
   await prisma.document.update({
     where: { id: documentId },
     data: { processingPhase, ...extra },

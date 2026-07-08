@@ -11,10 +11,7 @@ const otherEmail = `chat-other-${Date.now()}@example.com`;
 const cookies: Record<string, string> = {};
 const otherCookies: Record<string, string> = {};
 
-function absorb(
-  jar: Record<string, string>,
-  res: { headers: Record<string, unknown> },
-) {
+function absorb(jar: Record<string, string>, res: { headers: Record<string, unknown> }) {
   const raw = res.headers['set-cookie'];
   if (!raw) return;
   for (const part of Array.isArray(raw) ? raw : [raw]) {
@@ -202,7 +199,10 @@ describe('chat routes', () => {
       payload: { content: 'Beta confidential other workspace only', documentIds: [] },
     });
     expect(res.statusCode).toBe(200);
-    const citations = res.json().message.citations as Array<{ documentName: string; documentId: string }>;
+    const citations = res.json().message.citations as Array<{
+      documentName: string;
+      documentId: string;
+    }>;
     expect(citations.some((c) => c.documentName === 'beta.txt')).toBe(false);
     const foreignChunks = await prisma.documentChunk.count({
       where: { workspaceId: otherWorkspaceId, document: { name: 'beta.txt' } },
