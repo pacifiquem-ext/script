@@ -37,3 +37,7 @@ config.bat
 
 # test coverage
 coverage
+
+# intro video intermediates
+docs/assets/intro-frames/shot-*.mp4
+docs/assets/intro-frames/concat.txt

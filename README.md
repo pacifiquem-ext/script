@@ -9,6 +9,30 @@ without regressing that quality. This entire application — backend, AI integra
 between them and the existing frontend — is being built by AI agents. `AGENTS.md` is the contract
 that governs how.
 
+## Project introduction
+
+A short overview of what **script** is, how the monorepo fits together, the ingest → embed → RAG
+chat flow, and how to run it locally (`pnpm deps:up` + `pnpm dev:app`).
+
+[![Watch the project introduction](docs/assets/intro-frames/01-title.png)](docs/assets/script-intro.mp4)
+
+**[Play / download the intro video](./docs/assets/script-intro.mp4)** (~36s, 1080p) — covers product
+scope, architecture (`client` / `server` / `shared`), quickstart commands, data flow, and stack.
+
+<details>
+<summary>Slide outline</summary>
+
+1. Title — AI document management + RAG chat  
+2. Product — Library, ingestion, chat, multi-tenant workspaces  
+3. Monorepo — client · server · packages/shared  
+4. Quickstart — `pnpm install` → env → `deps:up` → `dev:app`  
+5. Data flow — upload → worker → embeddings → chat retrieval  
+6. Stack & next docs — `AGENTS.md`, `ENV.md`, self-host vs managed  
+
+Source frames: [`docs/assets/intro-frames/`](./docs/assets/intro-frames/).
+
+</details>
+
 ## Docs index
 
 Read in this order if you're new to the repo:

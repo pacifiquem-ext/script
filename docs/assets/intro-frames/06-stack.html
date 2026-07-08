@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html><head><meta charset='utf-8'><style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; }
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  background: radial-gradient(1200px 800px at 20% 0%, #0d3d24 0%, #06140c 45%, #030806 100%);
+  color: #f4faf6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 100px;
+}
+.wrap { width: 100%; max-width: 1600px; }
+.badge {
+  display: inline-block;
+  font-size: 22px;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  color: #00B258;
+  border: 1px solid rgba(0,178,88,0.45);
+  background: rgba(0,178,88,0.1);
+  padding: 10px 18px;
+  border-radius: 999px;
+  margin-bottom: 36px;
+}
+h1 {
+  font-size: 140px;
+  line-height: 0.95;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #ffffff 0%, #9dffc4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 28px;
+}
+h2 {
+  font-size: 64px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  margin-bottom: 40px;
+  max-width: 1400px;
+}
+.tagline { font-size: 40px; color: #d7eee0; max-width: 1200px; line-height: 1.35; margin-bottom: 18px; }
+.sub { font-size: 28px; color: #8fb89e; }
+ul { list-style: none; display: grid; gap: 22px; }
+ul li { font-size: 34px; color: #e6f6ec; line-height: 1.35; padding-left: 28px; border-left: 4px solid #00B258; }
+ul li strong { color: #fff; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+.card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px;
+  padding: 36px;
+  min-height: 280px;
+}
+.card h3 { font-size: 36px; color: #00B258; margin-bottom: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.card p { font-size: 28px; color: #cfe8d9; line-height: 1.4; }
+pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 26px;
+  line-height: 1.55;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(0,178,88,0.25);
+  border-radius: 20px;
+  padding: 36px 40px;
+  color: #d8ffe8;
+  white-space: pre-wrap;
+}
+.hint { margin-top: 28px; font-size: 26px; color: #9bc9ae; }
+.flow {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 28px;
+}
+.flow span {
+  background: rgba(0,178,88,0.12);
+  border: 1px solid rgba(0,178,88,0.35);
+  padding: 16px 22px;
+  border-radius: 14px;
+  font-size: 26px;
+  font-weight: 600;
+}
+.flow .arrow { background: transparent; border: none; color: #00B258; font-size: 32px; padding: 0 4px; }
+.flow.second span { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
+.stack { font-size: 30px; line-height: 1.5; color: #d7eee0; margin-bottom: 36px; max-width: 1500px; }
+.next { margin-top: 8px; }
+.next li { font-size: 30px; }
+code { color: #9dffc4; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.cta { margin-top: 48px; font-size: 28px; color: #00B258; font-weight: 700; letter-spacing: 0.02em; }
+</style></head>
+<body><div class='wrap'>
+<div class="badge">STACK &amp; NEXT</div>
+<h2>Production-minded defaults</h2>
+<p class="stack">TypeScript · Fastify · Neon/Postgres + pgvector · Voyage · Claude · Redis/BullMQ · Garage/S3 · UploadThing · Vitest</p>
+<ul class="next">
+  <li>Read <code>AGENTS.md</code> + <code>docs/local-infra.md</code></li>
+  <li>Keys in <code>ENV.md</code> · tasks in <code>TODO.md</code></li>
+  <li>Self-host: Compose deps · managed: Neon + UploadThing</li>
+</ul>
+<p class="cta">github.com — script monorepo</p>
+</div></body></html>
