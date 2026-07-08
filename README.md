@@ -9,6 +9,36 @@ without regressing that quality. This entire application — backend, AI integra
 between them and the existing frontend — is being built by AI agents. `AGENTS.md` is the contract
 that governs how.
 
+## Project introduction
+
+A short overview of what **script** is, how the monorepo fits together, the ingest → embed → RAG
+chat flow, and how to run it locally (`pnpm deps:up` + `pnpm dev:app`).
+
+[![Watch the project introduction](docs/assets/script-intro-poster.png)](docs/assets/script-intro.mp4)
+
+**[Play / download the intro video](./docs/assets/script-intro.mp4)** (~62s, 1080p, with narration) —
+built with [Hyperframes](https://hyperframes.heygen.com) + Kokoro TTS (see `.agents/skills/video`).
+
+<details>
+<summary>What’s covered</summary>
+
+1. What script is (Library + RAG chat)
+2. Product capabilities
+3. Monorepo layout (`client` / `server` / `shared`)
+4. Ingest + retrieval data flow
+5. Local quickstart commands
+6. Stack and where to read next
+
+Source composition: [`docs/assets/intro/`](./docs/assets/intro/) — re-render with:
+
+```bash
+# requires: node >= 22, ffmpeg, `npx hyperframes`, kokoro-onnx for TTS
+cd docs/assets/intro
+npx hyperframes render . -o ../script-intro.mp4 -q high
+```
+
+</details>
+
 ## Docs index
 
 Read in this order if you're new to the repo:

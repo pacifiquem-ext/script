@@ -37,3 +37,6 @@ config.bat
 
 # test coverage
 coverage
+
+# intro video intermediates
+docs/assets/intro/renders/
