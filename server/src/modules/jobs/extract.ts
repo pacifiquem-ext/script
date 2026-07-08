@@ -5,10 +5,7 @@ import * as XLSX from 'xlsx';
 const pdfParse = require('pdf-parse') as (
   buffer: Buffer,
 ) => Promise<{ text: string; numpages?: number }>;
-import {
-  CHUNK_OVERLAP_CHARS,
-  CHUNK_SIZE_CHARS,
-} from '@script/shared';
+import { CHUNK_OVERLAP_CHARS, CHUNK_SIZE_CHARS } from '@script/shared';
 import { env } from '../../config/env';
 
 export interface TextChunk {
@@ -63,14 +60,16 @@ export async function extractText(
     return { text: parts.join('\n').trim(), pageCount: workbook.SheetNames.length || null };
   }
 
-  if (mime.startsWith('text/') || lower.endsWith('.txt') || lower.endsWith('.md') || lower.endsWith('.csv')) {
+  if (
+    mime.startsWith('text/') ||
+    lower.endsWith('.txt') ||
+    lower.endsWith('.md') ||
+    lower.endsWith('.csv')
+  ) {
     return { text: buffer.toString('utf8').trim(), pageCount: null };
   }
 
-  if (
-    mime.startsWith('image/') ||
-    /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(lower)
-  ) {
+  if (mime.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(lower)) {
     const { createWorker } = await import('tesseract.js');
     const worker = await createWorker('eng');
     try {

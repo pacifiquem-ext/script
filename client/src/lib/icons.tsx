@@ -106,9 +106,13 @@ export const IconFolderSimple = ({ size = 18, className = '' }) =>
   icon(Folder01Icon, size, className);
 
 export const IconAlert = ({ size = 18, className = '' }) => icon(Alert02Icon, size, className);
-export const IconInfo = ({ size = 18, className = '' }) => icon(InformationCircleIcon, size, className);
-export const IconSuccess = ({ size = 18, className = '' }) => icon(CheckmarkCircle02Icon, size, className);
-export const IconWarning = ({ size = 18, className = '' }) => icon(AlertCircleIcon, size, className);
+export const IconInfo = ({ size = 18, className = '' }) =>
+  icon(InformationCircleIcon, size, className);
+export const IconSuccess = ({ size = 18, className = '' }) =>
+  icon(CheckmarkCircle02Icon, size, className);
+export const IconWarning = ({ size = 18, className = '' }) =>
+  icon(AlertCircleIcon, size, className);
 export const IconDelete = ({ size = 18, className = '' }) => icon(Delete02Icon, size, className);
 export const IconEdit = ({ size = 18, className = '' }) => icon(Edit02Icon, size, className);
-export const IconMore = ({ size = 18, className = '' }) => icon(MoreHorizontalIcon, size, className);
+export const IconMore = ({ size = 18, className = '' }) =>
+  icon(MoreHorizontalIcon, size, className);

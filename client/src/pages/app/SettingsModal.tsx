@@ -679,7 +679,13 @@ export function SettingsModal({ open, onClose }: Props) {
                 </Button>
               </div>
               {inviteError && (
-                <Alert status="error" variant="stroke" compact description={inviteError} onDismiss={() => setInviteError(null)} />
+                <Alert
+                  status="error"
+                  variant="stroke"
+                  compact
+                  description={inviteError}
+                  onDismiss={() => setInviteError(null)}
+                />
               )}
               <p className="text-[13px] text-neutral-500">{members.length} members</p>
               {members.map((member) => (
@@ -1048,10 +1054,22 @@ export function SettingsModal({ open, onClose }: Props) {
                           className="h-9 px-3 border border-neutral-200 rounded-8 text-[13px] outline-none focus:border-primary-base"
                         />
                         {passwordError && (
-                          <Alert status="error" variant="stroke" compact description={passwordError} onDismiss={() => setPasswordError(null)} />
+                          <Alert
+                            status="error"
+                            variant="stroke"
+                            compact
+                            description={passwordError}
+                            onDismiss={() => setPasswordError(null)}
+                          />
                         )}
                         {passwordMessage && (
-                          <Alert status="success" variant="lighter" compact description={passwordMessage} onDismiss={() => setPasswordMessage(null)} />
+                          <Alert
+                            status="success"
+                            variant="lighter"
+                            compact
+                            description={passwordMessage}
+                            onDismiss={() => setPasswordMessage(null)}
+                          />
                         )}
                         <Button
                           variant="neutral"
@@ -1087,7 +1105,9 @@ export function SettingsModal({ open, onClose }: Props) {
                                         return sessionsQuery.refetch();
                                       })
                                       .catch((err) =>
-                                        notify.error(getErrorMessage(err, 'Could not revoke session')),
+                                        notify.error(
+                                          getErrorMessage(err, 'Could not revoke session'),
+                                        ),
                                       )
                                   }
                                 >
@@ -1252,10 +1272,22 @@ export function SettingsModal({ open, onClose }: Props) {
                 </Button>
               </section>
               {privacyMessage && (
-                <Alert status="success" variant="lighter" compact description={privacyMessage} onDismiss={() => setPrivacyMessage(null)} />
+                <Alert
+                  status="success"
+                  variant="lighter"
+                  compact
+                  description={privacyMessage}
+                  onDismiss={() => setPrivacyMessage(null)}
+                />
               )}
               {privacyError && (
-                <Alert status="error" variant="stroke" compact description={privacyError} onDismiss={() => setPrivacyError(null)} />
+                <Alert
+                  status="error"
+                  variant="stroke"
+                  compact
+                  description={privacyError}
+                  onDismiss={() => setPrivacyError(null)}
+                />
               )}
             </div>
           </>

@@ -8,10 +8,7 @@ const defaultOptions: ToasterProps = {
   duration: 4000,
 };
 
-function customToast(
-  renderFunc: (t: string | number) => ReactElement,
-  options: ToasterProps = {},
-) {
+function customToast(renderFunc: (t: string | number) => ReactElement, options: ToasterProps = {}) {
   sonnerToast.custom(renderFunc, { ...defaultOptions, ...options });
 }
 

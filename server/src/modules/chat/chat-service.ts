@@ -17,11 +17,7 @@ import {
   type SendMessageBody,
   type UpdateConversationBody,
 } from '@script/shared';
-import {
-  BadRequestError,
-  ConfigurationError,
-  NotFoundError,
-} from '../../common/errors';
+import { BadRequestError, ConfigurationError, NotFoundError } from '../../common/errors';
 import { env, requireAnthropicApiKey } from '../../config/env';
 import { prisma } from '../../db/prisma';
 import { logger } from '../../lib/logger';
@@ -87,9 +83,7 @@ export async function listConversations(
   const where = {
     workspaceId,
     userId,
-    ...(query.q
-      ? { title: { contains: query.q, mode: 'insensitive' as const } }
-      : {}),
+    ...(query.q ? { title: { contains: query.q, mode: 'insensitive' as const } } : {}),
   };
   const { skip, take } = toSkipTake(query);
   const [total, rows] = await Promise.all([
@@ -481,9 +475,7 @@ export async function* streamAssistantReply(input: {
     data: {
       updatedAt: new Date(),
       title:
-        conversation.title === 'New chat'
-          ? input.body.content.slice(0, 80)
-          : conversation.title,
+        conversation.title === 'New chat' ? input.body.content.slice(0, 80) : conversation.title,
     },
   });
 

@@ -1,8 +1,4 @@
-import {
-  EMBEDDING_DIMENSIONS,
-  EMBEDDING_MODEL,
-  VOYAGE_EMBED_BATCH_SIZE,
-} from '@script/shared';
+import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, VOYAGE_EMBED_BATCH_SIZE } from '@script/shared';
 import { ConfigurationError } from '../../common/errors';
 import { env, requireVoyageApiKey } from '../../config/env';
 import { logger } from '../../lib/logger';

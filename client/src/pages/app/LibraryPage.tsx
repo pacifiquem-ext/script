@@ -93,11 +93,7 @@ export function LibraryPage() {
       >
         <div className="p-3 flex items-center justify-between gap-2">
           <p className="text-label-sm text-neutral-950">Library</p>
-          <Button
-            size="xs"
-            aria-label="Create folder"
-            onClick={() => setFolderModalOpen(true)}
-          >
+          <Button size="xs" aria-label="Create folder" onClick={() => setFolderModalOpen(true)}>
             <IconPlus size={14} /> New
           </Button>
         </div>

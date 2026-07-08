@@ -62,7 +62,15 @@ export function Banner({
       </p>
       {action}
       {onDismiss ? (
-        <Button type="button" size="xs" variant="neutral" mode="ghost" aria-label="Dismiss banner" onClick={onDismiss} className="!px-1">
+        <Button
+          type="button"
+          size="xs"
+          variant="neutral"
+          mode="ghost"
+          aria-label="Dismiss banner"
+          onClick={onDismiss}
+          className="!px-1"
+        >
           <IconClose size={14} />
         </Button>
       ) : null}

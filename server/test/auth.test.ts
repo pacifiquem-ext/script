@@ -28,7 +28,6 @@ function absorbSetCookie(response: { headers: Record<string, unknown> }) {
   }
 }
 
-
 describe('auth routes', () => {
   beforeAll(async () => {
     await app.ready();

@@ -116,7 +116,13 @@ export function ResetPasswordPage() {
             required
           />
           {error && (
-            <Alert status="error" variant="stroke" compact description={error} onDismiss={() => setError(null)} />
+            <Alert
+              status="error"
+              variant="stroke"
+              compact
+              description={error}
+              onDismiss={() => setError(null)}
+            />
           )}
           <Button
             type="submit"
