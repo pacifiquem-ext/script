@@ -152,7 +152,7 @@ async function createPendingDocument(input: {
   mimeType: string;
   byteSize: number;
   storageKey: string;
-  source: 'local' | 'url';
+  source: 'local' | 'url' | 'drive' | 'dropbox' | 'onedrive' | 'box';
   sourceUrl?: string | null;
   folderId?: string | null;
 }) {
@@ -185,13 +185,15 @@ async function createPendingDocument(input: {
   return { document: await toPublicDocument(doc) };
 }
 
-export async function uploadLocalDocument(input: {
+export async function createDocumentFromBuffer(input: {
   workspaceId: string;
   userId: string;
   filename: string;
   mimeType: string;
   buffer: Buffer;
   folderId?: string | null;
+  source: 'local' | 'url' | 'drive' | 'dropbox' | 'onedrive' | 'box';
+  sourceUrl?: string | null;
 }) {
   const mimeType = input.mimeType || 'application/octet-stream';
   if (!ALLOWED_MIME.has(mimeType) && !mimeType.startsWith('text/')) {
@@ -209,8 +211,28 @@ export async function uploadLocalDocument(input: {
     mimeType,
     byteSize: uploaded.size,
     storageKey: uploaded.key,
-    source: 'local',
+    source: input.source,
+    sourceUrl: input.sourceUrl,
     folderId: input.folderId,
+  });
+}
+
+export async function uploadLocalDocument(input: {
+  workspaceId: string;
+  userId: string;
+  filename: string;
+  mimeType: string;
+  buffer: Buffer;
+  folderId?: string | null;
+}) {
+  return createDocumentFromBuffer({
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    filename: input.filename,
+    mimeType: input.mimeType,
+    buffer: input.buffer,
+    folderId: input.folderId,
+    source: 'local',
   });
 }
 

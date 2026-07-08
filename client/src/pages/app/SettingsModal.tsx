@@ -31,7 +31,12 @@ import { useWorkspaceMembers, useWorkspaces } from '../../lib/workspaces';
 import { apiRequest } from '../../lib/api-client';
 import { useQuery } from '@tanstack/react-query';
 import { getErrorMessage } from '../../lib/form-errors';
-import { changePasswordBodySchema } from '@script/shared';
+import { changePasswordBodySchema, type IntegrationProvider } from '@script/shared';
+import {
+  PROVIDER_LABELS,
+  useIntegrationMutations,
+  useIntegrations,
+} from '../../lib/integrations-api';
 
 interface Props {
   open: boolean;
@@ -158,6 +163,8 @@ export function SettingsModal({ open, onClose }: Props) {
       return data.apiKeys;
     },
   });
+  const integrationsQuery = useIntegrations(open && activeItem === 'integrations');
+  const integrationMutations = useIntegrationMutations();
   const preferencesQuery = useQuery({
     queryKey: ['preferences'],
     enabled:
@@ -827,7 +834,30 @@ export function SettingsModal({ open, onClose }: Props) {
           </>
         );
 
-      case 'integrations':
+      case 'integrations': {
+        const providerMeta: Record<
+          IntegrationProvider,
+          { icon: React.ReactNode; description: string }
+        > = {
+          drive: {
+            icon: <IconGoogleDrive size={24} />,
+            description: 'Import documents from your Google Drive account.',
+          },
+          dropbox: {
+            icon: <IconDropbox size={24} />,
+            description: 'Sync folders and documents from Dropbox.',
+          },
+          onedrive: {
+            icon: <IconOneDrive size={24} />,
+            description: 'Access your Microsoft 365 documents.',
+          },
+          box: {
+            icon: <IconBox size={24} />,
+            description: 'High-security document management integration.',
+          },
+        };
+        const providers = integrationsQuery.data?.providers ?? [];
+
         return (
           <>
             <div className="flex items-start justify-between p-[32px_40px_24px]">
@@ -849,83 +879,102 @@ export function SettingsModal({ open, onClose }: Props) {
                 <div className="flex flex-col gap-1 mb-2">
                   <h3 className="text-[14px] font-semibold text-neutral-950">Cloud Storage</h3>
                   <p className="text-[13px] text-neutral-500">
-                    Bulk import files from your storage providers.
+                    Bulk import files from your storage providers. Configure OAuth apps in{' '}
+                    <code className="text-[12px]">server/.env</code> (see ENV.md).
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3">
-                  {[
-                    {
-                      id: 'drive',
-                      name: 'Google Drive',
-                      icon: <IconGoogleDrive size={24} />,
-                      description: 'Import documents from your Google Drive account.',
-                      connected: true,
-                    },
-                    {
-                      id: 'dropbox',
-                      name: 'Dropbox',
-                      icon: <IconDropbox size={24} />,
-                      description: 'Sync folders and documents from Dropbox.',
-                      connected: false,
-                    },
-                    {
-                      id: 'onedrive',
-                      name: 'OneDrive',
-                      icon: <IconOneDrive size={24} />,
-                      description: 'Access your Microsoft 365 documents.',
-                      connected: false,
-                    },
-                    {
-                      id: 'box',
-                      name: 'Box',
-                      icon: <IconBox size={24} />,
-                      description: 'High-security document management integration.',
-                      connected: false,
-                    },
-                  ].map((integration) => (
-                    <div
-                      key={integration.id}
-                      className="flex items-center justify-between p-4 bg-neutral-50 rounded-16 border border-neutral-200 hover:border-neutral-300 transition-all"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-12 bg-white flex items-center justify-center shadow-sm border border-neutral-100">
-                          {integration.icon}
-                        </div>
-                        <div className="flex flex-col">
+                {integrationsQuery.isLoading ? (
+                  <p className="text-[13px] text-neutral-500">Loading integrations…</p>
+                ) : integrationsQuery.isError ? (
+                  <Alert
+                    status="error"
+                    variant="stroke"
+                    title="Failed to load integrations"
+                    description={getErrorMessage(integrationsQuery.error)}
+                    compact
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {providers.map((row) => {
+                      const meta = providerMeta[row.provider];
+                      const busy =
+                        integrationMutations.connect.isPending ||
+                        integrationMutations.disconnect.isPending;
+                      return (
+                        <div
+                          key={row.provider}
+                          className="flex items-center justify-between p-4 bg-neutral-50 rounded-16 border border-neutral-200 hover:border-neutral-300 transition-all"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-12 bg-white flex items-center justify-center shadow-sm border border-neutral-100">
+                              {meta.icon}
+                            </div>
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[14px] font-bold text-neutral-950">
+                                  {PROVIDER_LABELS[row.provider]}
+                                </span>
+                                {row.connected && (
+                                  <span className="flex items-center gap-1 text-[10px] text-green-600 font-bold bg-green-50 px-1.5 py-0.5 rounded-full border border-green-100">
+                                    <IconCheck size={10} /> CONNECTED
+                                  </span>
+                                )}
+                                {!row.configured && (
+                                  <span className="text-[10px] text-neutral-500 font-semibold bg-neutral-100 px-1.5 py-0.5 rounded-full">
+                                    NOT CONFIGURED
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[12px] text-neutral-500 mt-0.5">
+                                {meta.description}
+                                {row.integration?.accountEmail
+                                  ? ` · ${row.integration.accountEmail}`
+                                  : ''}
+                              </p>
+                            </div>
+                          </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[14px] font-bold text-neutral-950">
-                              {integration.name}
-                            </span>
-                            {integration.connected && (
-                              <span className="flex items-center gap-1 text-[10px] text-green-600 font-bold bg-green-50 px-1.5 py-0.5 rounded-full border border-green-100">
-                                <IconCheck size={10} /> CONNECTED
-                              </span>
+                            {row.connected ? (
+                              <Button
+                                variant="error"
+                                mode="lighter"
+                                size="sm"
+                                loading={busy}
+                                onClick={() => {
+                                  void integrationMutations.disconnect
+                                    .mutateAsync(row.provider)
+                                    .then(() => notify.success('Disconnected'))
+                                    .catch((err) => notify.error(getErrorMessage(err)));
+                                }}
+                              >
+                                Disconnect
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                rightIcon={<IconArrowRight size={14} />}
+                                loading={busy}
+                                disabled={!row.configured}
+                                onClick={() => {
+                                  void integrationMutations.connect
+                                    .mutateAsync(row.provider)
+                                    .then((res) => {
+                                      window.location.assign(res.url);
+                                    })
+                                    .catch((err) => notify.error(getErrorMessage(err)));
+                                }}
+                              >
+                                Connect
+                              </Button>
                             )}
                           </div>
-                          <p className="text-[12px] text-neutral-500 mt-0.5">
-                            {integration.description}
-                          </p>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {integration.connected ? (
-                          <Button variant="error" mode="lighter" size="sm">
-                            Disconnect
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            rightIcon={<IconArrowRight size={14} />}
-                          >
-                            Connect
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="py-8 border-t border-neutral-200 flex flex-col gap-6">
@@ -1002,6 +1051,7 @@ export function SettingsModal({ open, onClose }: Props) {
             </div>
           </>
         );
+      }
 
       case 'security':
         return (

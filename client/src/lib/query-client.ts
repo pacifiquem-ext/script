@@ -21,4 +21,7 @@ export const queryKeys = {
   conversations: (workspaceId: string) => ['conversations', workspaceId] as const,
   messages: (conversationId: string) => ['messages', conversationId] as const,
   credits: (workspaceId: string) => ['credits', workspaceId] as const,
+  integrations: ['integrations'] as const,
+  cloudFiles: (provider: string, parentId: string | null) =>
+    ['cloud-files', provider, parentId ?? 'root'] as const,
 };
