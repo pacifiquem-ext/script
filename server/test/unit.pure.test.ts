@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
-import { ZodError, z } from 'zod';
+import { z } from 'zod';
 import { registerErrorHandler } from '../src/common/error-handler';
 import {
   AppError,
