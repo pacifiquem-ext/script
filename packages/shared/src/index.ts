@@ -9,3 +9,4 @@ export * from './library';
 export * from './chat';
 export * from './api-keys';
 export * from './user-settings';
+export * from './integrations';

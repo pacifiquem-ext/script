@@ -58,6 +58,18 @@ const envSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((v) => v === 'true'),
+
+    // Cloud OAuth (integrations §9) — each provider is optional until you connect it
+    OAUTH_REDIRECT_URL: optionalUrl,
+    APP_PUBLIC_URL: optionalUrl,
+    GOOGLE_DRIVE_CLIENT_ID: optionalString,
+    GOOGLE_DRIVE_CLIENT_SECRET: optionalString,
+    DROPBOX_CLIENT_ID: optionalString,
+    DROPBOX_CLIENT_SECRET: optionalString,
+    ONEDRIVE_CLIENT_ID: optionalString,
+    ONEDRIVE_CLIENT_SECRET: optionalString,
+    BOX_CLIENT_ID: optionalString,
+    BOX_CLIENT_SECRET: optionalString,
   })
   .superRefine((value, ctx) => {
     if (value.STORAGE_DRIVER === 'uploadthing' && !value.UPLOADTHING_TOKEN) {
@@ -114,6 +126,26 @@ const envSchema = z
           message: 'REDIS_URL is required in production (BullMQ worker topology)',
         });
       }
+    }
+
+    const anyOAuth =
+      value.GOOGLE_DRIVE_CLIENT_ID ||
+      value.DROPBOX_CLIENT_ID ||
+      value.ONEDRIVE_CLIENT_ID ||
+      value.BOX_CLIENT_ID;
+    if (anyOAuth && !value.OAUTH_REDIRECT_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['OAUTH_REDIRECT_URL'],
+        message: 'OAUTH_REDIRECT_URL is required when any cloud OAuth client ID is set',
+      });
+    }
+    if (anyOAuth && !value.TOKEN_ENCRYPTION_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['TOKEN_ENCRYPTION_KEY'],
+        message: 'TOKEN_ENCRYPTION_KEY is required when cloud OAuth is configured',
+      });
     }
   });
 

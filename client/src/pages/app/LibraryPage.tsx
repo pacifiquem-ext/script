@@ -1,8 +1,9 @@
-import React, { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { PublicDocument, PublicFolder } from '@script/shared';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
+import { CloudImportModal } from '../../components/app/CloudImportModal';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -17,6 +18,7 @@ import { notify } from '../../components/ui/toast-alert';
 
 export function LibraryPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [parentId, setParentId] = useState<string | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -26,6 +28,20 @@ export function LibraryPage() {
   const [dragActive, setDragActive] = useState(false);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [folderBusy, setFolderBusy] = useState(false);
+  const [cloudImportOpen, setCloudImportOpen] = useState(false);
+
+  useEffect(() => {
+    const status = searchParams.get('integration');
+    if (!status) return;
+    const provider = searchParams.get('provider');
+    const message = searchParams.get('message');
+    if (status === 'connected') {
+      notify.success(provider ? `Connected ${provider}` : 'Cloud provider connected');
+    } else if (status === 'error') {
+      notify.error(message || 'Cloud connection failed');
+    }
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const listRef = useRef<HTMLDivElement>(null);
   const foldersQuery = useFolders(parentId);
   const documentsQuery = useDocuments(selectedFolderId);
@@ -179,6 +195,14 @@ export function LibraryPage() {
             }}
           >
             Import URL
+          </Button>
+          <Button
+            size="sm"
+            variant="neutral"
+            mode="stroke"
+            onClick={() => setCloudImportOpen(true)}
+          >
+            Cloud import
           </Button>
         </div>
 
@@ -357,6 +381,11 @@ export function LibraryPage() {
             setFolderBusy(false);
           }
         }}
+      />
+      <CloudImportModal
+        open={cloudImportOpen}
+        onOpenChange={setCloudImportOpen}
+        folderId={selectedFolderId}
       />
     </div>
   );
