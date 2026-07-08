@@ -51,8 +51,9 @@ pnpm deps:redis   # ensure Redis is up and answers PONG
 pnpm dev          # client + API on the host (uses Compose Redis; ALLOW_INLINE_INGESTION=false)
 pnpm dev:app      # client + API + BullMQ worker on the host
 pnpm stack:up     # optional: build/run API+worker in Docker too (--profile app)
-pnpm build && pnpm test && pnpm lint && pnpm typecheck
+pnpm build && pnpm test && pnpm test:coverage && pnpm lint && pnpm typecheck
 pnpm format
+# Unit coverage thresholds (≥90% lines on pure modules): see docs/testing.md
 ```
 
 Server health: `GET http://localhost:4000/health` (liveness),

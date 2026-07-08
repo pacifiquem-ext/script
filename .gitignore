@@ -34,3 +34,6 @@ config.bat
 # pnpm
 .pnpm-store/
 
+
+# test coverage
+coverage
