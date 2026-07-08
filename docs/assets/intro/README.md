@@ -24,9 +24,9 @@ ffmpeg -y -ss 2 -i ../script-intro.mp4 -frames:v 1 -q:v 2 ../script-intro-poster
 
 ## Layout
 
-| Path | Purpose |
-| ---- | ------- |
-| `index.html` | Composition (6 scenes + audio clips) |
-| `audio/sN.wav` | Scene narration |
-| `audio/sN.txt` | Narration script |
-| `timeline.json` | Computed start/duration map |
+| Path            | Purpose                              |
+| --------------- | ------------------------------------ |
+| `index.html`    | Composition (6 scenes + audio clips) |
+| `audio/sN.wav`  | Scene narration                      |
+| `audio/sN.txt`  | Narration script                     |
+| `timeline.json` | Computed start/duration map          |

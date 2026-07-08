@@ -9,7 +9,6 @@ without regressing that quality. This entire application — backend, AI integra
 between them and the existing frontend — is being built by AI agents. `AGENTS.md` is the contract
 that governs how.
 
-
 ## Project introduction
 
 A short overview of what **script** is, how the monorepo fits together, the ingest → embed → RAG
@@ -39,7 +38,6 @@ npx hyperframes render . -o ../script-intro.mp4 -q high
 ```
 
 </details>
-
 
 ## Docs index
 

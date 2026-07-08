@@ -6,13 +6,27 @@
     <title>script — project introduction</title>
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body {
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
         width: 1920px;
         height: 1080px;
         overflow: hidden;
         background: #030806;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
       }
       #root {
         position: relative;
@@ -31,15 +45,18 @@
         opacity: 0;
         will-change: opacity;
       }
-      .inner { width: 100%; max-width: 1560px; }
+      .inner {
+        width: 100%;
+        max-width: 1560px;
+      }
       .badge {
         display: inline-block;
         font-size: 20px;
         letter-spacing: 0.14em;
         font-weight: 700;
-        color: #00B258;
-        border: 1px solid rgba(0,178,88,0.45);
-        background: rgba(0,178,88,0.12);
+        color: #00b258;
+        border: 1px solid rgba(0, 178, 88, 0.45);
+        background: rgba(0, 178, 88, 0.12);
         padding: 10px 18px;
         border-radius: 999px;
         margin-bottom: 32px;
@@ -67,47 +84,64 @@
         line-height: 1.35;
         margin-bottom: 16px;
       }
-      .sub { font-size: 26px; color: #8fb89e; }
-      ul { list-style: none; display: grid; gap: 18px; }
+      .sub {
+        font-size: 26px;
+        color: #8fb89e;
+      }
+      ul {
+        list-style: none;
+        display: grid;
+        gap: 18px;
+      }
       li {
         font-size: 32px;
         color: #e6f6ec;
         line-height: 1.35;
         padding-left: 24px;
-        border-left: 4px solid #00B258;
+        border-left: 4px solid #00b258;
       }
-      li strong { color: #fff; }
+      li strong {
+        color: #fff;
+      }
       .grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 24px;
       }
       .card {
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 22px;
         padding: 32px;
         min-height: 260px;
       }
       .card h3 {
         font-size: 32px;
-        color: #00B258;
+        color: #00b258;
         margin-bottom: 14px;
         font-family: ui-monospace, Menlo, Monaco, monospace;
       }
-      .card p { font-size: 26px; color: #cfe8d9; line-height: 1.4; }
+      .card p {
+        font-size: 26px;
+        color: #cfe8d9;
+        line-height: 1.4;
+      }
       pre {
         font-family: ui-monospace, Menlo, Monaco, monospace;
         font-size: 26px;
         line-height: 1.55;
-        background: rgba(0,0,0,0.4);
-        border: 1px solid rgba(0,178,88,0.28);
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(0, 178, 88, 0.28);
         border-radius: 18px;
         padding: 32px 36px;
         color: #d8ffe8;
         white-space: pre-wrap;
       }
-      .hint { margin-top: 24px; font-size: 24px; color: #9bc9ae; }
+      .hint {
+        margin-top: 24px;
+        font-size: 24px;
+        color: #9bc9ae;
+      }
       .flow {
         display: flex;
         flex-wrap: wrap;
@@ -116,8 +150,8 @@
         margin-bottom: 22px;
       }
       .flow span {
-        background: rgba(0,178,88,0.12);
-        border: 1px solid rgba(0,178,88,0.35);
+        background: rgba(0, 178, 88, 0.12);
+        border: 1px solid rgba(0, 178, 88, 0.35);
         padding: 14px 18px;
         border-radius: 12px;
         font-size: 24px;
@@ -127,13 +161,13 @@
       .flow .arrow {
         background: transparent;
         border: none;
-        color: #00B258;
+        color: #00b258;
         font-size: 28px;
         padding: 0 2px;
       }
       .flow.second span {
-        background: rgba(255,255,255,0.05);
-        border-color: rgba(255,255,255,0.12);
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.12);
       }
       .stack {
         font-size: 28px;
@@ -149,7 +183,7 @@
       .cta {
         margin-top: 36px;
         font-size: 28px;
-        color: #00B258;
+        color: #00b258;
         font-weight: 700;
       }
     </style>
@@ -165,7 +199,13 @@
       data-fps="30"
     >
       <!-- Scene 1 -->
-      <div id="scene-1" class="clip scene" data-start="0" data-duration="7.804" data-track-index="1">
+      <div
+        id="scene-1"
+        class="clip scene"
+        data-start="0"
+        data-duration="7.804"
+        data-track-index="1"
+      >
         <div class="inner">
           <div class="badge">OPEN SOURCE · FULL STACK</div>
           <h1>script</h1>
@@ -184,7 +224,13 @@
       ></audio>
 
       <!-- Scene 2 -->
-      <div id="scene-2" class="clip scene" data-start="7.954" data-duration="9.937" data-track-index="1">
+      <div
+        id="scene-2"
+        class="clip scene"
+        data-start="7.954"
+        data-duration="9.937"
+        data-track-index="1"
+      >
         <div class="inner">
           <div class="badge">WHAT IT IS</div>
           <h2>One workspace Library. Real AI context.</h2>
@@ -207,7 +253,13 @@
       ></audio>
 
       <!-- Scene 3 -->
-      <div id="scene-3" class="clip scene" data-start="18.041" data-duration="9.639" data-track-index="1">
+      <div
+        id="scene-3"
+        class="clip scene"
+        data-start="18.041"
+        data-duration="9.639"
+        data-track-index="1"
+      >
         <div class="inner">
           <div class="badge">MONOREPO</div>
           <h2>client · server · shared</h2>
@@ -238,21 +290,25 @@
       ></audio>
 
       <!-- Scene 4 -->
-      <div id="scene-4" class="clip scene" data-start="27.83" data-duration="8.615" data-track-index="1">
+      <div
+        id="scene-4"
+        class="clip scene"
+        data-start="27.83"
+        data-duration="8.615"
+        data-track-index="1"
+      >
         <div class="inner">
           <div class="badge">DATA FLOW</div>
           <h2>Ingest once. Query fast.</h2>
           <div class="flow">
-            <span>Upload / URL</span><span class="arrow">→</span>
-            <span>Storage</span><span class="arrow">→</span>
-            <span>Worker extract</span><span class="arrow">→</span>
+            <span>Upload / URL</span><span class="arrow">→</span> <span>Storage</span
+            ><span class="arrow">→</span> <span>Worker extract</span><span class="arrow">→</span>
             <span>Chunk + Voyage</span><span class="arrow">→</span>
             <span>pgvector</span>
           </div>
           <div class="flow second">
-            <span>Chat query</span><span class="arrow">→</span>
-            <span>Embed query</span><span class="arrow">→</span>
-            <span>Top-K chunks</span><span class="arrow">→</span>
+            <span>Chat query</span><span class="arrow">→</span> <span>Embed query</span
+            ><span class="arrow">→</span> <span>Top-K chunks</span><span class="arrow">→</span>
             <span>Claude stream</span><span class="arrow">→</span>
             <span>Citations</span>
           </div>
@@ -270,11 +326,18 @@
       ></audio>
 
       <!-- Scene 5 -->
-      <div id="scene-5" class="clip scene" data-start="36.595" data-duration="13.521" data-track-index="1">
+      <div
+        id="scene-5"
+        class="clip scene"
+        data-start="36.595"
+        data-duration="13.521"
+        data-track-index="1"
+      >
         <div class="inner">
           <div class="badge">QUICKSTART</div>
           <h2>Run it locally</h2>
-          <pre>pnpm install
+          <pre>
+pnpm install
 cp client/.env.example client/.env
 cp server/.env.example server/.env
 # DATABASE_URL, JWT_SECRET, VOYAGE_API_KEY,
@@ -296,13 +359,19 @@ pnpm dev:app      # client + API + worker</pre>
       ></audio>
 
       <!-- Scene 6 -->
-      <div id="scene-6" class="clip scene" data-start="50.266" data-duration="11.729" data-track-index="1">
+      <div
+        id="scene-6"
+        class="clip scene"
+        data-start="50.266"
+        data-duration="11.729"
+        data-track-index="1"
+      >
         <div class="inner">
           <div class="badge">STACK &amp; NEXT</div>
           <h2>Production-minded defaults</h2>
           <p class="stack">
-            TypeScript · Fastify · Neon/Postgres + pgvector · Voyage · Claude ·
-            Redis/BullMQ · Garage/S3 · UploadThing · Vitest
+            TypeScript · Fastify · Neon/Postgres + pgvector · Voyage · Claude · Redis/BullMQ ·
+            Garage/S3 · UploadThing · Vitest
           </p>
           <ul>
             <li>Read <code>AGENTS.md</code> + <code>docs/local-infra.md</code></li>
