@@ -29,5 +29,25 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'text-summary', 'json-summary'],
+      reportsDirectory: './coverage',
+      // Unit-testable pure modules (integration suites live in test/*.test.ts but do not
+      // pull route/service graphs into the 90% gate — those are covered by contract tests).
+      include: [
+        'src/common/**/*.{ts,tsx}',
+        'src/lib/**/*.{ts,tsx}',
+        'src/config/rate-limits.ts',
+        'src/modules/jobs/extract.ts',
+      ],
+      exclude: ['src/**/*.d.ts', 'src/lib/logger.ts', '**/node_modules/**', '**/dist/**'],
+      thresholds: {
+        lines: 90,
+        functions: 90,
+        branches: 80,
+        statements: 90,
+      },
+    },
   },
 });

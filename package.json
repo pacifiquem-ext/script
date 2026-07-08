@@ -23,9 +23,11 @@
     "deps:redis": "docker compose up -d redis && docker compose exec redis redis-cli ping",
     "deps:garage": "docker compose up -d garage && docker compose exec garage /garage status",
     "stack:up": "docker compose --profile app up -d --build",
-    "stack:down": "docker compose --profile app down --remove-orphans"
+    "stack:down": "docker compose --profile app down --remove-orphans",
+    "test:coverage": "pnpm -r test:coverage"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^2.1.4",
     "concurrently": "^9.1.0",
     "prettier": "^3.3.3",
     "typescript": "^5.5.3"

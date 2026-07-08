@@ -9,8 +9,33 @@ export default defineConfig({
   },
   test: {
     include: ['src/test/**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['node_modules', 'dist', 'src/components/**', 'src/lib/**', 'src/pages/**'],
+    exclude: ['node_modules', 'dist'],
     environment: 'jsdom',
     passWithNoTests: false,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'text-summary', 'json-summary'],
+      reportsDirectory: './coverage',
+      // Unit surface: pure libs + design-system UI (pages/layouts stay integration-level).
+      include: [
+        'src/lib/**/*.{ts,tsx}',
+        'src/components/ui/**/*.{ts,tsx}',
+        'src/hooks/**/*.{ts,tsx}',
+      ],
+      exclude: [
+        'src/**/*.d.ts',
+        'src/test/**',
+        'src/lib/icons.tsx',
+        'src/components/ui/BrandIcons.tsx',
+        '**/node_modules/**',
+        '**/dist/**',
+      ],
+      thresholds: {
+        lines: 90,
+        functions: 90,
+        branches: 80,
+        statements: 90,
+      },
+    },
   },
 });

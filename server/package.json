@@ -17,7 +17,9 @@
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
     "worker": "node -r @swc-node/register src/worker/index.ts",
-    "worker:start": "node dist/src/worker/index.js"
+    "worker:start": "node dist/src/worker/index.js",
+    "test:coverage": "vitest run --coverage test/unit.pure.test.ts test/unit.extract.test.ts test/password.test.ts test/pagination.test.ts",
+    "test:coverage:all": "vitest run --coverage"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
@@ -53,6 +55,7 @@
     "@types/node": "^22.9.0",
     "@types/pdf-parse": "^1.1.5",
     "@types/xlsx": "^0.0.36",
+    "@vitest/coverage-v8": "^2.1.4",
     "eslint": "^9.9.1",
     "eslint-config-prettier": "^9.1.0",
     "globals": "^15.9.0",
