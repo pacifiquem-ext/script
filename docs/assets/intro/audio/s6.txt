@@ -1,0 +1,1 @@
+Read AGENTS.md and ENV.md next. Self-host with Docker Compose, or use managed Neon and UploadThing. Happy building with script.

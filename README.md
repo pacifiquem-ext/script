@@ -9,29 +9,37 @@ without regressing that quality. This entire application — backend, AI integra
 between them and the existing frontend — is being built by AI agents. `AGENTS.md` is the contract
 that governs how.
 
+
 ## Project introduction
 
 A short overview of what **script** is, how the monorepo fits together, the ingest → embed → RAG
 chat flow, and how to run it locally (`pnpm deps:up` + `pnpm dev:app`).
 
-[![Watch the project introduction](docs/assets/intro-frames/01-title.png)](docs/assets/script-intro.mp4)
+[![Watch the project introduction](docs/assets/script-intro-poster.png)](docs/assets/script-intro.mp4)
 
-**[Play / download the intro video](./docs/assets/script-intro.mp4)** (~36s, 1080p) — covers product
-scope, architecture (`client` / `server` / `shared`), quickstart commands, data flow, and stack.
+**[Play / download the intro video](./docs/assets/script-intro.mp4)** (~62s, 1080p, with narration) —
+built with [Hyperframes](https://hyperframes.heygen.com) + Kokoro TTS (see `.agents/skills/video`).
 
 <details>
-<summary>Slide outline</summary>
+<summary>What’s covered</summary>
 
-1. Title — AI document management + RAG chat  
-2. Product — Library, ingestion, chat, multi-tenant workspaces  
-3. Monorepo — client · server · packages/shared  
-4. Quickstart — `pnpm install` → env → `deps:up` → `dev:app`  
-5. Data flow — upload → worker → embeddings → chat retrieval  
-6. Stack & next docs — `AGENTS.md`, `ENV.md`, self-host vs managed  
+1. What script is (Library + RAG chat)
+2. Product capabilities
+3. Monorepo layout (`client` / `server` / `shared`)
+4. Ingest + retrieval data flow
+5. Local quickstart commands
+6. Stack and where to read next
 
-Source frames: [`docs/assets/intro-frames/`](./docs/assets/intro-frames/).
+Source composition: [`docs/assets/intro/`](./docs/assets/intro/) — re-render with:
+
+```bash
+# requires: node >= 22, ffmpeg, `npx hyperframes`, kokoro-onnx for TTS
+cd docs/assets/intro
+npx hyperframes render . -o ../script-intro.mp4 -q high
+```
 
 </details>
+
 
 ## Docs index
 

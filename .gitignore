@@ -39,5 +39,4 @@ config.bat
 coverage
 
 # intro video intermediates
-docs/assets/intro-frames/shot-*.mp4
-docs/assets/intro-frames/concat.txt
+docs/assets/intro/renders/
