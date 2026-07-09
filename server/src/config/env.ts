@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseCorsOrigins } from '../lib/cors-origins';
 
 const emptyToUndefined = (value: unknown) =>
   value === undefined || value === null || value === '' ? undefined : value;
@@ -19,7 +20,8 @@ const envSchema = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
-    CORS_ORIGIN: z.string().default('http://localhost:5173'),
+    // Single origin or comma-separated allowlist (e.g. http://localhost:5173,http://localhost:5174)
+    CORS_ORIGIN: z.string().default('http://localhost:5173,http://localhost:5174'),
 
     DATABASE_URL: z
       .string()
@@ -149,7 +151,12 @@ const envSchema = z
     }
   });
 
-export type Env = z.infer<typeof envSchema>;
+export type Env = z.infer<typeof envSchema> & {
+  /** Parsed CORS_ORIGIN allowlist (no trailing slashes). */
+  corsOrigins: string[];
+  /** First allowlisted origin — used as SPA public URL fallback. */
+  primaryCorsOrigin: string;
+};
 
 function loadEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
@@ -161,7 +168,12 @@ function loadEnv(): Env {
       `Invalid environment configuration:\n${message}\n\nSee ENV.md and server/.env.example.`,
     );
   }
-  return parsed.data;
+  const corsOrigins = parseCorsOrigins(parsed.data.CORS_ORIGIN);
+  return {
+    ...parsed.data,
+    corsOrigins,
+    primaryCorsOrigin: corsOrigins[0]!,
+  };
 }
 
 export const env = loadEnv();

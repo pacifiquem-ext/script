@@ -5,10 +5,20 @@ import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { MarkdownContent } from '../../components/ui/MarkdownContent';
+import { uniqueSourceChips } from '../../lib/citations';
 import { notify } from '../../components/ui/toast-alert';
-import { streamMessage, useChatMutations, useCredits, useMessages } from '../../lib/chat-api';
+import {
+  appendMessageToCache,
+  streamMessage,
+  useChatMutations,
+  useCredits,
+  useMessages,
+} from '../../lib/chat-api';
 import { useDocument, useDocuments } from '../../lib/library-api';
 import { getErrorMessage } from '../../lib/form-errors';
+import { queryKeys } from '../../lib/query-client';
 
 export function ChatPage() {
   const location = useLocation();
@@ -19,7 +29,12 @@ export function ChatPage() {
   const [pendingUser, setPendingUser] = useState<string | null>(null);
   const [liveCitations, setLiveCitations] = useState<MessageCitation[]>([]);
   const [loading, setLoading] = useState(false);
-  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    documentId: string;
+    startOffset?: number | null;
+    endOffset?: number | null;
+    label?: string;
+  } | null>(null);
   const [selectedDocs, setSelectedDocs] = useState<PublicDocument[]>([]);
   const [atQuery, setAtQuery] = useState<string | null>(null);
   const [atIndex, setAtIndex] = useState(0);
@@ -29,7 +44,7 @@ export function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesQuery = useMessages(conversationId);
   const documentsQuery = useDocuments(null);
-  const previewQuery = useDocument(previewId);
+  const previewQuery = useDocument(preview?.documentId ?? null);
   const { createConversation, queryClient } = useChatMutations();
   const credits = useCredits();
   const messages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data]);
@@ -43,9 +58,14 @@ export function ChatPage() {
     return readyDocs.filter((d) => d.name.toLowerCase().includes(q)).slice(0, 8);
   }, [atQuery, readyDocs]);
 
+  // Hide optimistic bubble once the real user message is in the cache.
+  const showPendingUser = Boolean(
+    pendingUser && !messages.some((m) => m.role === 'user' && m.content === pendingUser),
+  );
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streaming, pendingUser]);
+  }, [messages, streaming, showPendingUser]);
 
   useEffect(() => {
     const state = location.state as { conversationId?: string } | null;
@@ -83,27 +103,50 @@ export function ChatPage() {
       setStreaming('');
       setLiveCitations([]);
       setPendingUser(trimmed);
+      setInput('');
       const controller = new AbortController();
       abortRef.current = controller;
+      let activeConversationId: string | null = conversationId;
       try {
         const id = await ensureConversation();
+        activeConversationId = id;
         await streamMessage(id, trimmed, documentIds, {
           signal: controller.signal,
+          onUserMessage: (message) => {
+            appendMessageToCache(queryClient, id, message);
+            setPendingUser(null);
+          },
           onDelta: (delta) => setStreaming((prev) => prev + delta),
           onCitations: (citations) => setLiveCitations(citations),
-          onDone: () => undefined,
+          onDone: (message) => {
+            appendMessageToCache(queryClient, id, message);
+            setStreaming('');
+            setLiveCitations([]);
+          },
         });
-        setInput('');
         setStreaming('');
         setPendingUser(null);
+        setLiveCitations([]);
         setAtQuery(null);
-        await queryClient.invalidateQueries({ queryKey: ['messages', id] });
-        await queryClient.invalidateQueries({ queryKey: ['conversations'] });
-        await queryClient.invalidateQueries({ queryKey: ['credits'] });
+        // Soft background refresh — do not await (avoids empty-state flicker).
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations('current'),
+          refetchType: 'active',
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.credits('current'),
+          refetchType: 'active',
+        });
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           setError('Generation stopped.');
           notify.info('Generation stopped.', 'Stopped');
+          // Server may have saved a partial assistant message — reconcile once.
+          if (activeConversationId) {
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.messages(activeConversationId),
+            });
+          }
         } else {
           const message = getErrorMessage(err, 'Failed to send message');
           setError(message);
@@ -111,9 +154,9 @@ export function ChatPage() {
         }
         setStreaming('');
         setPendingUser(null);
-        if (conversationId) {
-          await queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
-          await queryClient.invalidateQueries({ queryKey: ['credits'] });
+        setLiveCitations([]);
+        if (activeConversationId) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.credits('current') });
         }
       } finally {
         abortRef.current = null;
@@ -186,28 +229,74 @@ export function ChatPage() {
     setInput((prev) => `${prev}${prev.endsWith(' ') || !prev ? '' : ' '}@${doc.name} `);
   }
 
+  function openCitation(citation: MessageCitation, index1Based?: number) {
+    const hasRange =
+      citation.startOffset != null &&
+      citation.endOffset != null &&
+      citation.endOffset > citation.startOffset;
+    setPreview({
+      documentId: citation.documentId,
+      startOffset: hasRange ? citation.startOffset : null,
+      endOffset: hasRange ? citation.endOffset : null,
+      label:
+        index1Based != null
+          ? `Source [${index1Based}] · ${citation.documentName}`
+          : citation.documentName,
+    });
+  }
+
   function renderCitations(citations: MessageCitation[]) {
-    if (!citations.length) return null;
+    const chips = uniqueSourceChips(citations);
+    if (!chips.length) return null;
     return (
       <div className="flex flex-wrap gap-1.5 mt-2">
-        {citations.map((citation) => (
+        {chips.map((chip) => (
           <button
             type="button"
-            key={citation.chunkId}
-            className="text-[11px] px-2 py-0.5 rounded-full border border-neutral-200 text-neutral-600 hover:border-primary-base hover:text-primary-base"
-            onClick={() => setPreviewId(citation.documentId)}
+            key={chip.documentId}
+            className="text-[11px] px-2 py-0.5 rounded-full border border-primary-base/20 bg-primary-alpha-10 text-primary-base hover:bg-primary-base hover:text-white transition-colors"
+            onClick={() => openCitation(chip.best, chip.indices[0])}
             title={
-              citation.score != null
-                ? `${citation.documentName} · relevance ${(citation.score * 100).toFixed(0)}%`
-                : citation.documentName
+              chip.best.score != null
+                ? `${chip.documentName} · refs ${chip.indices.map((n) => `[${n}]`).join(' ')} · relevance ${(chip.best.score * 100).toFixed(0)}%`
+                : `${chip.documentName} · refs ${chip.indices.map((n) => `[${n}]`).join(' ')}`
             }
           >
-            {citation.documentName}
+            <span>{chip.documentName}</span>
+            {chip.indices.length > 1 ? (
+              <span className="ml-1 opacity-70">×{chip.indices.length}</span>
+            ) : (
+              <span className="ml-1 opacity-70">[{chip.indices[0]}]</span>
+            )}
           </button>
         ))}
       </div>
     );
   }
+
+  function renderMessageBody(message: PublicMessage) {
+    if (message.role === 'assistant') {
+      const citations = message.citations ?? [];
+      return (
+        <>
+          <MarkdownContent
+            content={message.content}
+            compact
+            citations={citations}
+            onCitationClick={(citation, index) => openCitation(citation, index)}
+          />
+          {message.partial ? (
+            <p className="mt-1 text-[11px] text-neutral-400">Stopped early</p>
+          ) : null}
+          {renderCitations(citations)}
+        </>
+      );
+    }
+    return <p className="whitespace-pre-wrap m-0">{message.content}</p>;
+  }
+
+
+  const showInitialLoading = messagesQuery.isLoading && !messagesQuery.data && !pendingUser;
 
   return (
     <div className="flex h-full overflow-hidden bg-white">
@@ -217,14 +306,14 @@ export function ChatPage() {
         onDrop={onDropChat}
       >
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
-          {messagesQuery.isLoading ? (
-            <EmptyState title="Loading conversation…" description="Fetching messages." />
+          {showInitialLoading ? (
+            <LoadingState label="Loading conversation…" />
           ) : messagesQuery.isError ? (
             <EmptyState
               title="Couldn’t load messages"
               description={getErrorMessage(messagesQuery.error, 'Try again in a moment.')}
             />
-          ) : messages.length === 0 && !streaming && !pendingUser ? (
+          ) : messages.length === 0 && !streaming && !showPendingUser ? (
             <EmptyState
               title="Chat with your library"
               description="Type @ to mention ready documents, or drag a file chip from the list below."
@@ -233,27 +322,32 @@ export function ChatPage() {
           {messages.map((message: PublicMessage) => (
             <div
               key={message.id}
-              className={`max-w-[80%] rounded-16 px-4 py-3 text-para-sm whitespace-pre-wrap ${
+              className={`max-w-[80%] rounded-16 px-4 py-3 text-para-sm ${
                 message.role === 'user'
                   ? 'ml-auto bg-primary-alpha-10 text-neutral-950'
                   : 'bg-neutral-50 text-neutral-800'
               }`}
             >
-              {message.content}
-              {message.partial ? (
-                <p className="mt-1 text-[11px] text-neutral-400">Stopped early</p>
-              ) : null}
-              {message.role === 'assistant' ? renderCitations(message.citations ?? []) : null}
+              {renderMessageBody(message)}
             </div>
           ))}
-          {pendingUser && (
+          {showPendingUser && pendingUser ? (
             <div className="max-w-[80%] ml-auto rounded-16 px-4 py-3 text-para-sm whitespace-pre-wrap bg-primary-alpha-10 text-neutral-950">
               {pendingUser}
             </div>
-          )}
-          {(streaming || loading) && (
-            <div className="max-w-[80%] rounded-16 px-4 py-3 text-para-sm whitespace-pre-wrap bg-neutral-50 text-neutral-800">
-              {streaming || 'Thinking…'}
+          ) : null}
+          {(streaming || (loading && !streaming)) && (
+            <div className="max-w-[80%] rounded-16 px-4 py-3 text-para-sm bg-neutral-50 text-neutral-800">
+              {streaming ? (
+                <MarkdownContent
+                  content={streaming}
+                  compact
+                  citations={liveCitations}
+                  onCitationClick={(citation, index) => openCitation(citation, index)}
+                />
+              ) : (
+                <span className="text-neutral-500 animate-pulse">Thinking…</span>
+              )}
               {renderCitations(liveCitations)}
             </div>
           )}
@@ -384,16 +478,29 @@ export function ChatPage() {
           </div>
         </div>
       </div>
-      {previewId && (
+      {preview && (
         <DocumentCanvas
           file={{
-            id: previewId,
+            id: preview.documentId,
             name: previewQuery.data?.name || 'Document',
             status: previewQuery.data?.status,
+            mimeType: previewQuery.data?.mimeType,
           }}
           content={previewQuery.data?.extractedText ?? null}
+          downloadUrl={previewQuery.data?.downloadUrl ?? null}
           loading={previewQuery.isLoading}
-          onClose={() => setPreviewId(null)}
+          highlight={
+            preview.startOffset != null &&
+            preview.endOffset != null &&
+            preview.endOffset > preview.startOffset
+              ? {
+                  startOffset: preview.startOffset,
+                  endOffset: preview.endOffset,
+                  label: preview.label,
+                }
+              : null
+          }
+          onClose={() => setPreview(null)}
         />
       )}
     </div>

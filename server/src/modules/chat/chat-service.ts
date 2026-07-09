@@ -265,6 +265,18 @@ export interface CompletionStreamer {
   }): AsyncGenerator<string>;
 }
 
+function anthropicErrorMessage(error: unknown): string {
+  if (!error || typeof error !== 'object') return 'Chat completion failed';
+  const err = error as {
+    message?: string;
+    error?: { message?: string; type?: string };
+    status?: number;
+  };
+  const detail = err.error?.message || err.message;
+  if (detail) return detail;
+  return 'Chat completion failed';
+}
+
 async function* anthropicStream(input: {
   system: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -272,6 +284,7 @@ async function* anthropicStream(input: {
 }): AsyncGenerator<string> {
   const apiKey = requireAnthropicApiKey();
   const client = new Anthropic({ apiKey });
+  logger.info({ model: CHAT_MODEL }, 'claude completion starting');
   const stream = client.messages.stream({
     model: CHAT_MODEL,
     max_tokens: CHAT_MAX_TOKENS,
@@ -290,6 +303,7 @@ async function* anthropicStream(input: {
         yield event.delta.text;
       }
     }
+    if (input.signal?.aborted) return;
     const final = await stream.finalMessage();
     logger.info(
       {
@@ -299,6 +313,10 @@ async function* anthropicStream(input: {
       },
       'claude completion finished',
     );
+  } catch (error) {
+    if (input.signal?.aborted) return;
+    logger.error({ err: error, model: CHAT_MODEL }, 'claude completion failed');
+    throw new Error(anthropicErrorMessage(error));
   } finally {
     input.signal?.removeEventListener('abort', onAbort);
   }
@@ -439,11 +457,16 @@ export async function* streamAssistantReply(input: {
     if (input.signal?.aborted) {
       aborted = true;
     } else {
+      const errMessage = error instanceof Error ? error.message : 'Chat failed';
+      logger.error(
+        { err: error, conversationId: conversation.id, model: CHAT_MODEL },
+        'assistant stream failed',
+      );
       const partial = await prisma.message.create({
         data: {
           conversationId: conversation.id,
           role: 'assistant',
-          content: full || 'Chat failed before a response was generated.',
+          content: full || `Chat failed before a response was generated. (${errMessage})`,
           citations: citations as unknown as Prisma.InputJsonValue,
           partial: true,
         },
@@ -452,7 +475,7 @@ export async function* streamAssistantReply(input: {
       yield {
         type: 'error',
         code: 'CHAT_FAILED',
-        message: error instanceof Error ? error.message : 'Chat failed',
+        message: errMessage,
       };
       yield { type: 'done', message: mapMessage(partial) };
       return;

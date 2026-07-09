@@ -37,7 +37,7 @@ function toPublic(row: {
 }
 
 function appPublicUrl() {
-  return (env.APP_PUBLIC_URL || env.CORS_ORIGIN).replace(/\/$/, '');
+  return (env.APP_PUBLIC_URL || env.primaryCorsOrigin).replace(/\/$/, '');
 }
 
 export function listIntegrations(workspaceId: string) {

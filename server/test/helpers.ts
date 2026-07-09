@@ -1,5 +1,5 @@
 import { env } from '../src/config/env';
 
 export function originHeaders(): { origin: string } {
-  return { origin: env.CORS_ORIGIN };
+  return { origin: env.primaryCorsOrigin };
 }

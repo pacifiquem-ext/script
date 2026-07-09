@@ -9,6 +9,34 @@ function getClient() {
   return new UTApi({ token: env.UPLOADTHING_TOKEN });
 }
 
+/** Normalize UTApi signed-url responses across SDK shapes (v7 direct + legacy { data }). */
+export function extractUploadThingUrl(result: unknown): string | null {
+  if (typeof result === 'string' && result.length > 0) return result;
+  if (!result || typeof result !== 'object') return null;
+
+  const obj = result as {
+    error?: { message?: string } | null;
+    data?: { url?: string; ufsUrl?: string } | string | null;
+    url?: string;
+    ufsUrl?: string;
+  };
+
+  if (obj.error) {
+    throw new Error(obj.error.message ?? 'Failed to sign UploadThing URL');
+  }
+
+  if (typeof obj.ufsUrl === 'string' && obj.ufsUrl.length > 0) return obj.ufsUrl;
+  if (typeof obj.url === 'string' && obj.url.length > 0) return obj.url;
+
+  if (typeof obj.data === 'string' && obj.data.length > 0) return obj.data;
+  if (obj.data && typeof obj.data === 'object') {
+    if (typeof obj.data.ufsUrl === 'string' && obj.data.ufsUrl.length > 0) return obj.data.ufsUrl;
+    if (typeof obj.data.url === 'string' && obj.data.url.length > 0) return obj.data.url;
+  }
+
+  return null;
+}
+
 export function createUploadThingDriver(): StorageDriver {
   return {
     async upload(input): Promise<UploadedFile> {
@@ -31,17 +59,21 @@ export function createUploadThingDriver(): StorageDriver {
 
     async getSignedDownloadUrl(key: string, expiresInSeconds = 3600): Promise<string> {
       const utapi = getClient();
-      const result = await utapi.getSignedURL(key, { expiresIn: expiresInSeconds });
-      if (typeof result === 'string') return result;
-      if (result && typeof result === 'object' && 'data' in result) {
-        const data = (
-          result as { data?: { url?: string } | string | null; error?: { message?: string } }
-        ).data;
-        const error = (result as { error?: { message?: string } }).error;
-        if (error) throw new Error(error.message ?? 'Failed to sign UploadThing URL');
-        if (typeof data === 'string') return data;
-        if (data?.url) return data.url;
+
+      // Preferred: local HMAC URL (no extra UploadThing API round-trip). UT v7+.
+      if (typeof utapi.generateSignedURL === 'function') {
+        try {
+          const generated = await utapi.generateSignedURL(key, { expiresIn: expiresInSeconds });
+          const url = extractUploadThingUrl(generated);
+          if (url) return url;
+        } catch {
+          // Fall through to legacy getSignedURL for older tokens/SDKs.
+        }
       }
+
+      const result = await utapi.getSignedURL(key, { expiresIn: expiresInSeconds });
+      const url = extractUploadThingUrl(result);
+      if (url) return url;
       throw new Error('Failed to sign UploadThing URL');
     },
 

@@ -3,16 +3,20 @@ import type { PublicDocument, PublicDocumentDetail, PublicFolder } from '@script
 import { apiRequest, getApiBaseUrl } from './api-client';
 import { queryKeys } from './query-client';
 
+function hasActiveProcessing(docs: PublicDocument[] | undefined): boolean {
+  return Boolean(docs?.some((d) => d.status === 'pending' || d.status === 'processing'));
+}
+
 export function useFolders(parentId: string | null = null, enabled = true) {
   return useQuery({
     queryKey: [...queryKeys.folders('current'), parentId],
     enabled,
+    staleTime: 15_000,
     queryFn: async () => {
       const qs = parentId ? `?parentId=${encodeURIComponent(parentId)}` : '';
       const data = await apiRequest<{ folders: PublicFolder[] }>(`/folders${qs}`);
       return data.folders;
     },
-    refetchInterval: 5000,
   });
 }
 
@@ -20,6 +24,7 @@ export function useDocuments(folderId: string | null = null, enabled = true) {
   return useQuery({
     queryKey: queryKeys.documents('current', folderId),
     enabled,
+    staleTime: 10_000,
     queryFn: async () => {
       const params = new URLSearchParams();
       if (folderId) params.set('folderId', folderId);
@@ -29,7 +34,8 @@ export function useDocuments(folderId: string | null = null, enabled = true) {
       );
       return data.data;
     },
-    refetchInterval: 3000,
+    // Poll only while documents are still processing — not forever every 3s.
+    refetchInterval: (query) => (hasActiveProcessing(query.state.data) ? 3000 : false),
   });
 }
 
@@ -37,11 +43,16 @@ export function useDocument(documentId: string | null) {
   return useQuery({
     queryKey: documentId ? queryKeys.document(documentId) : ['documents', 'none'],
     enabled: Boolean(documentId),
+    staleTime: 30_000,
     queryFn: async () => {
       const data = await apiRequest<{ document: PublicDocumentDetail }>(`/documents/${documentId}`);
       return data.document;
     },
-    refetchInterval: (query) => (query.state.data?.status === 'ready' ? false : 2000),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (!status || status === 'ready' || status === 'failed') return false;
+      return 2000;
+    },
   });
 }
 

@@ -1,6 +1,7 @@
 import type { FastifyRequest } from 'fastify';
 import { env } from '../config/env';
 import { ForbiddenError } from '../common/errors';
+import { isAllowedCorsOrigin, isAllowedCorsReferer } from './cors-origins';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -14,13 +15,13 @@ export function assertSameOrigin(request: FastifyRequest): void {
       if (env.NODE_ENV === 'test') return;
       throw new ForbiddenError('Missing Origin header');
     }
-    if (!referer.startsWith(env.CORS_ORIGIN)) {
+    if (!isAllowedCorsReferer(referer, env.corsOrigins)) {
       throw new ForbiddenError('Invalid Referer');
     }
     return;
   }
 
-  if (origin !== env.CORS_ORIGIN) {
+  if (!isAllowedCorsOrigin(origin, env.corsOrigins)) {
     throw new ForbiddenError('Invalid Origin');
   }
 }

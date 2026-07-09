@@ -8,6 +8,7 @@ export function useConversations(enabled = true, search?: string) {
   return useQuery({
     queryKey: [...queryKeys.conversations('current'), q],
     enabled,
+    staleTime: 30_000,
     queryFn: async () => {
       const params = new URLSearchParams({ page: '1', pageSize: '100' });
       if (q) params.set('q', q);
@@ -25,12 +26,27 @@ export function useMessages(conversationId: string | null) {
   return useQuery({
     queryKey: conversationId ? queryKeys.messages(conversationId) : ['messages', 'none'],
     enabled: Boolean(conversationId),
+    staleTime: 60_000,
     queryFn: async () => {
       const data = await apiRequest<{ data: PublicMessage[]; messages?: PublicMessage[] }>(
         `/conversations/${conversationId}/messages?page=1&pageSize=100`,
       );
       return data.data ?? data.messages ?? [];
     },
+  });
+}
+
+export function appendMessageToCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  conversationId: string,
+  message: PublicMessage,
+) {
+  queryClient.setQueryData<PublicMessage[]>(queryKeys.messages(conversationId), (old) => {
+    const list = old ?? [];
+    if (list.some((m) => m.id === message.id)) {
+      return list.map((m) => (m.id === message.id ? message : m));
+    }
+    return [...list, message];
   });
 }
 
@@ -45,7 +61,10 @@ export function useChatMutations() {
         method: 'POST',
         body: title ? { title } : {},
       }),
-    onSuccess: invalidateConversations,
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.messages(data.conversation.id), [] as PublicMessage[]);
+      void invalidateConversations();
+    },
   });
   const renameConversation = useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) =>
@@ -58,7 +77,10 @@ export function useChatMutations() {
   const deleteConversation = useMutation({
     mutationFn: (id: string) =>
       apiRequest<{ ok: true }>(`/conversations/${id}`, { method: 'DELETE' }),
-    onSuccess: invalidateConversations,
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: queryKeys.messages(id) });
+      void invalidateConversations();
+    },
   });
   return { createConversation, renameConversation, deleteConversation, queryClient };
 }
@@ -133,7 +155,9 @@ export function useCredits(enabled = true) {
   return useQuery({
     queryKey: queryKeys.credits('current'),
     enabled,
+    staleTime: 30_000,
     queryFn: async () => apiRequest<{ balance: number; plan: string }>('/credits'),
-    refetchInterval: 10000,
+    // Was 10s — too chatty; balance only changes after AI actions.
+    refetchInterval: 60_000,
   });
 }

@@ -1,7 +1,7 @@
 {
-  "watch": ["src"],
+  "watch": ["src", "../packages/shared/src"],
   "ext": "ts",
-  "exec": "node -r dotenv/config -r @swc-node/register src/index.ts",
+  "exec": "pnpm --filter @script/shared build && node -r dotenv/config -r @swc-node/register src/index.ts",
   "env": {
     "NODE_ENV": "development"
   }

@@ -350,8 +350,10 @@ export function LibraryPage() {
             id: previewId,
             name: previewQuery.data?.name || 'Document',
             status: previewQuery.data?.status,
+            mimeType: previewQuery.data?.mimeType,
           }}
           content={previewQuery.data?.extractedText ?? null}
+          downloadUrl={previewQuery.data?.downloadUrl ?? null}
           loading={previewQuery.isLoading}
           onClose={() => setPreviewId(null)}
         />

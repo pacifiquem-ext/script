@@ -1,0 +1,7 @@
+# Playwright MCP for this project — absolute launcher under ~/.grok (shared install).
+[mcp_servers.playwright]
+command = "/Users/mac/.grok/mcp-servers/playwright/run.sh"
+args = []
+enabled = true
+startup_timeout_sec = 60
+tool_timeout_sec = 180

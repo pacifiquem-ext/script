@@ -8,6 +8,7 @@ import {
 } from '@script/shared';
 import { isAppError } from '../../common/errors';
 import { chatMessageRateLimitConfig } from '../../config/rate-limits';
+import { buildSseHeaders } from '../../lib/sse-headers';
 import { requireWorkspace } from '../../plugins/auth';
 import * as chat from './chat-service';
 
@@ -94,15 +95,16 @@ export async function chatRoutes(app: FastifyInstance) {
       const { conversationId } = request.params as { conversationId: string };
       const body = sendMessageBodySchema.parse(request.body);
       const controller = new AbortController();
-      const onClose = () => controller.abort();
-      request.raw.on('close', onClose);
+      // Abort only when the *response* socket closes early (client disconnect).
+      // request.raw 'close' fires when the request body is fully received — that
+      // would abort the model stream immediately after Fastify parses the POST.
+      const onResponseClose = () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      };
 
       reply.hijack();
-      reply.raw.writeHead(200, {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-      });
+      reply.raw.writeHead(200, buildSseHeaders(request.headers));
+      reply.raw.on('close', onResponseClose);
 
       try {
         for await (const event of chat.streamAssistantReply({
@@ -118,10 +120,12 @@ export async function chatRoutes(app: FastifyInstance) {
       } catch (error) {
         const message = isAppError(error) ? error.message : 'Chat failed';
         const code = isAppError(error) ? error.code : 'INTERNAL_SERVER_ERROR';
-        writeEvent(reply, { type: 'error', code, message });
+        if (!reply.raw.writableEnded) {
+          writeEvent(reply, { type: 'error', code, message });
+        }
       } finally {
-        request.raw.off('close', onClose);
-        reply.raw.end();
+        reply.raw.off('close', onResponseClose);
+        if (!reply.raw.writableEnded) reply.raw.end();
       }
       return reply;
     },

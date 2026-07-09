@@ -53,10 +53,19 @@
     background: theme('colors.neutral.300');
   }
 
-  /* ── Links ── */
+  /* ── Links (primary brand green) ── */
   a {
+    color: theme('colors.primary.base');
     text-decoration: none;
-    color: inherit;
+    transition: color 0.15s ease;
+  }
+  a:hover {
+    color: theme('colors.primary.darker');
+  }
+  a:focus-visible {
+    outline: 2px solid theme('colors.primary.base');
+    outline-offset: 2px;
+    border-radius: 2px;
   }
 }
 
@@ -202,4 +211,75 @@
       line-height: 32px;
     }
   }
+}
+
+/* ── Document / markdown previews (mammoth HTML + chat) ── */
+.script-docx-preview {
+  color: theme('colors.neutral.800');
+  font-size: 14px;
+  line-height: 1.65;
+}
+.script-docx-preview h1 {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 500;
+  color: theme('colors.neutral.950');
+  margin: 0 0 12px;
+}
+.script-docx-preview h2 {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 500;
+  color: theme('colors.neutral.950');
+  margin: 20px 0 10px;
+}
+.script-docx-preview h3 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  color: theme('colors.neutral.950');
+  margin: 16px 0 8px;
+}
+.script-docx-preview p {
+  margin: 0 0 12px;
+}
+.script-docx-preview ul,
+.script-docx-preview ol {
+  margin: 0 0 12px;
+  padding-left: 1.25rem;
+}
+.script-docx-preview li {
+  margin-bottom: 4px;
+}
+.script-docx-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.script-docx-preview th,
+.script-docx-preview td {
+  border: 1px solid theme('colors.neutral.200');
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.script-docx-preview th {
+  background: theme('colors.neutral.50');
+  font-weight: 500;
+}
+.script-docx-preview a {
+  color: theme('colors.primary.base');
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.script-docx-preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+.script-docx-preview strong {
+  font-weight: 600;
+  color: theme('colors.neutral.950');
 }

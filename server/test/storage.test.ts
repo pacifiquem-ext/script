@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const uploadFiles = vi.fn();
 const deleteFiles = vi.fn();
 const getSignedURL = vi.fn();
+const generateSignedURL = vi.fn();
 
 vi.mock('uploadthing/server', () => ({
   UTApi: class {
     uploadFiles = uploadFiles;
     deleteFiles = deleteFiles;
     getSignedURL = getSignedURL;
+    generateSignedURL = generateSignedURL;
   },
 }));
 
@@ -47,21 +49,24 @@ describe('storage drivers', () => {
     uploadFiles.mockReset();
     deleteFiles.mockReset();
     getSignedURL.mockReset();
+    generateSignedURL.mockReset();
     send.mockReset();
   });
 
-  it('uploads via UploadThing driver', async () => {
+  it('uploads via UploadThing driver and signs with generateSignedURL (v7 shape)', async () => {
     process.env.STORAGE_DRIVER = 'uploadthing';
     process.env.UPLOADTHING_TOKEN = 'test-token';
     uploadFiles.mockResolvedValue({
       data: {
         key: 'abc',
         url: 'https://ut.example/abc',
-        ufsUrl: 'https://ut.example/abc',
+        ufsUrl: 'https://app.ufs.sh/f/abc',
         size: 4,
       },
     });
-    getSignedURL.mockResolvedValue({ data: { url: 'https://ut.example/signed' } });
+    generateSignedURL.mockResolvedValue({
+      ufsUrl: 'https://app.ufs.sh/f/abc?expires=1&signature=hmac-sha256%3Ddeadbeef',
+    });
 
     const { createUploadThingDriver } = await import('../src/storage/uploadthing');
     const driver = createUploadThingDriver();
@@ -71,9 +76,42 @@ describe('storage drivers', () => {
       contentType: 'text/plain',
     });
     expect(uploaded.key).toBe('abc');
-    await expect(driver.getSignedDownloadUrl('abc')).resolves.toBe('https://ut.example/signed');
+    expect(uploaded.url).toBe('https://app.ufs.sh/f/abc');
+    await expect(driver.getSignedDownloadUrl('abc')).resolves.toContain('signature=');
+    expect(generateSignedURL).toHaveBeenCalledWith('abc', { expiresIn: 3600 });
+    expect(getSignedURL).not.toHaveBeenCalled();
     await driver.delete('abc');
     expect(deleteFiles).toHaveBeenCalledWith('abc');
+  });
+
+  it('falls back to getSignedURL v7 direct { url, ufsUrl } when generateSignedURL fails', async () => {
+    process.env.STORAGE_DRIVER = 'uploadthing';
+    process.env.UPLOADTHING_TOKEN = 'test-token';
+    generateSignedURL.mockRejectedValue(new Error('local sign failed'));
+    getSignedURL.mockResolvedValue({
+      url: 'https://utfs.io/f/abc',
+      ufsUrl: 'https://app.ufs.sh/f/abc',
+    });
+
+    const { createUploadThingDriver } = await import('../src/storage/uploadthing');
+    const driver = createUploadThingDriver();
+    await expect(driver.getSignedDownloadUrl('abc', 600)).resolves.toBe('https://app.ufs.sh/f/abc');
+    expect(getSignedURL).toHaveBeenCalledWith('abc', { expiresIn: 600 });
+  });
+
+  it('parses legacy getSignedURL { data: { url } } shape', async () => {
+    process.env.STORAGE_DRIVER = 'uploadthing';
+    process.env.UPLOADTHING_TOKEN = 'test-token';
+    generateSignedURL.mockRejectedValue(new Error('unavailable'));
+    getSignedURL.mockResolvedValue({ data: { url: 'https://ut.example/signed' } });
+
+    const { createUploadThingDriver, extractUploadThingUrl } =
+      await import('../src/storage/uploadthing');
+    expect(extractUploadThingUrl({ data: { url: 'https://ut.example/signed' } })).toBe(
+      'https://ut.example/signed',
+    );
+    const driver = createUploadThingDriver();
+    await expect(driver.getSignedDownloadUrl('abc')).resolves.toBe('https://ut.example/signed');
   });
 
   it('uploads via S3-compatible driver', async () => {

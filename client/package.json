@@ -19,9 +19,12 @@
     "@script/shared": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-virtual": "^3.11.2",
+    "mammoth": "^1.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.14.2",
+    "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "zod": "^3.23.8"
   },

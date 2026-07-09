@@ -3,7 +3,7 @@ export const EMBEDDING_MODEL = 'voyage-3.5' as const;
 export const EMBEDDING_DIMENSIONS = 1024 as const;
 export const VOYAGE_EMBED_BATCH_SIZE = 128 as const;
 
-export const CHAT_MODEL = 'claude-sonnet-4-20250514' as const;
+export const CHAT_MODEL = 'claude-sonnet-4-6' as const;
 export const CHAT_MAX_TOKENS = 1200 as const;
 export const CHAT_TEMPERATURE = 0 as const;
 export const CHAT_HISTORY_MESSAGE_LIMIT = 20 as const;

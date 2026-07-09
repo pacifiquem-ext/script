@@ -21,7 +21,13 @@ import {
 } from '../src/config/rate-limits';
 import { clearAuthCookies, setAuthCookies, setWorkspaceCookie } from '../src/lib/cookies';
 import { generateOtpCode, generateRefreshToken, sha256 } from '../src/lib/crypto';
+import {
+  isAllowedCorsOrigin,
+  isAllowedCorsReferer,
+  parseCorsOrigins,
+} from '../src/lib/cors-origins';
 import { assertSameOrigin } from '../src/lib/origin';
+import { buildSseHeaders } from '../src/lib/sse-headers';
 import { hashPassword, verifyPassword } from '../src/lib/password';
 import { assertSafeUrl } from '../src/lib/ssrf';
 import { authCookieNames, signAccessToken, verifyAccessToken } from '../src/lib/tokens';
@@ -108,6 +114,42 @@ describe('cookies', () => {
       workspaceId: null,
     });
     expect(setCookie).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('cors origins parser', () => {
+  it('parses single and comma-separated origins, strips trailing slashes', () => {
+    expect(parseCorsOrigins('http://localhost:5173')).toEqual(['http://localhost:5173']);
+    expect(
+      parseCorsOrigins('http://localhost:5173/, http://localhost:5174, http://localhost:5173'),
+    ).toEqual(['http://localhost:5173', 'http://localhost:5174']);
+  });
+
+  it('rejects empty allowlist', () => {
+    expect(() => parseCorsOrigins('  ,  ')).toThrow(/at least one origin/);
+  });
+
+  it('matches origin and referer against allowlist', () => {
+    const allowed = ['http://localhost:5173', 'http://localhost:5174'];
+    expect(isAllowedCorsOrigin('http://localhost:5174', allowed)).toBe(true);
+    expect(isAllowedCorsOrigin('https://evil.example', allowed)).toBe(false);
+    expect(isAllowedCorsReferer('http://localhost:5173/app/chat', allowed)).toBe(true);
+    expect(isAllowedCorsReferer('http://localhost:5173.evil.example/', allowed)).toBe(false);
+  });
+});
+
+describe('sse headers', () => {
+  it('includes CORS + CORP for allowed SPA origins on hijacked streams', () => {
+    const headers = buildSseHeaders({ origin: 'http://localhost:5173' });
+    expect(headers['Content-Type']).toBe('text/event-stream; charset=utf-8');
+    expect(headers['Access-Control-Allow-Origin']).toBe('http://localhost:5173');
+    expect(headers['Access-Control-Allow-Credentials']).toBe('true');
+    expect(headers['Cross-Origin-Resource-Policy']).toBe('cross-origin');
+  });
+
+  it('omits ACAO for disallowed origins', () => {
+    const headers = buildSseHeaders({ origin: 'https://evil.example' });
+    expect(headers['Access-Control-Allow-Origin']).toBeUndefined();
   });
 });
 

@@ -23,8 +23,27 @@ import { integrationRoutes } from './modules/integrations/routes';
 export function buildApp() {
   registerIngestionProcessors();
   const app = Fastify({ logger: pinoOptions });
-  app.register(helmet, { global: true, contentSecurityPolicy: false });
-  app.register(cors, { origin: env.CORS_ORIGIN, credentials: true });
+  // SPA runs on a different origin (e.g. Vite :5173 → API :4000). Default Helmet
+  // CORP "same-origin" makes the browser treat successful responses as opaque /
+  // blocked for credentialed cross-origin fetch and EventSource — looks like CORS.
+  app.register(helmet, {
+    global: true,
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  });
+  app.register(cors, {
+    origin: env.corsOrigins,
+    credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Workspace-Id',
+      'X-Request-Id',
+      'Accept',
+    ],
+    exposedHeaders: ['Content-Type'],
+  });
   app.register(cookie);
   app.register(multipart, { limits: { fileSize: env.MAX_UPLOAD_BYTES, files: 10 } });
   app.register(rateLimit, { max: 100, timeWindow: '1 minute' });

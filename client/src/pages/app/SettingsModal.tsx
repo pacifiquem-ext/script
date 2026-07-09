@@ -804,7 +804,7 @@ export function SettingsModal({ open, onClose }: Props) {
             <div className="px-[40px] pb-[40px] flex flex-col gap-3 max-w-[520px] text-[13px] text-neutral-700">
               <div className="flex justify-between border border-neutral-200 rounded-10 p-3">
                 <span>Model</span>
-                <span className="font-medium">claude-sonnet-4</span>
+                <span className="font-medium">claude-sonnet-4-6</span>
               </div>
               <div className="flex justify-between border border-neutral-200 rounded-10 p-3">
                 <span>Temperature</span>
