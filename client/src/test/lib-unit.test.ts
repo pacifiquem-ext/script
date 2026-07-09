@@ -5,9 +5,28 @@ import { apiRequest, getApiBaseUrl } from '../lib/api-client';
 import { streamMessage } from '../lib/chat-api';
 import { cn } from '../lib/cn';
 import { getErrorMessage } from '../lib/form-errors';
+import { buildDocumentPrompts, matchDocumentsInText } from '../lib/library-api';
 import { queryKeys } from '../lib/query-client';
 import { initials } from '../lib/workspaces';
-import { COOKIE_WORKSPACE_ID } from '@script/shared';
+import { COOKIE_WORKSPACE_ID, type PublicDocument } from '@script/shared';
+
+function stubDoc(partial: Partial<PublicDocument> & Pick<PublicDocument, 'id' | 'name'>): PublicDocument {
+  return {
+    folderId: null,
+    mimeType: 'text/plain',
+    byteSize: 1,
+    source: 'local',
+    sourceUrl: null,
+    status: 'ready',
+    processingPhase: null,
+    failureReason: null,
+    pageCount: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    processedAt: null,
+    ...partial,
+  };
+}
 
 describe('cn', () => {
   it('joins truthy class parts', () => {
@@ -35,6 +54,44 @@ describe('queryKeys', () => {
     expect(queryKeys.documents('w', null)).toEqual(['documents', 'w', 'root']);
     expect(queryKeys.documents('w', 'f1')).toEqual(['documents', 'w', 'f1']);
     expect(queryKeys.messages('c1')).toEqual(['messages', 'c1']);
+  });
+});
+
+describe('matchDocumentsInText', () => {
+  it('matches full names and long basenames case-insensitively', () => {
+    const docs = [
+      stubDoc({ id: '1', name: 'AGENTS.md', folderId: 'f1' }),
+      stubDoc({ id: '2', name: 'api.md' }),
+      stubDoc({ id: '3', name: 'chunking.md' }),
+    ];
+    const hits = matchDocumentsInText('Tell me about agents.md in the folder', docs);
+    expect(hits.map((d) => d.id)).toEqual(['1']);
+    // short basename "api" should not match loosely
+    expect(matchDocumentsInText('tell me about the api design', docs).map((d) => d.id)).toEqual([]);
+    expect(matchDocumentsInText('summarize chunking', docs).map((d) => d.id)).toEqual(['3']);
+  });
+});
+
+describe('buildDocumentPrompts', () => {
+  it('builds prompts from newest ready files', () => {
+    const docs = [
+      stubDoc({
+        id: '1',
+        name: 'newer.md',
+        status: 'ready',
+        createdAt: '2026-07-09T12:00:00.000Z',
+      }),
+      stubDoc({
+        id: '2',
+        name: 'older.md',
+        status: 'ready',
+        createdAt: '2026-07-01T12:00:00.000Z',
+      }),
+      stubDoc({ id: '3', name: 'failed.md', status: 'failed' }),
+    ];
+    const prompts = buildDocumentPrompts(docs, 3);
+    expect(prompts[0]).toContain('newer.md');
+    expect(prompts.some((p) => p.includes('failed.md'))).toBe(false);
   });
 });
 

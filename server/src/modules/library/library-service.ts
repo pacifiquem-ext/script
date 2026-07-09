@@ -145,6 +145,29 @@ export async function deleteDocument(workspaceId: string, documentId: string) {
   return { ok: true as const };
 }
 
+export async function reprocessDocument(workspaceId: string, documentId: string, userId: string) {
+  const existing = await prisma.document.findFirst({ where: { id: documentId, workspaceId } });
+  if (!existing) throw new NotFoundError('Document');
+  if (existing.status === 'pending' || existing.status === 'processing') {
+    throw new BadRequestError('Document is already processing');
+  }
+  await assertHasCredits(workspaceId, INGESTION_CREDIT_COST);
+  const doc = await prisma.document.update({
+    where: { id: documentId },
+    data: {
+      status: 'pending',
+      failureReason: null,
+      processingPhase: null,
+      processedAt: null,
+    },
+  });
+  await enqueueIngestion(
+    { documentId: doc.id, workspaceId, userId, mode: 'ingest' },
+    { uniqueJobId: true },
+  );
+  return { document: await toPublicDocument(doc) };
+}
+
 async function createPendingDocument(input: {
   workspaceId: string;
   userId: string;

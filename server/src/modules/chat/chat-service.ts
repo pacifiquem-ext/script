@@ -192,6 +192,63 @@ type RetrievedChunk = {
   score: number;
 };
 
+function documentNameMatches(content: string, name: string): boolean {
+  const hay = content.toLowerCase();
+  const full = name.toLowerCase().trim();
+  if (!full) return false;
+  if (hay.includes(full) || hay.includes(`@${full}`)) return true;
+  const base = full.replace(/\.[^.]+$/, '');
+  // Avoid short basenames matching common words ("api", "doc").
+  if (base.length >= 5 && (hay.includes(base) || hay.includes(`@${base}`))) return true;
+  return false;
+}
+
+/**
+ * Merge explicit mention IDs with documents named in the user message so
+ * "Tell me about AGENTS.md" scopes retrieval even without an @-chip.
+ * Throws when the user clearly names only non-ready documents.
+ */
+async function resolveDocumentScope(
+  workspaceId: string,
+  content: string,
+  explicitIds: string[],
+): Promise<string[]> {
+  const docs = await prisma.document.findMany({
+    where: { workspaceId },
+    select: { id: true, name: true, status: true, failureReason: true },
+    orderBy: { name: 'asc' },
+  });
+
+  const byId = new Map(docs.map((d) => [d.id, d]));
+  const explicit = explicitIds.filter((id) => byId.has(id));
+
+  // Longest name first so "Service Contract Q1.doc" wins over "Contract".
+  const named = [...docs]
+    .sort((a, b) => b.name.length - a.name.length)
+    .filter((d) => documentNameMatches(content, d.name));
+
+  if (explicit.length === 0 && named.length > 0) {
+    const readyNamed = named.filter((d) => d.status === 'ready').map((d) => d.id);
+    if (readyNamed.length > 0) return [...new Set(readyNamed)];
+
+    const blocked = named.filter((d) => d.status !== 'ready');
+    const detail = blocked
+      .map((d) => {
+        if (d.status === 'failed') {
+          return `"${d.name}" failed processing${d.failureReason ? ` (${d.failureReason.slice(0, 120)})` : ''}`;
+        }
+        return `"${d.name}" is still ${d.status}`;
+      })
+      .join('; ');
+    throw new BadRequestError(
+      `Named document(s) are not ready for chat: ${detail}. Open the library and use Retry on failed files.`,
+      { documents: blocked.map((d) => ({ id: d.id, name: d.name, status: d.status })) },
+    );
+  }
+
+  return [...new Set(explicit)];
+}
+
 async function retrieveContext(
   workspaceId: string,
   query: string,
@@ -363,13 +420,13 @@ export async function* streamAssistantReply(input: {
   if (!conversation) throw new NotFoundError('Conversation');
   await assertHasCredits(input.workspaceId, CHAT_CREDIT_COST);
 
-  const documentIds = [...new Set(input.body.documentIds ?? [])];
-  if (documentIds.length) {
+  const explicitIds = [...new Set(input.body.documentIds ?? [])];
+  if (explicitIds.length) {
     const docs = await prisma.document.findMany({
-      where: { workspaceId: input.workspaceId, id: { in: documentIds } },
+      where: { workspaceId: input.workspaceId, id: { in: explicitIds } },
       select: { id: true, status: true, name: true },
     });
-    if (docs.length !== documentIds.length) {
+    if (docs.length !== explicitIds.length) {
       throw new BadRequestError('One or more documents are invalid');
     }
     const notReady = docs.filter((d) => d.status !== 'ready');
@@ -378,6 +435,13 @@ export async function* streamAssistantReply(input: {
         documents: notReady.map((d) => ({ id: d.id, name: d.name, status: d.status })),
       });
     }
+  }
+
+  let documentIds: string[];
+  try {
+    documentIds = await resolveDocumentScope(input.workspaceId, input.body.content, explicitIds);
+  } catch (error) {
+    throw error;
   }
 
   const userMessage = await prisma.message.create({

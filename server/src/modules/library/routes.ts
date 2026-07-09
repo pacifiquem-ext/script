@@ -62,6 +62,12 @@ export async function libraryRoutes(app: FastifyInstance) {
     return library.deleteDocument(workspace.id, documentId);
   });
 
+  app.post('/documents/:documentId/reprocess', async (request) => {
+    const { user, workspace } = await requireWorkspace(request);
+    const { documentId } = request.params as { documentId: string };
+    return library.reprocessDocument(workspace.id, documentId, user.id);
+  });
+
   app.post('/documents/upload', async (request) => {
     const { user, workspace } = await requireWorkspace(request);
     const file = await request.file();

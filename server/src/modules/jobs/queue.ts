@@ -53,11 +53,16 @@ function allowInline(): boolean {
   return env.ALLOW_INLINE_INGESTION;
 }
 
-export async function enqueueIngestion(data: IngestionJobData): Promise<void> {
+export async function enqueueIngestion(
+  data: IngestionJobData,
+  options?: { uniqueJobId?: boolean },
+): Promise<void> {
   const queue = getIngestionQueue();
   if (queue) {
+    const baseId = `ingest-${data.documentId}-${data.mode ?? 'ingest'}`;
     await queue.add('ingest', data, {
-      jobId: `ingest-${data.documentId}-${data.mode ?? 'ingest'}`,
+      // uniqueJobId avoids BullMQ rejecting reprocess after a prior completed/failed job.
+      jobId: options?.uniqueJobId ? `${baseId}-${Date.now()}` : baseId,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
       removeOnComplete: 1000,

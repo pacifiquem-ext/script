@@ -169,8 +169,13 @@ describe('data hooks', () => {
             type="button"
             onClick={() => {
               void lib.createFolder.mutateAsync({ name: 'N' });
+              void lib.updateFolder.mutateAsync({ folderId: 'f1', name: 'Renamed' });
+              void lib.updateFolder.mutateAsync({ folderId: 'f1', parentId: null });
               void lib.deleteFolder.mutateAsync('f1');
+              void lib.updateDocument.mutateAsync({ documentId: 'd1', name: 'Renamed.pdf' });
+              void lib.updateDocument.mutateAsync({ documentId: 'd1', folderId: 'f2' });
               void lib.deleteDocument.mutateAsync('d1');
+              void lib.reprocessDocument.mutateAsync('d1');
               void lib.importUrl.mutateAsync({ url: 'https://example.com/a.pdf' });
               void lib.uploadFile
                 .mutateAsync({ file: new File(['x'], 'a.txt') })
