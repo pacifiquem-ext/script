@@ -15,7 +15,17 @@ import { storage } from '../../storage';
 import { assertHasCredits } from '../credits/credits-service';
 import { enqueueIngestion } from '../jobs/queue';
 import { INGESTION_CREDIT_COST } from '@script/shared';
-import { toPublicDocument, toPublicDocumentDetail, toPublicFolder } from './serialize';
+import {
+  createDocumentVersion,
+  findDocumentByContentHash,
+  getDocumentVersion,
+  hashDocumentBytes,
+  listDocumentVersions,
+  rollbackDocumentVersion,
+  toPublicDocument,
+  toPublicDocumentDetail,
+} from './document-versions';
+import { toPublicFolder } from './serialize';
 
 const ALLOWED_MIME = new Set([
   'application/pdf',
@@ -33,6 +43,11 @@ const ALLOWED_MIME = new Set([
   'image/bmp',
   'image/tiff',
 ]);
+
+const documentVersionInclude = {
+  currentVersion: { select: { id: true, versionNumber: true } },
+  processingVersion: { select: { id: true, status: true } },
+} as const;
 
 export async function listFolders(workspaceId: string, parentId?: string | null) {
   const folders = await prisma.folder.findMany({
@@ -100,15 +115,32 @@ export async function listDocuments(workspaceId: string, query: ListDocumentsQue
       where,
       orderBy: { createdAt: 'desc' },
       ...toSkipTake(query),
+      include: documentVersionInclude,
     }),
   ]);
   const data = await Promise.all(rows.map((row) => toPublicDocument(row)));
   return paginate(data, total, query);
 }
 
-export async function getDocument(workspaceId: string, documentId: string) {
-  const doc = await prisma.document.findFirst({ where: { id: documentId, workspaceId } });
+export async function getDocument(
+  workspaceId: string,
+  documentId: string,
+  options?: { versionId?: string | null },
+) {
+  const doc = await prisma.document.findFirst({
+    where: { id: documentId, workspaceId },
+    include: documentVersionInclude,
+  });
   if (!doc) throw new NotFoundError('Document');
+
+  if (options?.versionId) {
+    const version = await prisma.documentVersion.findFirst({
+      where: { id: options.versionId, documentId, workspaceId },
+    });
+    if (!version) throw new NotFoundError('Document version');
+    return { document: await toPublicDocumentDetail(doc, { version }) };
+  }
+
   return { document: await toPublicDocumentDetail(doc) };
 }
 
@@ -129,40 +161,81 @@ export async function updateDocument(
       name: body.name ?? undefined,
       folderId: body.folderId === undefined ? undefined : body.folderId,
     },
+    include: documentVersionInclude,
   });
   return { document: await toPublicDocument(doc) };
 }
 
 export async function deleteDocument(workspaceId: string, documentId: string) {
-  const existing = await prisma.document.findFirst({ where: { id: documentId, workspaceId } });
+  const existing = await prisma.document.findFirst({
+    where: { id: documentId, workspaceId },
+    include: { versions: { select: { storageKey: true } } },
+  });
   if (!existing) throw new NotFoundError('Document');
+  const storageKeys = [...new Set(existing.versions.map((v) => v.storageKey).concat(existing.storageKey))];
   await prisma.document.delete({ where: { id: documentId } });
-  try {
-    await storage.delete(existing.storageKey);
-  } catch {
-    // best effort
+  for (const key of storageKeys) {
+    try {
+      await storage.delete(key);
+    } catch {
+      // best effort
+    }
   }
   return { ok: true as const };
 }
 
 export async function reprocessDocument(workspaceId: string, documentId: string, userId: string) {
-  const existing = await prisma.document.findFirst({ where: { id: documentId, workspaceId } });
+  const existing = await prisma.document.findFirst({
+    where: { id: documentId, workspaceId },
+    include: documentVersionInclude,
+  });
   if (!existing) throw new NotFoundError('Document');
-  if (existing.status === 'pending' || existing.status === 'processing') {
+  if (existing.processingVersionId) {
     throw new BadRequestError('Document is already processing');
   }
   await assertHasCredits(workspaceId, INGESTION_CREDIT_COST);
+
+  const sourceVersion =
+    (existing.currentVersionId
+      ? await prisma.documentVersion.findUnique({ where: { id: existing.currentVersionId } })
+      : null) ??
+    (await prisma.documentVersion.findFirst({
+      where: { documentId },
+      orderBy: { versionNumber: 'desc' },
+    }));
+
+  const version = await createDocumentVersion({
+    documentId,
+    workspaceId,
+    mimeType: sourceVersion?.mimeType ?? existing.mimeType,
+    byteSize: sourceVersion?.byteSize ?? existing.byteSize,
+    storageKey: sourceVersion?.storageKey ?? existing.storageKey,
+    contentHash: sourceVersion?.contentHash ?? existing.contentHash,
+    changeReason: 'reprocess',
+    createdById: userId,
+    status: 'pending',
+  });
+
   const doc = await prisma.document.update({
     where: { id: documentId },
     data: {
-      status: 'pending',
-      failureReason: null,
+      processingVersionId: version.id,
+      // Keep last good version retrievable; only flip to pending when nothing is ready yet.
+      status: existing.currentVersionId && existing.status === 'ready' ? 'ready' : 'pending',
       processingPhase: null,
-      processedAt: null,
+      failureReason: null,
     },
+    include: documentVersionInclude,
   });
+
   await enqueueIngestion(
-    { documentId: doc.id, workspaceId, userId, mode: 'ingest' },
+    {
+      documentId: doc.id,
+      workspaceId,
+      userId,
+      versionId: version.id,
+      mode: 'ingest',
+    },
     { uniqueJobId: true },
   );
   return { document: await toPublicDocument(doc) };
@@ -175,6 +248,7 @@ async function createPendingDocument(input: {
   mimeType: string;
   byteSize: number;
   storageKey: string;
+  contentHash: string;
   source: 'local' | 'url' | 'drive' | 'dropbox' | 'onedrive' | 'box';
   sourceUrl?: string | null;
   folderId?: string | null;
@@ -186,24 +260,51 @@ async function createPendingDocument(input: {
     });
     if (!folder) throw new NotFoundError('Folder');
   }
-  const doc = await prisma.document.create({
-    data: {
+
+  const changeReason = input.source === 'local' ? 'upload' : 'import';
+
+  const { doc, version } = await prisma.$transaction(async (tx) => {
+    const created = await tx.document.create({
+      data: {
+        workspaceId: input.workspaceId,
+        folderId: input.folderId ?? null,
+        name: input.name,
+        mimeType: input.mimeType,
+        byteSize: input.byteSize,
+        storageKey: input.storageKey,
+        source: input.source,
+        sourceUrl: input.sourceUrl ?? null,
+        status: 'pending',
+        contentHash: input.contentHash,
+        createdById: input.userId,
+      },
+    });
+    const ver = await createDocumentVersion({
+      documentId: created.id,
       workspaceId: input.workspaceId,
-      folderId: input.folderId ?? null,
-      name: input.name,
       mimeType: input.mimeType,
       byteSize: input.byteSize,
       storageKey: input.storageKey,
-      source: input.source,
-      sourceUrl: input.sourceUrl ?? null,
-      status: 'pending',
+      contentHash: input.contentHash,
+      changeReason,
       createdById: input.userId,
-    },
+      status: 'pending',
+      tx,
+    });
+    const updated = await tx.document.update({
+      where: { id: created.id },
+      data: { processingVersionId: ver.id },
+      include: documentVersionInclude,
+    });
+    return { doc: updated, version: ver };
   });
+
   await enqueueIngestion({
     documentId: doc.id,
     workspaceId: input.workspaceId,
     userId: input.userId,
+    versionId: version.id,
+    mode: 'ingest',
   });
   return { document: await toPublicDocument(doc) };
 }
@@ -222,22 +323,31 @@ export async function createDocumentFromBuffer(input: {
   if (!ALLOWED_MIME.has(mimeType) && !mimeType.startsWith('text/')) {
     throw new BadRequestError(`Unsupported file type: ${mimeType}`);
   }
+
+  const contentHash = hashDocumentBytes(input.buffer);
+  const duplicate = await findDocumentByContentHash(input.workspaceId, contentHash);
+  if (duplicate) {
+    return { document: await toPublicDocument(duplicate), deduplicated: true as const };
+  }
+
   const uploaded = await storage.upload({
     buffer: input.buffer,
     filename: input.filename,
     contentType: mimeType,
   });
-  return createPendingDocument({
+  const result = await createPendingDocument({
     workspaceId: input.workspaceId,
     userId: input.userId,
     name: input.filename,
     mimeType,
     byteSize: uploaded.size,
     storageKey: uploaded.key,
+    contentHash,
     source: input.source,
     sourceUrl: input.sourceUrl,
     folderId: input.folderId,
   });
+  return { ...result, deduplicated: false as const };
 }
 
 export async function uploadLocalDocument(input: {
@@ -269,20 +379,20 @@ export async function importFromUrl(workspaceId: string, userId: string, body: I
   if (buffer.byteLength === 0) throw new BadRequestError('Remote file is empty');
   const filename =
     body.name || url.pathname.split('/').filter(Boolean).pop() || `import-${randomName()}.bin`;
-  const uploaded = await storage.upload({ buffer, filename, contentType: mimeType });
-  return createPendingDocument({
+  return createDocumentFromBuffer({
     workspaceId,
     userId,
-    name: filename,
+    filename,
     mimeType,
-    byteSize: uploaded.size,
-    storageKey: uploaded.key,
+    buffer,
+    folderId: body.folderId,
     source: 'url',
     sourceUrl: body.url,
-    folderId: body.folderId,
   });
 }
 
 function randomName() {
   return randomUUID().slice(0, 8);
 }
+
+export { listDocumentVersions, getDocumentVersion, rollbackDocumentVersion };

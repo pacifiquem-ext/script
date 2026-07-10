@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app';
 import { prisma } from '../src/db/prisma';
 import { sha256 } from '../src/lib/crypto';
-import { embedTexts, vectorLiteral } from '../src/modules/jobs/embeddings';
 import { originHeaders } from './helpers';
+import { createReadyDocumentWithVersion } from './helpers-documents';
 
 const app = buildApp();
 const email = `chat-${Date.now()}@example.com`;
@@ -81,69 +81,18 @@ describe('chat routes', () => {
     });
     conversationId = created.json().conversation.id;
 
-    const doc = await prisma.document.create({
-      data: {
-        workspaceId,
-        name: 'alpha.txt',
-        mimeType: 'text/plain',
-        byteSize: 20,
-        storageKey: 'k-alpha',
-        source: 'local',
-        status: 'ready',
-        extractedText: 'Alpha secret project plan details.',
-        embeddingModel: 'voyage-3.5',
-        embeddingDimensions: 1024,
-        processedAt: new Date(),
-      },
+    await createReadyDocumentWithVersion({
+      workspaceId,
+      name: 'alpha.txt',
+      content: 'Alpha secret project plan details.',
+      storageKey: 'k-alpha',
     });
-    const [embedding] = await embedTexts(['Alpha secret project plan details.']);
-    const chunk = await prisma.documentChunk.create({
-      data: {
-        documentId: doc.id,
-        workspaceId,
-        position: 0,
-        content: 'Alpha secret project plan details.',
-        startOffset: 0,
-        endOffset: 33,
-      },
+    await createReadyDocumentWithVersion({
+      workspaceId: otherWorkspaceId,
+      name: 'beta.txt',
+      content: 'Beta confidential other workspace only.',
+      storageKey: 'k-beta',
     });
-    await prisma.$executeRawUnsafe(
-      `UPDATE "DocumentChunk" SET embedding = $1::vector WHERE id = $2`,
-      vectorLiteral(embedding),
-      chunk.id,
-    );
-
-    const otherDoc = await prisma.document.create({
-      data: {
-        workspaceId: otherWorkspaceId,
-        name: 'beta.txt',
-        mimeType: 'text/plain',
-        byteSize: 20,
-        storageKey: 'k-beta',
-        source: 'local',
-        status: 'ready',
-        extractedText: 'Beta confidential other workspace only.',
-        embeddingModel: 'voyage-3.5',
-        embeddingDimensions: 1024,
-        processedAt: new Date(),
-      },
-    });
-    const [otherEmbedding] = await embedTexts(['Beta confidential other workspace only.']);
-    const otherChunk = await prisma.documentChunk.create({
-      data: {
-        documentId: otherDoc.id,
-        workspaceId: otherWorkspaceId,
-        position: 0,
-        content: 'Beta confidential other workspace only.',
-        startOffset: 0,
-        endOffset: 40,
-      },
-    });
-    await prisma.$executeRawUnsafe(
-      `UPDATE "DocumentChunk" SET embedding = $1::vector WHERE id = $2`,
-      vectorLiteral(otherEmbedding),
-      otherChunk.id,
-    );
   }, 60_000);
 
   afterAll(async () => {

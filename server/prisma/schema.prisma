@@ -71,6 +71,14 @@ enum CreditLedgerReason {
   purchase_pending
 }
 
+enum DocumentVersionChangeReason {
+  upload
+  reprocess
+  rollback
+  backfill
+  import
+}
+
 model User {
   id              String    @id @default(cuid())
   email           String    @unique
@@ -138,15 +146,16 @@ model Workspace {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
-  members           WorkspaceMember[]
-  folders           Folder[]
-  documents         Document[]
-  documentChunks    DocumentChunk[]
-  conversations     Conversation[]
-  integrations      Integration[]
-  apiKeys           ApiKey[]
-  creditBalance     CreditBalance?
-  creditLedger      CreditLedgerEntry[]
+  members            WorkspaceMember[]
+  folders            Folder[]
+  documents          Document[]
+  documentVersions   DocumentVersion[]
+  documentChunks     DocumentChunk[]
+  conversations      Conversation[]
+  integrations       Integration[]
+  apiKeys            ApiKey[]
+  creditBalance      CreditBalance?
+  creditLedger       CreditLedgerEntry[]
   lastWorkspaceUsers User[] @relation("UserLastWorkspace")
 }
 
@@ -192,6 +201,8 @@ model Document {
   storageKey          String
   source              DocumentSource
   sourceUrl           String?
+  /// Retrieval-facing status: ready when currentVersion is ready. Stays ready while a
+  /// newer version is processing so chat keeps serving the last good version.
   status              DocumentStatus @default(pending)
   processingPhase     String?
   failureReason       String?
@@ -199,41 +210,92 @@ model Document {
   extractedText       String?        @db.Text
   embeddingModel      String?
   embeddingDimensions Int?
+  /// SHA-256 of current version bytes (workspace upload dedup).
+  contentHash         String?
+  currentVersionId    String?        @unique
+  processingVersionId String?        @unique
   createdById         String?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   processedAt         DateTime?
 
-  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  folder     Folder?            @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  createdBy  User?              @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  chunks     DocumentChunk[]
-  mentions   MessageMention[]
+  workspace           Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folder              Folder?            @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdBy           User?              @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  versions            DocumentVersion[]  @relation("DocumentVersions")
+  currentVersion      DocumentVersion?   @relation("DocumentCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  processingVersion   DocumentVersion?   @relation("DocumentProcessingVersion", fields: [processingVersionId], references: [id], onDelete: SetNull)
+  chunks              DocumentChunk[]
+  mentions            MessageMention[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, folderId])
   @@index([workspaceId, createdAt])
+  @@index([workspaceId, contentHash])
   @@index([createdById])
   @@index([embeddingModel, embeddingDimensions, status])
 }
 
-model DocumentChunk {
-  id          String                       @id @default(cuid())
-  documentId  String
-  workspaceId String
-  position    Int
-  content     String                       @db.Text
-  startOffset Int?
-  endOffset   Int?
-  pageNumber  Int?
-  embedding   Unsupported("vector(1024)")?
-  createdAt   DateTime                     @default(now())
+/// Immutable content snapshot. Ready/failed versions are never rewritten in place;
+/// only pending/processing rows mutate while ingestion runs. Rollback creates a new version.
+model DocumentVersion {
+  id                    String                       @id @default(cuid())
+  documentId            String
+  workspaceId           String
+  versionNumber         Int
+  status                DocumentStatus               @default(pending)
+  processingPhase       String?
+  failureReason         String?
+  mimeType              String
+  byteSize              Int
+  storageKey            String
+  contentHash           String?
+  extractedText         String?                      @db.Text
+  pageCount             Int?
+  embeddingModel        String?
+  embeddingDimensions   Int?
+  changeReason          DocumentVersionChangeReason
+  restoredFromVersionId String?
+  createdById           String?
+  createdAt             DateTime                     @default(now())
+  processedAt           DateTime?
+  supersededAt          DateTime?
 
-  document  Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document       Document         @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  restoredFrom   DocumentVersion? @relation("VersionRestore", fields: [restoredFromVersionId], references: [id], onDelete: SetNull)
+  restorations   DocumentVersion[] @relation("VersionRestore")
+  currentFor     Document?        @relation("DocumentCurrentVersion")
+  processingFor  Document?        @relation("DocumentProcessingVersion")
+  chunks         DocumentChunk[]
 
-  @@unique([documentId, position])
+  @@unique([documentId, versionNumber])
+  @@index([workspaceId, contentHash])
+  @@index([documentId, status])
   @@index([workspaceId, documentId])
+}
+
+model DocumentChunk {
+  id                String                       @id @default(cuid())
+  documentId        String
+  documentVersionId String
+  workspaceId       String
+  position          Int
+  content           String                       @db.Text
+  startOffset       Int?
+  endOffset         Int?
+  pageNumber        Int?
+  embedding         Unsupported("vector(1024)")?
+  createdAt         DateTime                     @default(now())
+
+  document  Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version   DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([documentVersionId, position])
+  @@index([workspaceId, documentId])
+  @@index([documentId])
+  @@index([documentVersionId])
 }
 
 model Conversation {

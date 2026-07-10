@@ -1,14 +1,15 @@
 # Embedding backfill
 
-Per [ADR 0001](./adr/0001-precompute-rag-context-at-ingestion.md) and
-[ADR 0002](./adr/0002-voyage-embeddings.md), changing `EMBEDDING_MODEL` or
+Per [ADR 0001](./adr/0001-precompute-rag-context-at-ingestion.md),
+[ADR 0002](./adr/0002-voyage-embeddings.md), and
+[ADR 0008](./adr/0008-document-version-history.md), changing `EMBEDDING_MODEL` or
 `EMBEDDING_DIMENSIONS` requires re-chunking/re-embedding existing ready Documents.
 
 ## Detection
 
-`Document.embeddingModel` and `Document.embeddingDimensions` record what produced the
-current `DocumentChunk` rows. `@script/shared` exports `needsEmbeddingBackfill()` and
-`currentEmbeddingModel` for workers and admin tools.
+`Document.embeddingModel` / `Document.embeddingDimensions` (mirrored from the **current**
+`DocumentVersion`) record what produced the chunks used for retrieval. `@script/shared`
+exports `needsEmbeddingBackfill()` and `currentEmbeddingModel` for workers and admin tools.
 
 ## Job interface
 
@@ -20,12 +21,15 @@ current `DocumentChunk` rows. `@script/shared` exports `needsEmbeddingBackfill()
 - **Payload:** `{ documentId: string } | { workspaceId: string } | { all: true }`
 - **Behavior:** for each targeted `Document` with `status = ready` that
   `needsEmbeddingBackfill` reports true:
-  1. Set status to `processing` with `processingPhase` progress markers.
-  2. Re-chunk `extractedText` when present; only re-download/extract when text is null.
-  3. Embed with active Voyage model/dimensions (`input_type: document`), batched.
-  4. Replace `DocumentChunk` rows (offsets preserved) and update embedding metadata.
-  5. Set `status = ready` or `failed` with reason. Backfill does **not** charge ingestion credits.
-- **Idempotency:** safe to retry; chunk delete+insert is transactional; usage ledger rows are
-  idempotent on `(workspaceId, reason, refType, refId)` for negative deltas.
+  1. Create a **new** `DocumentVersion` (`changeReason: backfill`) from the current version’s
+     storage + `extractedText` so prior version chunks (and citations) remain intact.
+  2. Set `processingVersionId`; keep document `status = ready` while current still points at
+     the previous version until success.
+  3. Re-chunk `extractedText` when present; only re-download/extract when text is null.
+  4. Embed with active Voyage model/dimensions (`input_type: document`), batched.
+  5. Persist chunks on the **new** version only; promote it to `currentVersionId` on success.
+  6. On failure, leave `currentVersionId` unchanged. Backfill does **not** charge ingestion credits.
+- **Idempotency:** safe to retry; per-version chunk delete+insert is transactional; usage ledger
+  rows are idempotent on `(workspaceId, reason, refType, refId)` for negative deltas.
 
 Do not run ad-hoc SQL updates to vectors — always go through this job so metadata stays consistent.

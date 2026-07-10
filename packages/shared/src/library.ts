@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { documentProcessingPhaseSchema, documentSourceSchema, documentStatusSchema } from './enums';
+import {
+  documentProcessingPhaseSchema,
+  documentSourceSchema,
+  documentStatusSchema,
+  documentVersionChangeReasonSchema,
+} from './enums';
 import { paginationQuerySchema } from './pagination';
 
 export const createFolderBodySchema = z.object({
@@ -60,10 +65,43 @@ export const publicDocumentSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   processedAt: z.string().datetime().nullable(),
+  currentVersionId: z.string().nullable(),
+  currentVersionNumber: z.number().int().positive().nullable(),
+  /** True while a non-current version is pending/processing (current ready version stays retrievable). */
+  isUpdating: z.boolean(),
 });
 export type PublicDocument = z.infer<typeof publicDocumentSchema>;
 
 export const publicDocumentDetailSchema = publicDocumentSchema.extend({
   extractedText: z.string().nullable(),
+  /** Present when detail is loaded for a historical version (citation preview / version viewer). */
+  versionId: z.string().nullable().optional(),
+  versionNumber: z.number().int().positive().nullable().optional(),
 });
 export type PublicDocumentDetail = z.infer<typeof publicDocumentDetailSchema>;
+
+export const publicDocumentVersionSchema = z.object({
+  id: z.string(),
+  documentId: z.string(),
+  versionNumber: z.number().int().positive(),
+  status: documentStatusSchema,
+  processingPhase: documentProcessingPhaseSchema.nullable(),
+  failureReason: z.string().nullable(),
+  mimeType: z.string(),
+  byteSize: z.number().int().nonnegative(),
+  contentHash: z.string().nullable(),
+  pageCount: z.number().int().nullable(),
+  changeReason: documentVersionChangeReasonSchema,
+  restoredFromVersionId: z.string().nullable(),
+  isCurrent: z.boolean(),
+  createdAt: z.string().datetime(),
+  processedAt: z.string().datetime().nullable(),
+  supersededAt: z.string().datetime().nullable(),
+});
+export type PublicDocumentVersion = z.infer<typeof publicDocumentVersionSchema>;
+
+export const publicDocumentVersionDetailSchema = publicDocumentVersionSchema.extend({
+  extractedText: z.string().nullable(),
+  downloadUrl: z.string().nullable().optional(),
+});
+export type PublicDocumentVersionDetail = z.infer<typeof publicDocumentVersionDetailSchema>;

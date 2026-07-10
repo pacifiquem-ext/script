@@ -10,7 +10,11 @@ import { apiRequest, getApiBaseUrl } from './api-client';
 import { queryKeys } from './query-client';
 
 function hasActiveProcessing(docs: PublicDocument[] | undefined): boolean {
-  return Boolean(docs?.some((d) => d.status === 'pending' || d.status === 'processing'));
+  return Boolean(
+    docs?.some(
+      (d) => d.status === 'pending' || d.status === 'processing' || d.isUpdating,
+    ),
+  );
 }
 
 function readWorkspaceCookie(): string | null {
@@ -131,19 +135,47 @@ export function useDocuments(
   });
 }
 
-export function useDocument(documentId: string | null) {
+export function useDocument(
+  documentId: string | null,
+  options?: { versionId?: string | null },
+) {
+  const versionId = options?.versionId ?? null;
   return useQuery({
-    queryKey: documentId ? queryKeys.document(documentId) : ['documents', 'none'],
+    queryKey: documentId
+      ? [...queryKeys.document(documentId), versionId ?? 'current']
+      : ['documents', 'none'],
     enabled: Boolean(documentId),
     staleTime: 30_000,
     queryFn: async () => {
-      const data = await apiRequest<{ document: PublicDocumentDetail }>(`/documents/${documentId}`);
+      const qs = versionId ? `?versionId=${encodeURIComponent(versionId)}` : '';
+      const data = await apiRequest<{ document: PublicDocumentDetail }>(
+        `/documents/${documentId}${qs}`,
+      );
       return data.document;
     },
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
+      const doc = query.state.data;
+      if (!doc) return false;
+      if (doc.isUpdating) return 2000;
+      const status = doc.status;
       if (!status || status === 'ready' || status === 'failed') return false;
       return 2000;
+    },
+  });
+}
+
+export function useDocumentVersions(documentId: string | null) {
+  return useQuery({
+    queryKey: documentId
+      ? [...queryKeys.document(documentId), 'versions']
+      : ['documents', 'versions', 'none'],
+    enabled: Boolean(documentId),
+    staleTime: 15_000,
+    queryFn: async () => {
+      const data = await apiRequest<{ versions: import('@script/shared').PublicDocumentVersion[] }>(
+        `/documents/${documentId}/versions`,
+      );
+      return data.versions;
     },
   });
 }
@@ -204,6 +236,17 @@ export function useLibraryMutations() {
     onSuccess: invalidate,
   });
 
+  const rollbackDocumentVersion = useMutation({
+    mutationFn: (input: { documentId: string; versionId: string }) =>
+      apiRequest<{
+        document: PublicDocument;
+        version: import('@script/shared').PublicDocumentVersion;
+      }>(`/documents/${input.documentId}/versions/${input.versionId}/rollback`, {
+        method: 'POST',
+      }),
+    onSuccess: invalidate,
+  });
+
   const importUrl = useMutation({
     mutationFn: (input: { url: string; folderId?: string | null; name?: string }) =>
       apiRequest<{ document: PublicDocument }>('/documents/import-url', {
@@ -233,6 +276,7 @@ export function useLibraryMutations() {
     updateDocument,
     deleteDocument,
     reprocessDocument,
+    rollbackDocumentVersion,
     importUrl,
     uploadFile,
     invalidate,

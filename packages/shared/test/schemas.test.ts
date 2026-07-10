@@ -170,6 +170,9 @@ describe('library and chat schemas', () => {
         createdAt: ts,
         updatedAt: ts,
         processedAt: ts,
+        currentVersionId: 'v1',
+        currentVersionNumber: 1,
+        isUpdating: false,
       }).name,
     ).toBe('a.pdf');
   });
@@ -182,6 +185,7 @@ describe('library and chat schemas', () => {
       messageCitationSchema.parse({
         documentId: 'd',
         documentName: 'n',
+        documentVersionId: 'v1',
         chunkId: 'c',
         position: 0,
         score: 0.9,

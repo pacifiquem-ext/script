@@ -19,6 +19,15 @@ export type DocumentProcessingPhase = z.infer<typeof documentProcessingPhaseSche
 export const documentSourceSchema = z.enum(['local', 'url', 'drive', 'dropbox', 'onedrive', 'box']);
 export type DocumentSource = z.infer<typeof documentSourceSchema>;
 
+export const documentVersionChangeReasonSchema = z.enum([
+  'upload',
+  'reprocess',
+  'rollback',
+  'backfill',
+  'import',
+]);
+export type DocumentVersionChangeReason = z.infer<typeof documentVersionChangeReasonSchema>;
+
 export const messageRoleSchema = z.enum(['user', 'assistant']);
 export type MessageRole = z.infer<typeof messageRoleSchema>;
 

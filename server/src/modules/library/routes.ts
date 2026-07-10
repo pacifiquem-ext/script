@@ -43,7 +43,32 @@ export async function libraryRoutes(app: FastifyInstance) {
   app.get('/documents/:documentId', async (request) => {
     const { workspace } = await requireWorkspace(request);
     const { documentId } = request.params as { documentId: string };
-    return library.getDocument(workspace.id, documentId);
+    const versionId = (request.query as { versionId?: string }).versionId;
+    return library.getDocument(workspace.id, documentId, { versionId });
+  });
+
+  app.get('/documents/:documentId/versions', async (request) => {
+    const { workspace } = await requireWorkspace(request);
+    const { documentId } = request.params as { documentId: string };
+    return library.listDocumentVersions(workspace.id, documentId);
+  });
+
+  app.get('/documents/:documentId/versions/:versionId', async (request) => {
+    const { workspace } = await requireWorkspace(request);
+    const { documentId, versionId } = request.params as {
+      documentId: string;
+      versionId: string;
+    };
+    return library.getDocumentVersion(workspace.id, documentId, versionId);
+  });
+
+  app.post('/documents/:documentId/versions/:versionId/rollback', async (request) => {
+    const { user, workspace } = await requireWorkspace(request);
+    const { documentId, versionId } = request.params as {
+      documentId: string;
+      versionId: string;
+    };
+    return library.rollbackDocumentVersion(workspace.id, documentId, versionId, user.id);
   });
 
   app.patch('/documents/:documentId', async (request) => {

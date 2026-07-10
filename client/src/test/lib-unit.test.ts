@@ -24,6 +24,9 @@ function stubDoc(partial: Partial<PublicDocument> & Pick<PublicDocument, 'id' | 
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     processedAt: null,
+    currentVersionId: null,
+    currentVersionNumber: null,
+    isUpdating: false,
     ...partial,
   };
 }

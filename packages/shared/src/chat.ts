@@ -41,6 +41,8 @@ export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
 export const messageCitationSchema = z.object({
   documentId: z.string(),
   documentName: z.string(),
+  /** Version that produced this chunk — citations stay valid after later versions. */
+  documentVersionId: z.string().optional(),
   chunkId: z.string(),
   position: z.number().int().nonnegative(),
   score: z.number().min(0).max(1).optional(),

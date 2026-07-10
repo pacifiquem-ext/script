@@ -27,7 +27,13 @@ import {
   IconUpload,
   IconZap,
 } from '../../lib/icons';
-import { useDocument, useDocuments, useFolders, useLibraryMutations } from '../../lib/library-api';
+import {
+  useDocument,
+  useDocumentVersions,
+  useDocuments,
+  useFolders,
+  useLibraryMutations,
+} from '../../lib/library-api';
 
 type ViewMode = 'grid' | 'list';
 type FileKind = 'pdf' | 'doc' | 'xls' | 'txt' | 'img' | 'other';
@@ -99,7 +105,19 @@ function formatDate(iso: string): string {
   }
 }
 
+function isDocProcessing(doc: PublicDocument): boolean {
+  return doc.status === 'pending' || doc.status === 'processing' || doc.isUpdating;
+}
+
 function statusLabel(doc: PublicDocument): string | null {
+  if (doc.isUpdating) {
+    return doc.processingPhase
+      ? `Updating (${doc.processingPhase})`
+      : 'Updating to new version…';
+  }
+  if (doc.status === 'ready' && doc.failureReason) {
+    return `Update failed — ${doc.failureReason}`;
+  }
   if (doc.status === 'ready') return null;
   if (doc.status === 'processing' && doc.processingPhase) return `Processing (${doc.processingPhase})`;
   if (doc.status === 'failed') return doc.failureReason ? `Failed — ${doc.failureReason}` : 'Failed';
@@ -203,6 +221,8 @@ export function LibraryPage() {
   const [moveTargetId, setMoveTargetId] = useState<string | null>(null);
   const [deleteState, setDeleteState] = useState<ContextTarget | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [versionsDoc, setVersionsDoc] = useState<PublicDocument | null>(null);
+  const [rollbackBusyId, setRollbackBusyId] = useState<string | null>(null);
 
   const [chatInput, setChatInput] = useState('');
   const [quotedDocs, setQuotedDocs] = useState<PublicDocument[]>([]);
@@ -234,6 +254,7 @@ export function LibraryPage() {
   // Root folders for move picker (always top-level)
   const rootFoldersQuery = useFolders(null);
   const previewQuery = useDocument(previewId);
+  const versionsQuery = useDocumentVersions(versionsDoc?.id ?? null);
   const mutations = useLibraryMutations();
   const credits = useCredits();
 
@@ -385,6 +406,9 @@ export function LibraryPage() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         processedAt: null,
+        currentVersionId: null,
+        currentVersionNumber: null,
+        isUpdating: false,
       } as PublicDocument);
     setQuotedDocs((prev) => (prev.some((p) => p.id === doc.id) ? prev : [...prev, doc]));
     chatTextareaRef.current?.focus();
@@ -493,6 +517,25 @@ export function LibraryPage() {
       const message = getErrorMessage(err, 'Could not reprocess file');
       setError(message);
       notify.error(message);
+    }
+  }
+
+  async function restoreVersion(versionId: string) {
+    if (!versionsDoc) return;
+    setRollbackBusyId(versionId);
+    try {
+      const result = await mutations.rollbackDocumentVersion.mutateAsync({
+        documentId: versionsDoc.id,
+        versionId,
+      });
+      notify.success(`Restored as version ${result.version.versionNumber}`);
+      await versionsQuery.refetch();
+    } catch (err) {
+      const message = getErrorMessage(err, 'Could not restore version');
+      setError(message);
+      notify.error(message);
+    } finally {
+      setRollbackBusyId(null);
     }
   }
 
@@ -848,14 +891,14 @@ export function LibraryPage() {
                           className={`text-[11px] m-0 ${
                             doc.status === 'failed'
                               ? 'text-error-base'
-                              : doc.status === 'pending' || doc.status === 'processing'
+                              : isDocProcessing(doc)
                                 ? 'text-primary-base'
                                 : 'text-neutral-400'
                           }`}
                         >
                           {status ?? `${formatBytes(doc.byteSize)} · ${formatDate(doc.createdAt)}`}
                         </p>
-                        {(doc.status === 'pending' || doc.status === 'processing') && (
+                        {(isDocProcessing(doc)) && (
                           <div className="w-[72px] h-1 bg-neutral-100 rounded-full overflow-hidden mt-0.5">
                             <div className="h-full w-1/2 bg-primary-base rounded-full animate-pulse" />
                           </div>
@@ -894,7 +937,7 @@ export function LibraryPage() {
                           <span className="text-label-sm text-neutral-950 truncate block">
                             {doc.name}
                           </span>
-                          {(doc.status === 'pending' || doc.status === 'processing') && (
+                          {(isDocProcessing(doc)) && (
                             <div className="h-1 w-full max-w-[160px] bg-neutral-100 rounded-full overflow-hidden mt-1">
                               <div className="h-full w-1/2 bg-primary-base rounded-full animate-pulse" />
                             </div>
@@ -904,7 +947,7 @@ export function LibraryPage() {
                           className={`text-para-xs w-28 hidden md:block truncate ${
                             doc.status === 'failed'
                               ? 'text-error-base'
-                              : doc.status === 'pending' || doc.status === 'processing'
+                              : isDocProcessing(doc)
                                 ? 'text-primary-base'
                                 : 'text-neutral-400'
                           }`}
@@ -1102,6 +1145,22 @@ export function LibraryPage() {
                 {contextMenu.target.item.status === 'failed' ? 'Retry processing' : 'Reprocess'}
               </button>
             ) : null}
+            {contextMenu.target.kind === 'file' ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex items-center w-full p-[8px_10px] text-left text-para-sm text-neutral-950 bg-transparent border-none rounded-8 cursor-pointer hover:bg-neutral-50"
+                onClick={() => {
+                  const target = contextMenu.target;
+                  if (target.kind === 'file') {
+                    setVersionsDoc(target.item);
+                    setContextMenu(null);
+                  }
+                }}
+              >
+                Version history
+              </button>
+            ) : null}
             <div className="h-px bg-neutral-200 my-1" />
             <button
               type="button"
@@ -1132,6 +1191,78 @@ export function LibraryPage() {
           onClose={() => setPreviewId(null)}
         />
       )}
+
+      <Modal open={Boolean(versionsDoc)} onOpenChange={(open) => !open && setVersionsDoc(null)}>
+        <ModalContent className="max-w-lg" size="lg">
+          <ModalHeader
+            title="Version history"
+            description={
+              versionsDoc
+                ? `Past versions of ${versionsDoc.name}. Restoring creates a new version; history is never rewritten.`
+                : undefined
+            }
+          />
+          <div className="max-h-[360px] overflow-y-auto space-y-2">
+            {versionsQuery.isLoading ? (
+              <LoadingState label="Loading versions…" />
+            ) : versionsQuery.isError ? (
+              <ErrorState
+                message={getErrorMessage(versionsQuery.error, 'Could not load versions')}
+                onRetry={() => void versionsQuery.refetch()}
+              />
+            ) : (versionsQuery.data ?? []).length === 0 ? (
+              <EmptyState
+                title="No versions yet"
+                description="Process this file to create the first version."
+              />
+            ) : (
+              (versionsQuery.data ?? []).map((version) => (
+                <div
+                  key={version.id}
+                  className="flex items-start justify-between gap-3 rounded-12 border border-neutral-200 p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-label-sm text-neutral-950">v{version.versionNumber}</span>
+                      {version.isCurrent ? (
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-primary-alpha-10 text-primary-base">
+                          Current
+                        </span>
+                      ) : null}
+                      <span className="text-[11px] text-neutral-500 capitalize">{version.status}</span>
+                      <span className="text-[11px] text-neutral-400 capitalize">
+                        {version.changeReason}
+                      </span>
+                    </div>
+                    <p className="text-para-sm text-neutral-500 mt-0.5">
+                      {new Date(version.createdAt).toLocaleString()}
+                      {version.failureReason ? ` · ${version.failureReason}` : ''}
+                    </p>
+                  </div>
+                  {version.status === 'ready' && !version.isCurrent ? (
+                    <Button
+                      variant="neutral"
+                      mode="stroke"
+                      size="xs"
+                      className="w-fit shrink-0"
+                      disabled={Boolean(rollbackBusyId)}
+                      loading={rollbackBusyId === version.id}
+                      onClick={() => void restoreVersion(version.id)}
+                    >
+                      Restore
+                    </Button>
+                  ) : null}
+                </div>
+              ))
+            )}
+          </div>
+          <ModalFooter>
+            <Button variant="neutral" mode="stroke" className="w-fit" onClick={() => setVersionsDoc(null)}>
+              Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       <FormModal
         open={folderModalOpen}

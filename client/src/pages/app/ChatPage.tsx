@@ -71,6 +71,7 @@ export function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<{
     documentId: string;
+    versionId?: string | null;
     startOffset?: number | null;
     endOffset?: number | null;
     label?: string;
@@ -86,7 +87,9 @@ export function ChatPage() {
   // pageSize 100 so files in nested folders still appear for @ and name matching.
   const documentsQuery = useDocuments(null, true, { pageSize: 100 });
   const foldersQuery = useFolders(null);
-  const previewQuery = useDocument(preview?.documentId ?? null);
+  const previewQuery = useDocument(preview?.documentId ?? null, {
+    versionId: preview?.versionId,
+  });
   const { createConversation, queryClient } = useChatMutations();
   const credits = useCredits();
   const messages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data]);
@@ -320,6 +323,9 @@ export function ChatPage() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       processedAt: null,
+      currentVersionId: null,
+      currentVersionNumber: null,
+      isUpdating: false,
     };
     setSelectedDocs((prev) => (prev.some((p) => p.id === doc.id) ? prev : [...prev, doc]));
     setInput((prev) => `${prev}${prev.endsWith(' ') || !prev ? '' : ' '}@${doc.name} `);
@@ -332,6 +338,7 @@ export function ChatPage() {
       citation.endOffset > citation.startOffset;
     setPreview({
       documentId: citation.documentId,
+      versionId: citation.documentVersionId ?? null,
       startOffset: hasRange ? citation.startOffset : null,
       endOffset: hasRange ? citation.endOffset : null,
       label:

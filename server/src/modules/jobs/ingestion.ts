@@ -9,6 +9,12 @@ import { prisma } from '../../db/prisma';
 import { logger } from '../../lib/logger';
 import { storage } from '../../storage';
 import { decrementCredits } from '../credits/credits-service';
+import {
+  createDocumentVersion,
+  hashDocumentBytes,
+  projectDocumentFromVersion,
+  shouldChargeIngestion,
+} from '../library/document-versions';
 import { chunkText, extractText, type TextChunk } from './extract';
 import { embedTexts, vectorLiteral } from './embeddings';
 import {
@@ -25,15 +31,35 @@ import {
 type Phase =
   'queued' | 'downloading' | 'extracting' | 'chunking' | 'embedding' | 'persisting' | null;
 
-async function setPhase(
+async function setVersionPhase(
+  versionId: string,
   documentId: string,
   processingPhase: Phase,
   extra: Record<string, unknown> = {},
 ) {
-  await prisma.document.update({
-    where: { id: documentId },
+  await prisma.documentVersion.update({
+    where: { id: versionId },
     data: { processingPhase, ...extra },
   });
+  // Mirror phase onto the document only when this version is the active processing target
+  // and we don't need to preserve a ready current version's list status incorrectly.
+  const doc = await prisma.document.findUnique({ where: { id: documentId } });
+  if (!doc) return;
+  if (doc.processingVersionId === versionId) {
+    await prisma.document.update({
+      where: { id: documentId },
+      data: {
+        processingPhase,
+        // Keep ready when a current version exists so chat retrieval stays available.
+        status:
+          doc.currentVersionId && doc.status === 'ready'
+            ? 'ready'
+            : processingPhase
+              ? 'processing'
+              : doc.status,
+      },
+    });
+  }
 }
 
 async function downloadDocumentBuffer(storageKey: string, sourceUrl: string | null) {
@@ -48,18 +74,21 @@ async function downloadDocumentBuffer(storageKey: string, sourceUrl: string | nu
   return Buffer.from(await response.arrayBuffer());
 }
 
-async function persistChunks(
+async function persistChunksForVersion(
   documentId: string,
+  documentVersionId: string,
   workspaceId: string,
   chunks: TextChunk[],
   embeddings: number[][],
 ) {
   await prisma.$transaction(async (tx) => {
-    await tx.documentChunk.deleteMany({ where: { documentId } });
+    // Never delete other versions' chunks — only replace this version's rows (retries).
+    await tx.documentChunk.deleteMany({ where: { documentVersionId } });
     if (chunks.length === 0) return;
     await tx.documentChunk.createMany({
       data: chunks.map((chunk, i) => ({
         documentId,
+        documentVersionId,
         workspaceId,
         position: i,
         content: chunk.content,
@@ -69,7 +98,7 @@ async function persistChunks(
       })),
     });
     const rows = await tx.documentChunk.findMany({
-      where: { documentId },
+      where: { documentVersionId },
       select: { id: true, position: true },
       orderBy: { position: 'asc' },
     });
@@ -85,6 +114,35 @@ async function persistChunks(
   });
 }
 
+async function resolveVersion(data: IngestionJobData) {
+  if (data.versionId) {
+    const version = await prisma.documentVersion.findUnique({ where: { id: data.versionId } });
+    if (!version || version.documentId !== data.documentId) return null;
+    return version;
+  }
+
+  // Legacy jobs / backfill without versionId: use processing version or create one for backfill.
+  const document = await prisma.document.findUnique({ where: { id: data.documentId } });
+  if (!document) return null;
+
+  if (document.processingVersionId) {
+    return prisma.documentVersion.findUnique({ where: { id: document.processingVersionId } });
+  }
+  if (document.currentVersionId && data.mode === 'backfill') {
+    return prisma.documentVersion.findUnique({ where: { id: document.currentVersionId } });
+  }
+  if (document.currentVersionId) {
+    return prisma.documentVersion.findUnique({ where: { id: document.currentVersionId } });
+  }
+
+  // Migrate path: document without versions — should not happen after migration, but be safe.
+  const existing = await prisma.documentVersion.findFirst({
+    where: { documentId: document.id },
+    orderBy: { versionNumber: 'desc' },
+  });
+  return existing;
+}
+
 export async function processIngestion(data: IngestionJobData): Promise<void> {
   const document = await prisma.document.findUnique({ where: { id: data.documentId } });
   if (!document || document.workspaceId !== data.workspaceId) return;
@@ -92,33 +150,75 @@ export async function processIngestion(data: IngestionJobData): Promise<void> {
   const mode = data.mode ?? 'ingest';
   const isBackfill = mode === 'backfill';
 
+  let version = await resolveVersion(data);
+  if (!version) {
+    logger.warn({ documentId: data.documentId }, 'ingestion skipped: no version');
+    return;
+  }
+
+  // Backfill always creates a new version from current ready content so old chunks (citations) stay.
+  if (isBackfill && version.status === 'ready' && !data.versionId) {
+    const newVersion = await createDocumentVersion({
+      documentId: document.id,
+      workspaceId: document.workspaceId,
+      mimeType: version.mimeType,
+      byteSize: version.byteSize,
+      storageKey: version.storageKey,
+      contentHash: version.contentHash,
+      changeReason: 'backfill',
+      createdById: data.userId ?? document.createdById,
+      extractedText: version.extractedText,
+      pageCount: version.pageCount,
+      status: 'pending',
+    });
+    await prisma.document.update({
+      where: { id: document.id },
+      data: {
+        processingVersionId: newVersion.id,
+        status: document.status === 'ready' ? 'ready' : 'pending',
+      },
+    });
+    version = newVersion;
+  }
+
+  await prisma.documentVersion.update({
+    where: { id: version.id },
+    data: { status: 'processing', failureReason: null, processingPhase: 'queued' },
+  });
   await prisma.document.update({
     where: { id: document.id },
-    data: { status: 'processing', failureReason: null, processingPhase: 'queued' },
+    data: {
+      processingVersionId: version.id,
+      status: document.currentVersionId && document.status === 'ready' ? 'ready' : 'processing',
+      processingPhase: 'queued',
+      failureReason: document.currentVersionId ? document.failureReason : null,
+    },
   });
 
   try {
-    let text = document.extractedText?.trim() || '';
-    let pageCount = document.pageCount;
+    let text = version.extractedText?.trim() || document.extractedText?.trim() || '';
+    let pageCount = version.pageCount ?? document.pageCount;
+    let contentHash = version.contentHash;
 
     if (!isBackfill || !text) {
-      await setPhase(document.id, 'downloading');
-      const buffer = await downloadDocumentBuffer(document.storageKey, document.sourceUrl);
-      await setPhase(document.id, 'extracting');
-      const extracted = await extractText(buffer, document.mimeType, document.name);
+      await setVersionPhase(version.id, document.id, 'downloading');
+      const buffer = await downloadDocumentBuffer(version.storageKey, document.sourceUrl);
+      contentHash = contentHash || hashDocumentBytes(buffer);
+      await setVersionPhase(version.id, document.id, 'extracting');
+      const extracted = await extractText(buffer, version.mimeType, document.name);
       text = extracted.text;
       pageCount = extracted.pageCount;
     } else {
-      await setPhase(document.id, 'extracting');
+      await setVersionPhase(version.id, document.id, 'extracting');
     }
 
     if (!text) throw new Error('No text could be extracted from document');
 
-    await setPhase(document.id, 'chunking');
+    await setVersionPhase(version.id, document.id, 'chunking');
     const chunks = chunkText(text);
     if (chunks.length === 0) throw new Error('Chunking produced no content');
 
-    await setPhase(document.id, 'embedding');
+    await setVersionPhase(version.id, document.id, 'embedding');
     const embeddings = await embedTexts(
       chunks.map((c) => c.content),
       'document',
@@ -127,27 +227,23 @@ export async function processIngestion(data: IngestionJobData): Promise<void> {
       throw new Error(`Embedding count mismatch: ${embeddings.length} vs ${chunks.length}`);
     }
 
-    await setPhase(document.id, 'persisting');
-    await persistChunks(document.id, document.workspaceId, chunks, embeddings);
+    await setVersionPhase(version.id, document.id, 'persisting');
+    await persistChunksForVersion(
+      document.id,
+      version.id,
+      document.workspaceId,
+      chunks,
+      embeddings,
+    );
 
-    if (!isBackfill) {
-      await decrementCredits({
-        workspaceId: data.workspaceId,
-        userId: data.userId,
-        cost: INGESTION_CREDIT_COST,
-        reason: 'ingestion_usage',
-        refType: 'document',
-        refId: document.id,
-      });
-    }
-
-    await prisma.document.update({
-      where: { id: document.id },
+    const readyVersion = await prisma.documentVersion.update({
+      where: { id: version.id },
       data: {
         status: 'ready',
         processingPhase: null,
         extractedText: text,
         pageCount,
+        contentHash,
         embeddingModel: EMBEDDING_MODEL,
         embeddingDimensions: EMBEDDING_DIMENSIONS,
         processedAt: new Date(),
@@ -155,16 +251,56 @@ export async function processIngestion(data: IngestionJobData): Promise<void> {
       },
     });
 
+    if (!isBackfill) {
+      const charge = await shouldChargeIngestion({
+        workspaceId: data.workspaceId,
+        documentId: document.id,
+        versionId: version.id,
+        contentHash,
+      });
+      if (charge) {
+        await decrementCredits({
+          workspaceId: data.workspaceId,
+          userId: data.userId,
+          cost: INGESTION_CREDIT_COST,
+          reason: 'ingestion_usage',
+          refType: 'document_version',
+          refId: version.id,
+        });
+      }
+    }
+
+    await projectDocumentFromVersion(document.id, readyVersion, {
+      makeCurrent: true,
+      clearProcessing: true,
+      failureReason: null,
+    });
+
     logger.info(
-      { documentId: document.id, chunkCount: chunks.length, mode },
+      {
+        documentId: document.id,
+        versionId: version.id,
+        versionNumber: version.versionNumber,
+        chunkCount: chunks.length,
+        mode,
+      },
       'ingestion completed',
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Ingestion failed';
-    logger.error({ err: error, documentId: document.id, mode }, 'ingestion failed');
-    await prisma.document.update({
-      where: { id: document.id },
+    logger.error(
+      { err: error, documentId: document.id, versionId: version.id, mode },
+      'ingestion failed',
+    );
+    const failedVersion = await prisma.documentVersion.update({
+      where: { id: version.id },
       data: { status: 'failed', failureReason: message, processingPhase: null },
+    });
+    // Preserve current ready version for retrieval — never demote a working document.
+    await projectDocumentFromVersion(document.id, failedVersion, {
+      makeCurrent: false,
+      clearProcessing: true,
+      failureReason: message,
     });
     throw error;
   }

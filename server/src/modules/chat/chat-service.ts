@@ -184,6 +184,7 @@ type RetrievedChunk = {
   id: string;
   content: string;
   document_id: string;
+  document_version_id: string;
   name: string;
   position: number;
   start_offset: number | null;
@@ -256,10 +257,12 @@ async function retrieveContext(
 ): Promise<RetrievedChunk[]> {
   const embedding = await embedQuery(query);
   const vector = vectorLiteral(embedding);
+  // Only chunks belonging to each document's currentVersionId — never mix versions or stale content.
   const rows =
     documentIds.length > 0
       ? await prisma.$queryRaw<Array<Omit<RetrievedChunk, 'score'> & { distance: number }>>`
-          SELECT c.id, c.content, c."documentId" as document_id, d.name, c.position,
+          SELECT c.id, c.content, c."documentId" as document_id,
+                 c."documentVersionId" as document_version_id, d.name, c.position,
                  c."startOffset" as start_offset, c."endOffset" as end_offset,
                  c."pageNumber" as page_number,
                  (c.embedding <=> ${vector}::vector) as distance
@@ -267,13 +270,16 @@ async function retrieveContext(
           JOIN "Document" d ON d.id = c."documentId"
           WHERE c."workspaceId" = ${workspaceId}
             AND d.status = 'ready'
+            AND d."currentVersionId" IS NOT NULL
+            AND c."documentVersionId" = d."currentVersionId"
             AND c.embedding IS NOT NULL
             AND d.id IN (${Prisma.join(documentIds)})
           ORDER BY c.embedding <=> ${vector}::vector
           LIMIT ${RAG_TOP_K}
         `
       : await prisma.$queryRaw<Array<Omit<RetrievedChunk, 'score'> & { distance: number }>>`
-          SELECT c.id, c.content, c."documentId" as document_id, d.name, c.position,
+          SELECT c.id, c.content, c."documentId" as document_id,
+                 c."documentVersionId" as document_version_id, d.name, c.position,
                  c."startOffset" as start_offset, c."endOffset" as end_offset,
                  c."pageNumber" as page_number,
                  (c.embedding <=> ${vector}::vector) as distance
@@ -281,6 +287,8 @@ async function retrieveContext(
           JOIN "Document" d ON d.id = c."documentId"
           WHERE c."workspaceId" = ${workspaceId}
             AND d.status = 'ready'
+            AND d."currentVersionId" IS NOT NULL
+            AND c."documentVersionId" = d."currentVersionId"
             AND c.embedding IS NOT NULL
           ORDER BY c.embedding <=> ${vector}::vector
           LIMIT ${RAG_TOP_K}
@@ -291,6 +299,7 @@ async function retrieveContext(
       id: row.id,
       content: row.content,
       document_id: row.document_id,
+      document_version_id: row.document_version_id,
       name: row.name,
       position: row.position,
       start_offset: row.start_offset,
@@ -305,6 +314,7 @@ function toCitations(chunks: RetrievedChunk[]): MessageCitation[] {
   return chunks.map((c) => ({
     documentId: c.document_id,
     documentName: c.name,
+    documentVersionId: c.document_version_id,
     chunkId: c.id,
     position: c.position,
     score: Number(c.score.toFixed(4)),
@@ -437,12 +447,11 @@ export async function* streamAssistantReply(input: {
     }
   }
 
-  let documentIds: string[];
-  try {
-    documentIds = await resolveDocumentScope(input.workspaceId, input.body.content, explicitIds);
-  } catch (error) {
-    throw error;
-  }
+  const documentIds = await resolveDocumentScope(
+    input.workspaceId,
+    input.body.content,
+    explicitIds,
+  );
 
   const userMessage = await prisma.message.create({
     data: {

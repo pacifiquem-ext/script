@@ -134,14 +134,21 @@ async function transferOwnershipIfNeeded(workspaceId: string, departingUserId: s
 }
 
 async function deleteWorkspaceData(workspaceId: string) {
+  const versions = await prisma.documentVersion.findMany({
+    where: { workspaceId },
+    select: { storageKey: true },
+  });
   const documents = await prisma.document.findMany({
     where: { workspaceId },
     select: { storageKey: true },
   });
+  const storageKeys = [
+    ...new Set([...versions.map((v) => v.storageKey), ...documents.map((d) => d.storageKey)]),
+  ];
   await prisma.workspace.delete({ where: { id: workspaceId } });
-  for (const doc of documents) {
+  for (const key of storageKeys) {
     try {
-      await storage.delete(doc.storageKey);
+      await storage.delete(key);
     } catch {
       // best effort
     }

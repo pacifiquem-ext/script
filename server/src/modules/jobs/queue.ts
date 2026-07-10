@@ -10,6 +10,8 @@ export type IngestionJobData = {
   documentId: string;
   workspaceId: string;
   userId?: string;
+  /** Version being processed. When omitted, worker resolves processing/current version. */
+  versionId?: string;
   mode?: 'ingest' | 'backfill';
 };
 export type BackfillJobData = { documentId: string } | { workspaceId: string } | { all: true };
