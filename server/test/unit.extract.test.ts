@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('pdf-parse', () => ({
+  PDFParse: vi.fn().mockImplementation(() => ({
+    getText: vi.fn(async () => ({ text: '  pdf body  ', total: 2 })),
+    getInfo: vi.fn(async () => ({ total: 2 })),
+    destroy: vi.fn(async () => undefined),
+  })),
+}));
+
 vi.mock('mammoth', () => ({
   default: {
     extractRawText: vi.fn(async () => ({ value: '  docx body  ' })),
@@ -33,6 +41,12 @@ describe('extractText formats', () => {
   it('extracts docx by extension', async () => {
     const result = await extractText(Buffer.from('x'), 'application/octet-stream', 'a.docx');
     expect(result.text).toContain('docx body');
+  });
+
+  it('extracts pdf via PDFParse v2', async () => {
+    const result = await extractText(Buffer.from('%PDF'), 'application/pdf', 'a.pdf');
+    expect(result.text).toContain('pdf body');
+    expect(result.pageCount).toBe(2);
   });
 
   it('extracts xlsx spreadsheets', async () => {

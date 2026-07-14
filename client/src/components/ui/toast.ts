@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 
 const defaultOptions: ToasterProps = {
   className: 'group/toast',
-  position: 'bottom-center',
+  position: 'bottom-right',
   gap: 8,
   duration: 4000,
 };

@@ -119,7 +119,7 @@ describe('UI primitives render', () => {
     expect(typeof notify.info).toBe('function');
     expect(typeof notify.warning).toBe('function');
     expect(typeof toast.custom).toBe('function');
-    expect(toastDefaults.position).toBe('bottom-center');
+    expect(toastDefaults.position).toBe('bottom-right');
     notify.success('ok');
     notify.error('bad');
     notify.info('i');

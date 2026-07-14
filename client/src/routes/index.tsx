@@ -2,10 +2,9 @@ import { Suspense, lazy } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { GuestOnly } from '../components/auth/GuestOnly';
 import { RequireAuth } from '../components/auth/RequireAuth';
-import { LandingLayout } from '../components/layout/LandingLayout';
 import { AppLayout } from '../components/layout/AppLayout';
 import { LoadingState } from '../components/ui/LoadingState';
-import { LandingPage } from '../pages/landing/LandingPage';
+import { LandingPage } from '../pages/landing/page';
 
 const LoginPage = lazy(() =>
   import('../pages/app/LoginPage').then((m) => ({ default: m.LoginPage })),
@@ -37,8 +36,8 @@ function Lazy({ children }: { children: React.ReactNode }) {
 
 export const router = createBrowserRouter([
   {
-    element: <LandingLayout />,
-    children: [{ path: '/', element: <LandingPage /> }],
+    path: '/',
+    element: <LandingPage />,
   },
   {
     path: '/app/login',

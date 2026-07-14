@@ -216,7 +216,7 @@ export function DocumentCanvas({
   loading,
   highlight,
   onClose,
-  className = 'w-[50%] min-w-[320px] border-l border-neutral-200 animate-[slideInRight_0.4s_cubic-bezier(0.16,1,0.3,1)] max-md:w-full max-md:absolute max-md:inset-0 max-md:z-[100] max-md:border-l-0',
+  className = 'h-full w-full min-h-0',
 }: Props) {
   const badge = typeBadgeLabel(file.name, file.mimeType);
   const kind = detectPreviewKind({

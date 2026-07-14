@@ -1,51 +1,65 @@
 import React from 'react';
 
-type Variant = 'primary' | 'neutral' | 'error';
-type Mode = 'filled' | 'stroke' | 'lighter' | 'ghost';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'subtle' | 'destructive';
+type LegacyVariant = 'neutral' | 'error';
+type LegacyMode = 'filled' | 'stroke' | 'lighter' | 'ghost';
 type Size = 'md' | 'sm' | 'xs';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: Variant;
-  mode?: Mode;
+  variant?: ButtonVariant | LegacyVariant;
+  mode?: LegacyMode;
   size?: Size;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   loading?: boolean;
-  as?: 'button' | 'a';
-  href?: string;
 }
 
 const sizeStyles: Record<Size, string> = {
-  md: 'h-10 px-4 rounded-10 text-sm leading-5',
-  sm: 'h-9 px-3 rounded-8 text-sm leading-5',
-  xs: 'h-8 px-2.5 rounded-8 text-xs leading-4',
+  md: 'h-9 px-[22px] text-sm leading-5',
+  sm: 'h-8 px-4 text-xs leading-4',
+  xs: 'h-7 px-3 text-xs leading-4',
 };
 
-const variantModeStyles: Record<Variant, Record<Mode, string>> = {
-  primary: {
-    filled:
-      'bg-primary-base bg-primary-gradient text-white hover:bg-primary-gradient-hover shadow-sm',
-    stroke:
-      'bg-white text-primary-base shadow-[inset_0_0_0_1px_theme(colors.neutral.950)] hover:bg-primary-alpha-10',
-    lighter:
-      'bg-primary-alpha-10 text-primary-base hover:bg-white hover:shadow-[inset_0_0_0_1px_theme(colors.neutral.950)]',
-    ghost: 'bg-transparent text-primary-base hover:bg-primary-alpha-10',
-  },
-  neutral: {
-    filled:
-      'bg-white text-neutral-950 shadow-xs shadow-[inset_0_0_0_1px_theme(colors.neutral.200)] hover:bg-neutral-50 hover:shadow-sm',
-    stroke:
-      'bg-transparent text-neutral-950 shadow-[inset_0_0_0_1px_theme(colors.neutral.200)] hover:bg-neutral-50',
-    lighter: 'bg-neutral-50 text-neutral-950 hover:bg-neutral-200',
-    ghost: 'bg-transparent text-neutral-600 hover:bg-neutral-50 hover:text-neutral-950',
-  },
-  error: {
-    filled: 'bg-error-base text-white hover:bg-[#b91c1c]',
-    stroke: 'bg-white text-error-base shadow-[inset_0_0_0_1px_theme(colors.error.base)]',
-    lighter: 'bg-error-lighter text-error-base',
-    ghost: 'bg-transparent text-error-base',
-  },
+const variantStyles: Record<ButtonVariant, string> = {
+  primary:
+    'border-[var(--color-primary-border)] bg-[var(--color-primary)] text-neutral-0 shadow-button-primary hover:bg-[var(--color-primary-darker)] hover:shadow-button-primary-hover active:bg-[var(--color-primary-dark)]',
+  secondary:
+    'border-[var(--color-primary)] bg-neutral-0 text-[var(--color-primary)] hover:bg-surface-chip active:bg-primary-alpha-8',
+  ghost:
+    'border-transparent bg-transparent text-[var(--color-primary)] hover:bg-primary-alpha-8 active:bg-primary-alpha-10',
+  subtle:
+    'border-transparent bg-surface-chip text-[var(--color-primary)] hover:bg-primary-alpha-16 active:bg-primary-alpha-20',
+  destructive:
+    'border-destructive-border bg-destructive-base text-neutral-0 shadow-button-destructive hover:bg-destructive-darker hover:shadow-button-destructive-hover active:bg-destructive-dark',
 };
+
+const disabledStyles =
+  'disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-neutral-200 disabled:text-neutral-400 disabled:shadow-none';
+
+function resolveVariant(
+  variant: ButtonVariant | LegacyVariant,
+  mode: LegacyMode,
+): ButtonVariant {
+  if (
+    variant === 'primary' ||
+    variant === 'secondary' ||
+    variant === 'ghost' ||
+    variant === 'subtle' ||
+    variant === 'destructive'
+  ) {
+    return variant;
+  }
+
+  if (variant === 'error') {
+    if (mode === 'ghost') return 'ghost';
+    if (mode === 'lighter') return 'subtle';
+    return 'destructive';
+  }
+
+  if (mode === 'lighter') return 'subtle';
+  if (mode === 'ghost') return 'ghost';
+  return 'secondary';
+}
 
 export function Button({
   variant = 'primary',
@@ -57,26 +71,29 @@ export function Button({
   children,
   className = '',
   disabled,
+  type = 'button',
   ...props
 }: ButtonProps) {
+  const resolvedVariant = resolveVariant(variant, mode);
   const baseStyles =
-    'inline-flex items-center justify-center gap-2 font-medium tracking-tight cursor-pointer border-none outline-none no-underline transition-all duration-200 whitespace-nowrap select-none active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50';
+    'inline-flex w-fit items-center justify-center gap-2 whitespace-nowrap rounded-12 border font-medium transition-all duration-200 select-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 active:scale-[0.98]';
 
   return (
     <button
-      className={`${baseStyles} ${sizeStyles[size]} ${variantModeStyles[variant][mode]} ${className}`}
+      type={type}
+      className={`${baseStyles} ${sizeStyles[size]} ${variantStyles[resolvedVariant]} ${disabledStyles} ${className}`}
       disabled={disabled || loading}
       {...props}
     >
       {loading ? (
-        <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin flex items-center justify-center shrink-0" />
+        <span className="flex h-4 w-4 shrink-0 animate-spin items-center justify-center rounded-full border-2 border-current border-t-transparent" />
       ) : leftIcon ? (
-        <span className="flex items-center justify-center shrink-0">{leftIcon}</span>
+        <span className="flex shrink-0 items-center justify-center">{leftIcon}</span>
       ) : null}
-      {children && <span>{children}</span>}
-      {!loading && rightIcon && (
-        <span className="flex items-center justify-center shrink-0">{rightIcon}</span>
-      )}
+      {children ? <span>{children}</span> : null}
+      {!loading && rightIcon ? (
+        <span className="flex shrink-0 items-center justify-center">{rightIcon}</span>
+      ) : null}
     </button>
   );
 }

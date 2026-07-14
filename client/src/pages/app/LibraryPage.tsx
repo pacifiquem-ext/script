@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { PublicDocument, PublicFolder } from '@script/shared';
+import type { IntegrationProvider, PublicDocument, PublicFolder } from '@script/shared';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 import { CloudImportModal } from '../../components/app/CloudImportModal';
-import { Alert } from '../../components/ui/Alert';
+import { UploadProgressCard } from '../../components/app/UploadProgressCard';
 import { Button } from '../../components/ui/Button';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -11,19 +11,35 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import { FormModal } from '../../components/ui/FormModal';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Modal, ModalContent, ModalFooter, ModalHeader } from '../../components/ui/Modal';
+import {
+  SideDrawer,
+  SideDrawerBody,
+  SideDrawerContent,
+  SideDrawerHeader,
+} from '../../components/ui/SideDrawer';
 import { notify } from '../../components/ui/toast-alert';
 import { useCredits } from '../../lib/chat-api';
 import { getErrorMessage } from '../../lib/form-errors';
 import {
+  PROVIDER_LABELS,
+  useIntegrationMutations,
+  useIntegrations,
+} from '../../lib/integrations-api';
+import {
+  IconArchive,
   IconArrowUp,
   IconAttach,
   IconClose,
   IconDocFile,
+  IconFile,
+  IconFolderSimple,
   IconGrid,
+  IconImage,
   IconMenu,
   IconMore,
   IconPlus,
   IconSearch,
+  IconSettings,
   IconUpload,
   IconZap,
 } from '../../lib/icons';
@@ -35,6 +51,19 @@ import {
   useLibraryMutations,
 } from '../../lib/library-api';
 
+type QueueItemStatus = 'uploading' | 'processing' | 'ready' | 'failed';
+type QueueItem = {
+  id: string;
+  name: string;
+  kind: 'upload' | 'process' | 'import';
+  status: QueueItemStatus;
+  percent?: number | null;
+  error?: string;
+  documentId?: string;
+};
+
+const ALL_PROVIDERS: IntegrationProvider[] = ['drive', 'dropbox', 'onedrive', 'box'];
+
 type ViewMode = 'grid' | 'list';
 type FileKind = 'pdf' | 'doc' | 'xls' | 'txt' | 'img' | 'other';
 
@@ -45,21 +74,21 @@ type ContextTarget =
   | { kind: 'file'; item: PublicDocument };
 
 const TYPE_COLOR: Record<FileKind, string> = {
-  pdf: '#e54d2e',
-  doc: '#0070f3',
-  xls: '#1a7f3c',
-  txt: '#737373',
-  img: '#7c3aed',
-  other: '#737373',
+  pdf: '#6060FF',
+  doc: '#6060FF',
+  xls: '#6060FF',
+  txt: '#6060FF',
+  img: '#6060FF',
+  other: '#6060FF',
 };
 
 const TYPE_LABEL: Record<FileKind, string> = {
   pdf: 'PDF',
-  doc: 'DOC',
-  xls: 'XLS',
+  doc: 'DOCX',
+  xls: 'XLSX',
   txt: 'TXT',
   img: 'IMG',
-  other: 'FILE',
+  other: 'UNK',
 };
 
 function fileKind(doc: PublicDocument): FileKind {
@@ -96,8 +125,8 @@ function formatBytes(bytes: number): string {
 function formatDate(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString(undefined, {
+      day: '2-digit',
       month: 'short',
-      day: 'numeric',
       year: 'numeric',
     });
   } catch {
@@ -109,66 +138,279 @@ function isDocProcessing(doc: PublicDocument): boolean {
   return doc.status === 'pending' || doc.status === 'processing' || doc.isUpdating;
 }
 
-function statusLabel(doc: PublicDocument): string | null {
-  if (doc.isUpdating) {
-    return doc.processingPhase
-      ? `Updating (${doc.processingPhase})`
-      : 'Updating to new version…';
+/** Soft label for cards — never surface failure reasons on the file name row. */
+function cardStatusLabel(doc: PublicDocument): string | null {
+  if (doc.isUpdating || doc.status === 'pending' || doc.status === 'processing') {
+    return 'Processing…';
   }
-  if (doc.status === 'ready' && doc.failureReason) {
-    return `Update failed — ${doc.failureReason}`;
-  }
-  if (doc.status === 'ready') return null;
-  if (doc.status === 'processing' && doc.processingPhase) return `Processing (${doc.processingPhase})`;
-  if (doc.status === 'failed') return doc.failureReason ? `Failed — ${doc.failureReason}` : 'Failed';
-  return doc.status.charAt(0).toUpperCase() + doc.status.slice(1);
+  if (doc.status === 'failed') return 'Needs attention';
+  return null;
 }
 
-function FolderIcon({ name }: { name: string }) {
-  const initials = name.trim().slice(0, 2).toUpperCase() || 'FO';
+function queueStatusLabel(item: QueueItem): string {
+  if (item.status === 'uploading') {
+    return typeof item.percent === 'number' ? `Uploading ${item.percent}%` : 'Uploading…';
+  }
+  if (item.status === 'processing') {
+    return typeof item.percent === 'number' ? `Processing ${item.percent}%` : 'Processing…';
+  }
+  if (item.status === 'failed') return item.error ? `Failed — ${item.error}` : 'Failed';
+  return 'Ready';
+}
+
+function FolderCard({
+  name,
+  itemCount,
+  onOpen,
+  onMove,
+  onMenu,
+}: {
+  name: string;
+  itemCount: number;
+  onOpen: () => void;
+  onMove: (e: React.MouseEvent) => void;
+  onMenu: (e: React.MouseEvent) => void;
+}) {
+  const itemsLabel = `${itemCount} item${itemCount === 1 ? '' : 's'}`;
+  const hasFiles = itemCount > 0;
+
   return (
-    <div className="relative w-[80px] h-[68px] shrink-0">
-      <div className="absolute top-0 left-[6px] right-0 h-[52px] bg-neutral-400 rounded-[0_10px_10px_10px] before:content-[''] before:absolute before:-top-2 before:left-0 before:w-[36px] before:h-3 before:bg-neutral-400 before:rounded-[4px_4px_0_0]" />
-      <div className="absolute top-[10px] left-0 right-[6px] h-[52px] bg-neutral-500 rounded-8 flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-        <div className="text-[14px] font-bold text-white/50 tracking-[0.05em]">{initials}</div>
+    <div
+      role="button"
+      tabIndex={0}
+      className="group relative w-full cursor-pointer border-none bg-transparent p-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-base focus-visible:ring-offset-2 rounded-[18px]"
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      onContextMenu={onMenu}
+    >
+      {/* Papers peeking out when the folder has files */}
+      {hasFiles ? (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[36px]" aria-hidden>
+          <div className="absolute left-[22%] top-[4px] h-[30px] w-[38%] -rotate-[10deg] rounded-[3px] border border-neutral-200/80 bg-white shadow-[0_2px_5px_rgba(15,15,40,0.12)]" />
+          <div className="absolute left-[34%] top-0 h-[32px] w-[40%] rotate-[3deg] rounded-[3px] border border-neutral-200/90 bg-white shadow-[0_2px_6px_rgba(15,15,40,0.14)]" />
+          <div className="absolute left-[48%] top-[5px] h-[28px] w-[34%] rotate-[14deg] rounded-[3px] border border-neutral-100 bg-white shadow-[0_1px_4px_rgba(15,15,40,0.1)]" />
+        </div>
+      ) : null}
+
+      {/* Tab */}
+      <div
+        className={`absolute left-3 z-[1] h-[11px] w-[44px] rounded-t-[9px] bg-gradient-to-b from-[#9A9AFF] to-primary-base ${hasFiles ? 'top-[14px]' : 'top-0'}`}
+        aria-hidden
+      />
+
+      {/* Body */}
+      <div
+        className={`relative z-[2] flex min-h-[89px] flex-col justify-between overflow-hidden rounded-[18px] bg-gradient-to-b from-[#8B8BFF] via-primary-base to-primary-dark p-3 shadow-[0_8px_18px_rgba(96,96,255,0.28),0_1px_4px_rgba(58,58,212,0.18)] transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_10px_22px_rgba(96,96,255,0.34)] ${hasFiles ? 'mt-[22px]' : 'mt-[8px]'}`}
+      >
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-white/20 to-transparent"
+          aria-hidden
+        />
+        <div className="relative flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="m-0 truncate font-mono text-[12px] font-medium leading-4 tracking-[-0.01em] text-white">
+              {name}
+            </p>
+            <p className="m-0 mt-0.5 font-mono text-[10px] leading-3 text-white/75">{itemsLabel}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-6 border-none bg-transparent text-white/85 transition-colors hover:bg-white/15 hover:text-white cursor-pointer"
+              aria-label={`Move ${name}`}
+              title="Move"
+              onClick={onMove}
+            >
+              <IconArchive size={12} />
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-6 border-none bg-transparent text-white/85 transition-colors hover:bg-white/15 hover:text-white cursor-pointer"
+              aria-label={`Folder actions for ${name}`}
+              title="Folder actions"
+              onClick={onMenu}
+            >
+              <IconSettings size={12} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function SmallFolderIcon() {
+function SmallFolderIcon({ hasFiles = false }: { hasFiles?: boolean }) {
   return (
-    <div className="relative w-8 h-8 shrink-0">
-      <div className="absolute top-1 left-0 right-0 bottom-0 bg-neutral-500 rounded-[2px_6px_6px_6px] before:content-[''] before:absolute before:-top-1 before:left-0 before:w-3 before:h-2 before:bg-neutral-400 before:rounded-[2px_2px_0_0]" />
+    <div className="relative h-8 w-9 shrink-0" aria-hidden>
+      {hasFiles ? (
+        <>
+          <div className="absolute left-[10px] top-0 h-3.5 w-3 -rotate-6 rounded-[2px] border border-neutral-200 bg-white" />
+          <div className="absolute left-[14px] top-0 h-3.5 w-3 rotate-6 rounded-[2px] border border-neutral-200 bg-white" />
+        </>
+      ) : null}
+      <div className="absolute left-1 top-0.5 z-[1] h-2 w-3.5 rounded-t-[4px] bg-primary-base/80" />
+      <div className="absolute bottom-0 left-0 right-0 top-2 z-[2] rounded-[6px] bg-gradient-to-b from-[#8B8BFF] via-primary-base to-primary-dark shadow-sm" />
     </div>
   );
 }
 
-function FileIcon({ kind }: { kind: FileKind }) {
+function FileTypeMark({ kind }: { kind: FileKind }) {
+  if (kind === 'pdf') {
+    return (
+      <svg
+        width="28"
+        height="28"
+        viewBox="0 0 44 44"
+        fill="none"
+        aria-hidden
+        className="text-primary-base"
+      >
+        <path
+          d="M22 8c-6.2 0-10.5 3.4-10.5 8.2 0 3.4 2.2 5.6 6.4 7.1l3.2 1.1c3.1 1.1 4.4 2.1 4.4 3.8 0 2.1-1.9 3.5-4.8 3.5-2.7 0-5-.9-6.8-2.3"
+          stroke="currentColor"
+          strokeWidth="3.2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M22 36c6.2 0 10.5-3.4 10.5-8.2 0-3.4-2.2-5.6-6.4-7.1l-3.2-1.1c-3.1-1.1-4.4-2.1-4.4-3.8 0-2.1 1.9-3.5 4.8-3.5 2.7 0 5 .9 6.8 2.3"
+          stroke="currentColor"
+          strokeWidth="3.2"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+  if (kind === 'doc') {
+    return (
+      <span className="font-mono text-[28px] font-semibold leading-none tracking-tight text-primary-base">
+        W
+      </span>
+    );
+  }
+  if (kind === 'xls') {
+    return (
+      <span className="font-mono text-[28px] font-semibold leading-none tracking-tight text-primary-base">
+        X
+      </span>
+    );
+  }
+  if (kind === 'img') {
+    return <IconImage size={26} className="text-primary-base" />;
+  }
+  if (kind === 'txt') {
+    return (
+      <span className="font-mono text-[24px] font-semibold leading-none tracking-tight text-primary-base">
+        T
+      </span>
+    );
+  }
   return (
-    <div className="w-[60px] h-[72px] relative shrink-0">
-      <div className="w-full h-full bg-white border-[1.5px] border-neutral-200 rounded-6 relative flex items-center justify-center shadow-sm">
-        <div className="absolute top-0 right-0 w-[18px] h-[18px] bg-neutral-50 border-l-[1.5px] border-b-[1.5px] border-neutral-200 rounded-[0_6px_0_4px]" />
-        <span
-          className="text-[10px] font-bold tracking-[0.04em] mt-2"
-          style={{ color: TYPE_COLOR[kind] }}
-        >
+    <span className="font-mono text-[28px] font-semibold leading-none tracking-tight text-primary-base">
+      ?
+    </span>
+  );
+}
+
+/** Peeled corner: primary fills the top-right; only the inward (bottom-left)
+ *  corner is heavily rounded so it reads as paper folded back. */
+function PeeledCorner({ size = 16 }: { size?: number }) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute right-0 top-0 z-[6] bg-primary-base"
+      style={{
+        width: size,
+        height: size,
+        borderBottomLeftRadius: Math.round(size * 0.92),
+      }}
+    />
+  );
+}
+
+function FileCard({
+  doc,
+  onOpen,
+  onMenu,
+  onDragStart,
+}: {
+  doc: PublicDocument;
+  onOpen: () => void;
+  onMenu: (e: React.MouseEvent) => void;
+  onDragStart: (e: React.DragEvent) => void;
+}) {
+  const kind = fileKind(doc);
+  const status = cardStatusLabel(doc);
+  const peel = 16;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      draggable={doc.status === 'ready'}
+      onDragStart={onDragStart}
+      className="group relative flex min-h-[108px] cursor-pointer flex-col overflow-hidden rounded-[12px] border border-neutral-200/90 bg-[#F7F7FB] p-2.5 text-left shadow-[0_4px_12px_rgba(15,15,40,0.06)] outline-none transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(15,15,40,0.1)] focus-visible:ring-2 focus-visible:ring-primary-base focus-visible:ring-offset-2"
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      onContextMenu={onMenu}
+    >
+      <PeeledCorner size={peel} />
+
+      <div className="relative z-[3] flex items-start justify-between gap-1.5 pr-2.5">
+        <span className="inline-flex rounded-[4px] bg-primary-base px-1 py-px font-mono text-[8px] font-semibold uppercase tracking-[0.06em] text-white">
           {TYPE_LABEL[kind]}
         </span>
+        <button
+          type="button"
+          className="inline-flex h-5 w-5 items-center justify-center rounded-4 border-none bg-transparent text-neutral-400 transition-colors hover:bg-white hover:text-neutral-700 cursor-pointer"
+          aria-label={`Actions for ${doc.name}`}
+          onClick={onMenu}
+        >
+          <IconMore size={12} />
+        </button>
+      </div>
+
+      <div className="relative z-[3] flex flex-1 items-center justify-center py-2">
+        <FileTypeMark kind={kind} />
+      </div>
+
+      <div className="relative z-[3] min-w-0">
+        <p className="m-0 truncate font-mono text-[11px] font-medium leading-[14px] text-neutral-800">
+          {doc.name}
+        </p>
+        <p className="m-0 mt-0.5 font-mono text-[9px] leading-3 text-neutral-500">
+          {status ?? formatBytes(doc.byteSize)}
+        </p>
+        {!status ? (
+          <p className="m-0 mt-px font-mono text-[9px] leading-3 text-neutral-400">
+            {formatDate(doc.createdAt)}
+          </p>
+        ) : (
+          <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-primary-alpha-10">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-primary-base" />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function SmallFileIcon({ kind }: { kind: FileKind }) {
+  const peel = 10;
   return (
-    <div className="w-8 h-8 bg-white border border-neutral-200 rounded-4 relative flex items-center justify-center shadow-sm shrink-0">
-      <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-neutral-50 border-l border-b border-neutral-200 rounded-[0_3px_0_2px]" />
-      <span
-        className="text-[6px] font-bold tracking-[0.04em] mt-1"
-        style={{ color: TYPE_COLOR[kind] }}
-      >
-        {TYPE_LABEL[kind]}
+    <div className="relative flex h-8 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-neutral-200 bg-[#F7F7FB]">
+      <PeeledCorner size={peel} />
+      <span className="relative z-[1] font-mono text-[7px] font-bold tracking-[0.04em] text-primary-base">
+        {TYPE_LABEL[kind].slice(0, 3)}
       </span>
     </div>
   );
@@ -199,9 +441,12 @@ export function LibraryPage() {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [cloudImportOpen, setCloudImportOpen] = useState(false);
+  const [cloudProvider, setCloudProvider] = useState<IntegrationProvider | null>(null);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [folderBusy, setFolderBusy] = useState(false);
   const [urlModalOpen, setUrlModalOpen] = useState(false);
@@ -229,12 +474,19 @@ export function LibraryPage() {
   const [chatDropActive, setChatDropActive] = useState(false);
   const chatTextareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadProgress, setUploadProgress] = useState<{
-    fileName: string;
-    fileIndex: number;
-    fileTotal: number;
-    percent: number;
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const [activeProgress, setActiveProgress] = useState<{
+    title: string;
+    detail?: string;
+    percent?: number | null;
   } | null>(null);
+
+  useEffect(() => {
+    const el = folderInputRef.current;
+    if (!el) return;
+    el.setAttribute('webkitdirectory', '');
+    el.setAttribute('directory', '');
+  }, []);
 
   useEffect(() => {
     const status = searchParams.get('integration');
@@ -257,8 +509,33 @@ export function LibraryPage() {
   const versionsQuery = useDocumentVersions(versionsDoc?.id ?? null);
   const mutations = useLibraryMutations();
   const credits = useCredits();
+  const integrationsQuery = useIntegrations(addModalOpen || cloudImportOpen);
+  const integrationMutations = useIntegrationMutations();
 
   const moveFolders = rootFoldersQuery.data ?? [];
+
+  const connectedProviders = useMemo(() => {
+    const set = new Set(
+      (integrationsQuery.data?.providers ?? [])
+        .filter((p) => p.connected)
+        .map((p) => p.provider),
+    );
+    return set;
+  }, [integrationsQuery.data]);
+
+  function upsertQueueItem(item: QueueItem) {
+    setQueueItems((prev) => {
+      const idx = prev.findIndex((q) => q.id === item.id);
+      if (idx < 0) return [item, ...prev];
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...item };
+      return next;
+    });
+  }
+
+  function patchQueueItem(id: string, patch: Partial<QueueItem>) {
+    setQueueItems((prev) => prev.map((q) => (q.id === id ? { ...q, ...patch } : q)));
+  }
 
   const q = search.toLowerCase().trim();
   const displayFolders = useMemo(() => {
@@ -273,44 +550,114 @@ export function LibraryPage() {
     return documents.filter((d) => d.name.toLowerCase().includes(q));
   }, [documentsQuery.data, q]);
 
+  // Mirror in-flight / failed library docs into the upload queue (statuses live there, not on cards).
+  useEffect(() => {
+    const docs = documentsQuery.data ?? [];
+    setQueueItems((prev) => {
+      const byDoc = new Map(
+        prev.filter((i) => i.documentId).map((i) => [i.documentId!, i] as const),
+      );
+      let changed = false;
+      const next = [...prev];
+
+      for (const doc of docs) {
+        const existing = byDoc.get(doc.id);
+        if (doc.status === 'failed' || isDocProcessing(doc)) {
+          const status: QueueItemStatus = doc.status === 'failed' ? 'failed' : 'processing';
+          const error = doc.failureReason ?? undefined;
+          if (!existing) {
+            next.unshift({
+              id: `doc-${doc.id}`,
+              name: doc.name,
+              kind: 'process',
+              status,
+              documentId: doc.id,
+              error,
+              percent: null,
+            });
+            changed = true;
+          } else if (
+            existing.status !== status ||
+            existing.error !== error ||
+            existing.name !== doc.name
+          ) {
+            const idx = next.findIndex((i) => i.id === existing.id);
+            if (idx >= 0) {
+              next[idx] = { ...existing, status, error, name: doc.name, percent: null };
+              changed = true;
+            }
+          }
+        } else if (doc.status === 'ready' && existing && existing.status !== 'ready') {
+          const idx = next.findIndex((i) => i.id === existing.id);
+          if (idx >= 0) {
+            next[idx] = { ...existing, status: 'ready', error: undefined, percent: 100 };
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [documentsQuery.data]);
+
+  const queueBadgeCount = queueItems.filter(
+    (i) => i.status === 'uploading' || i.status === 'processing' || i.status === 'failed',
+  ).length;
+
   async function onUpload(fileList: FileList | File[] | null) {
     if (!fileList) return;
     const files = Array.from(fileList);
     if (!files.length) return;
-    if (uploadProgress) return;
-    setError(null);
+    if (activeProgress) return;
     const total = files.length;
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]!;
-        setUploadProgress({
-          fileName: file.name,
-          fileIndex: i + 1,
-          fileTotal: total,
+        const queueId = `upload-${Date.now()}-${i}-${file.name}`;
+        upsertQueueItem({
+          id: queueId,
+          name: file.name,
+          kind: 'upload',
+          status: 'uploading',
           percent: 0,
         });
-        await mutations.uploadFile.mutateAsync({
+        setActiveProgress({
+          title: `Uploading ${file.name}`,
+          detail: total > 1 ? `File ${i + 1} of ${total}` : undefined,
+          percent: 0,
+        });
+        const result = await mutations.uploadFile.mutateAsync({
           file,
           folderId: currentFolderId,
           onProgress: (percent) => {
-            setUploadProgress((prev) =>
-              prev && prev.fileName === file.name && prev.fileIndex === i + 1
-                ? { ...prev, percent }
-                : prev,
+            patchQueueItem(queueId, { percent });
+            setActiveProgress((prev) =>
+              prev ? { ...prev, percent } : prev,
             );
           },
         });
-        setUploadProgress((prev) =>
-          prev && prev.fileIndex === i + 1 ? { ...prev, percent: 100 } : prev,
-        );
+        patchQueueItem(queueId, {
+          status: 'processing',
+          percent: null,
+          documentId: result.document.id,
+          name: result.document.name,
+        });
       }
       notify.success(total === 1 ? 'File uploaded' : `${total} files uploaded`);
     } catch (err) {
       const message = getErrorMessage(err, 'Upload failed');
-      setError(message);
+      setQueueItems((prev) =>
+        prev.map((item) =>
+          item.status === 'uploading'
+            ? { ...item, status: 'failed', error: message, percent: null }
+            : item,
+        ),
+      );
+      setQueueOpen(true);
       notify.error(message);
     } finally {
-      setUploadProgress(null);
+      setActiveProgress(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (folderInputRef.current) folderInputRef.current.value = '';
     }
   }
 
@@ -436,9 +783,7 @@ export function LibraryPage() {
       }
       setRenameState(null);
     } catch (err) {
-      const message = getErrorMessage(err, 'Rename failed');
-      setError(message);
-      notify.error(message);
+      notify.error(getErrorMessage(err, 'Rename failed'));
     } finally {
       setRenameBusy(false);
     }
@@ -472,9 +817,7 @@ export function LibraryPage() {
       }
       setMoveState(null);
     } catch (err) {
-      const message = getErrorMessage(err, 'Move failed');
-      setError(message);
-      notify.error(message);
+      notify.error(getErrorMessage(err, 'Move failed'));
     } finally {
       setMoveBusy(false);
     }
@@ -500,9 +843,7 @@ export function LibraryPage() {
       }
       setDeleteState(null);
     } catch (err) {
-      const message = getErrorMessage(err, 'Delete failed');
-      setError(message);
-      notify.error(message);
+      notify.error(getErrorMessage(err, 'Delete failed'));
     } finally {
       setDeleteBusy(false);
     }
@@ -510,13 +851,30 @@ export function LibraryPage() {
 
   async function retryDocument(doc: PublicDocument) {
     setContextMenu(null);
+    const queueId = `doc-${doc.id}`;
+    upsertQueueItem({
+      id: queueId,
+      name: doc.name,
+      kind: 'process',
+      status: 'processing',
+      documentId: doc.id,
+      percent: null,
+    });
+    setActiveProgress({
+      title: `Retrying ${doc.name}`,
+      detail: 'Re-queueing processing…',
+      percent: null,
+    });
+    setQueueOpen(true);
     try {
       await mutations.reprocessDocument.mutateAsync(doc.id);
       notify.success(`Reprocessing ${doc.name}`);
     } catch (err) {
       const message = getErrorMessage(err, 'Could not reprocess file');
-      setError(message);
+      patchQueueItem(queueId, { status: 'failed', error: message });
       notify.error(message);
+    } finally {
+      setActiveProgress(null);
     }
   }
 
@@ -531,9 +889,7 @@ export function LibraryPage() {
       notify.success(`Restored as version ${result.version.versionNumber}`);
       await versionsQuery.refetch();
     } catch (err) {
-      const message = getErrorMessage(err, 'Could not restore version');
-      setError(message);
-      notify.error(message);
+      notify.error(getErrorMessage(err, 'Could not restore version'));
     } finally {
       setRollbackBusyId(null);
     }
@@ -549,12 +905,31 @@ export function LibraryPage() {
         type="file"
         multiple
         className="hidden"
-        disabled={Boolean(uploadProgress)}
+        disabled={Boolean(activeProgress)}
         onChange={(e) => {
           void onUpload(e.target.files);
           e.target.value = '';
         }}
       />
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        disabled={Boolean(activeProgress)}
+        onChange={(e) => {
+          void onUpload(e.target.files);
+          e.target.value = '';
+        }}
+      />
+
+      {activeProgress ? (
+        <UploadProgressCard
+          title={activeProgress.title}
+          detail={activeProgress.detail}
+          percent={activeProgress.percent}
+        />
+      ) : null}
 
       <div
         className={`flex-1 overflow-y-auto p-6 flex flex-col gap-8 relative transition-colors duration-200 ${dragActive ? 'bg-primary-alpha-10' : ''}`}
@@ -643,29 +1018,22 @@ export function LibraryPage() {
                 size="xs"
                 variant="neutral"
                 mode="stroke"
-                onClick={() => setFolderModalOpen(true)}
+                onClick={() => setQueueOpen(true)}
               >
-                <IconPlus size={14} /> New Folder
-              </Button>
-              <Button size="xs" variant="neutral" mode="stroke" onClick={() => setUrlModalOpen(true)}>
-                Import URL
-              </Button>
-              <Button
-                size="xs"
-                variant="neutral"
-                mode="stroke"
-                onClick={() => setCloudImportOpen(true)}
-              >
-                Cloud
+                Upload queue
+                {queueBadgeCount > 0 ? (
+                  <span className="ml-1.5 inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-primary-base text-white text-[10px] font-semibold px-1">
+                    {queueBadgeCount > 99 ? '99+' : queueBadgeCount}
+                  </span>
+                ) : null}
               </Button>
               <Button
                 size="xs"
-                loading={Boolean(uploadProgress)}
-                disabled={Boolean(uploadProgress)}
-                leftIcon={uploadProgress ? undefined : <IconUpload size={14} />}
-                onClick={() => fileInputRef.current?.click()}
+                leftIcon={<IconPlus size={14} />}
+                disabled={Boolean(activeProgress)}
+                onClick={() => setAddModalOpen(true)}
               >
-                {uploadProgress ? 'Uploading…' : 'Upload'}
+                Add
               </Button>
             </div>
           </div>
@@ -688,63 +1056,6 @@ export function LibraryPage() {
             />
           </div>
         </div>
-
-        {error ? (
-          <div className="relative z-20">
-            <Alert
-              status="error"
-              variant="stroke"
-              title="Library error"
-              description={error}
-              onDismiss={() => setError(null)}
-              compact
-            />
-          </div>
-        ) : null}
-
-        {uploadProgress ? (
-          <div
-            className="relative z-20 rounded-12 border border-neutral-200 bg-white p-3 shadow-sm"
-            role="status"
-            aria-live="polite"
-            aria-busy="true"
-          >
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-label-sm text-neutral-950 m-0 truncate">
-                  Uploading {uploadProgress.fileName}
-                </p>
-                <p className="text-para-xs text-neutral-400 m-0 mt-0.5">
-                  {uploadProgress.fileTotal > 1
-                    ? `File ${uploadProgress.fileIndex} of ${uploadProgress.fileTotal} · ${uploadProgress.percent}%`
-                    : `${uploadProgress.percent}%`}
-                </p>
-              </div>
-              <span className="text-label-sm text-primary-base font-semibold tabular-nums shrink-0">
-                {(() => {
-                  const overall =
-                    ((uploadProgress.fileIndex - 1 + uploadProgress.percent / 100) /
-                      uploadProgress.fileTotal) *
-                    100;
-                  return `${Math.round(overall)}%`;
-                })()}
-              </span>
-            </div>
-            <div className="h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary-base rounded-full transition-[width] duration-150 ease-out"
-                style={{
-                  width: `${Math.min(
-                    100,
-                    ((uploadProgress.fileIndex - 1 + uploadProgress.percent / 100) /
-                      uploadProgress.fileTotal) *
-                      100,
-                  )}%`,
-                }}
-              />
-            </div>
-          </div>
-        ) : null}
 
         {isLoading ? (
           <div className="relative z-20">
@@ -770,33 +1081,23 @@ export function LibraryPage() {
                   {q ? 'No folders match your search.' : 'No folders yet. Create one to organize files.'}
                 </p>
               ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 max-md:grid-cols-[repeat(auto-fill,minmax(130px,1fr))]">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-3 max-md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
                   {displayFolders.map((folder) => (
-                    <div
+                    <FolderCard
                       key={folder.id}
-                      role="button"
-                      tabIndex={0}
-                      className="group flex flex-col items-center gap-2 p-[16px_12px] bg-transparent border-none cursor-pointer font-sans rounded-12 transition-colors duration-200 text-center hover:bg-neutral-50 relative"
-                      onClick={() => openFolder(folder)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          openFolder(folder);
-                        }
+                      name={folder.name}
+                      itemCount={folder.documentCount}
+                      onOpen={() => openFolder(folder)}
+                      onMove={(e) => {
+                        e.stopPropagation();
+                        setMoveState({ kind: 'folder', item: folder });
+                        setMoveTargetId(folder.parentId);
                       }}
-                      onContextMenu={(e) => openContext(e, { kind: 'folder', item: folder })}
-                    >
-                      <FolderIcon name={folder.name} />
-                      <p className="text-label-sm text-neutral-950 mt-[2px] truncate w-full px-2 m-0">
-                        {folder.name}
-                      </p>
-                      <p className="text-para-xs text-neutral-400 m-0">
-                        {folder.documentCount} file{folder.documentCount === 1 ? '' : 's'}
-                      </p>
-                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <MoreButton onOpen={(e) => openContext(e, { kind: 'folder', item: folder })} />
-                      </div>
-                    </div>
+                      onMenu={(e) => {
+                        e.stopPropagation();
+                        openContext(e, { kind: 'folder', item: folder });
+                      }}
+                    />
                   ))}
                 </div>
               ) : (
@@ -816,15 +1117,37 @@ export function LibraryPage() {
                       role="button"
                       tabIndex={0}
                     >
-                      <SmallFolderIcon />
-                      <span className="text-label-sm text-neutral-950 flex-1 truncate">
+                      <SmallFolderIcon hasFiles={folder.documentCount > 0} />
+                      <span className="text-label-sm text-neutral-950 flex-1 truncate font-mono">
                         {folder.name}
                       </span>
-                      <span className="text-para-xs text-neutral-400 w-24">
-                        {folder.documentCount} file{folder.documentCount === 1 ? '' : 's'}
+                      <span className="text-para-xs text-neutral-400 w-24 font-mono">
+                        {folder.documentCount} item{folder.documentCount === 1 ? '' : 's'}
                       </span>
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                        <MoreButton onOpen={(e) => openContext(e, { kind: 'folder', item: folder })} />
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="inline-flex p-1.5 rounded-6 bg-white shadow-sm border border-neutral-200 text-neutral-600 hover:text-neutral-950 border-solid cursor-pointer"
+                          aria-label={`Move ${folder.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMoveState({ kind: 'folder', item: folder });
+                            setMoveTargetId(folder.parentId);
+                          }}
+                        >
+                          <IconArchive size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex p-1.5 rounded-6 bg-white shadow-sm border border-neutral-200 text-neutral-600 hover:text-neutral-950 border-solid cursor-pointer"
+                          aria-label={`Folder actions for ${folder.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openContext(e, { kind: 'folder', item: folder });
+                          }}
+                        >
+                          <IconSettings size={14} />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -860,61 +1183,25 @@ export function LibraryPage() {
                   }
                 />
               ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-4">
-                  {displayFiles.map((doc) => {
-                    const kind = fileKind(doc);
-                    const status = statusLabel(doc);
-                    return (
-                      <div
-                        key={doc.id}
-                        role="button"
-                        tabIndex={0}
-                        draggable={doc.status === 'ready'}
-                        onDragStart={(e) => onFileDragStart(e, doc)}
-                        className="group flex flex-col items-center gap-2 p-[16px_12px] bg-transparent border-none cursor-pointer font-sans rounded-12 transition-colors duration-200 text-center hover:bg-neutral-50 relative"
-                        onClick={() => setPreviewId(doc.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setPreviewId(doc.id);
-                          }
-                        }}
-                        onContextMenu={(e) => openContext(e, { kind: 'file', item: doc })}
-                      >
-                        <div className="flex items-center justify-center">
-                          <FileIcon kind={kind} />
-                        </div>
-                        <p className="text-label-sm text-neutral-950 text-[12px] break-words leading-[1.4] max-w-[120px] line-clamp-2 m-0">
-                          {doc.name}
-                        </p>
-                        <p
-                          className={`text-[11px] m-0 ${
-                            doc.status === 'failed'
-                              ? 'text-error-base'
-                              : isDocProcessing(doc)
-                                ? 'text-primary-base'
-                                : 'text-neutral-400'
-                          }`}
-                        >
-                          {status ?? `${formatBytes(doc.byteSize)} · ${formatDate(doc.createdAt)}`}
-                        </p>
-                        {(isDocProcessing(doc)) && (
-                          <div className="w-[72px] h-1 bg-neutral-100 rounded-full overflow-hidden mt-0.5">
-                            <div className="h-full w-1/2 bg-primary-base rounded-full animate-pulse" />
-                          </div>
-                        )}
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <MoreButton onOpen={(e) => openContext(e, { kind: 'file', item: doc })} />
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3">
+                  {displayFiles.map((doc) => (
+                    <FileCard
+                      key={doc.id}
+                      doc={doc}
+                      onOpen={() => setPreviewId(doc.id)}
+                      onMenu={(e) => {
+                        e.stopPropagation();
+                        openContext(e, { kind: 'file', item: doc });
+                      }}
+                      onDragStart={(e) => onFileDragStart(e, doc)}
+                    />
+                  ))}
                 </div>
               ) : (
                 <div className="flex flex-col border border-neutral-200 rounded-12 overflow-hidden bg-white">
                   {displayFiles.map((doc) => {
                     const kind = fileKind(doc);
-                    const status = statusLabel(doc);
+                    const status = cardStatusLabel(doc);
                     return (
                       <div
                         key={doc.id}
@@ -937,19 +1224,15 @@ export function LibraryPage() {
                           <span className="text-label-sm text-neutral-950 truncate block">
                             {doc.name}
                           </span>
-                          {(isDocProcessing(doc)) && (
+                          {isDocProcessing(doc) ? (
                             <div className="h-1 w-full max-w-[160px] bg-neutral-100 rounded-full overflow-hidden mt-1">
                               <div className="h-full w-1/2 bg-primary-base rounded-full animate-pulse" />
                             </div>
-                          )}
+                          ) : null}
                         </div>
                         <span
                           className={`text-para-xs w-28 hidden md:block truncate ${
-                            doc.status === 'failed'
-                              ? 'text-error-base'
-                              : isDocProcessing(doc)
-                                ? 'text-primary-base'
-                                : 'text-neutral-400'
+                            isDocProcessing(doc) ? 'text-primary-base' : 'text-neutral-400'
                           }`}
                         >
                           {status ?? formatBytes(doc.byteSize)}
@@ -972,7 +1255,7 @@ export function LibraryPage() {
 
       {/* Pinned chat composer */}
       <div
-        className="shrink-0 flex flex-col items-center px-4 pt-3 pb-4 bg-white border-t border-neutral-100 z-[100]"
+        className="relative z-10 shrink-0 flex flex-col items-center px-4 pt-3 pb-4 bg-white border-t border-neutral-100"
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1177,20 +1460,22 @@ export function LibraryPage() {
         </div>
       )}
 
-      {previewId && (
-        <DocumentCanvas
-          file={{
-            id: previewId,
-            name: previewQuery.data?.name || 'Document',
-            status: previewQuery.data?.status,
-            mimeType: previewQuery.data?.mimeType,
-          }}
-          content={previewQuery.data?.extractedText ?? null}
-          downloadUrl={previewQuery.data?.downloadUrl ?? null}
-          loading={previewQuery.isLoading}
-          onClose={() => setPreviewId(null)}
-        />
-      )}
+      <SideDrawer open={Boolean(previewId)} onOpenChange={(open) => !open && setPreviewId(null)}>
+        <SideDrawerContent showClose={false} width="md" className="p-0" accessibleTitle="Document preview">
+          <DocumentCanvas
+            file={{
+              id: previewId ?? '',
+              name: previewQuery.data?.name || 'Document',
+              status: previewQuery.data?.status,
+              mimeType: previewQuery.data?.mimeType,
+            }}
+            content={previewQuery.data?.extractedText ?? null}
+            downloadUrl={previewQuery.data?.downloadUrl ?? null}
+            loading={previewQuery.isLoading}
+            onClose={() => setPreviewId(null)}
+          />
+        </SideDrawerContent>
+      </SideDrawer>
 
       <Modal open={Boolean(versionsDoc)} onOpenChange={(open) => !open && setVersionsDoc(null)}>
         <ModalContent className="max-w-lg" size="lg">
@@ -1285,9 +1570,7 @@ export function LibraryPage() {
             notify.success('Folder created');
             setFolderModalOpen(false);
           } catch (err) {
-            const message = getErrorMessage(err, 'Could not create folder');
-            setError(message);
-            notify.error(message);
+            notify.error(getErrorMessage(err, 'Could not create folder'));
           } finally {
             setFolderBusy(false);
           }
@@ -1320,9 +1603,7 @@ export function LibraryPage() {
             setUrlModalOpen(false);
             setUrlValue('');
           } catch (err) {
-            const message = getErrorMessage(err, 'Import failed');
-            setError(message);
-            notify.error(message);
+            notify.error(getErrorMessage(err, 'Import failed'));
           } finally {
             setUrlBusy(false);
           }
@@ -1419,9 +1700,221 @@ export function LibraryPage() {
 
       <CloudImportModal
         open={cloudImportOpen}
-        onOpenChange={setCloudImportOpen}
+        onOpenChange={(open) => {
+          setCloudImportOpen(open);
+          if (!open) setCloudProvider(null);
+        }}
         folderId={currentFolderId}
+        initialProvider={cloudProvider}
       />
+
+      <Modal open={addModalOpen} onOpenChange={setAddModalOpen}>
+        <ModalContent size="md">
+          <ModalHeader
+            title="Add to library"
+            description="Create a folder, upload files, or import from a connected cloud drive."
+          />
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              className="flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-12 border-none bg-transparent cursor-pointer hover:bg-neutral-50 transition-colors"
+              onClick={() => {
+                setAddModalOpen(false);
+                setFolderModalOpen(true);
+              }}
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-10 bg-neutral-100 text-neutral-700">
+                <IconFolderSimple size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-label-sm text-neutral-950">New folder</span>
+                <span className="block text-para-xs text-neutral-400">Organize documents</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-12 border-none bg-transparent cursor-pointer hover:bg-neutral-50 transition-colors"
+              disabled={Boolean(activeProgress)}
+              onClick={() => {
+                setAddModalOpen(false);
+                fileInputRef.current?.click();
+              }}
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-10 bg-neutral-100 text-neutral-700">
+                <IconUpload size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-label-sm text-neutral-950">Upload a file</span>
+                <span className="block text-para-xs text-neutral-400">PDF, Word, images, and more</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-12 border-none bg-transparent cursor-pointer hover:bg-neutral-50 transition-colors"
+              disabled={Boolean(activeProgress)}
+              onClick={() => {
+                setAddModalOpen(false);
+                folderInputRef.current?.click();
+              }}
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-10 bg-neutral-100 text-neutral-700">
+                <IconFolderSimple size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-label-sm text-neutral-950">Upload a folder</span>
+                <span className="block text-para-xs text-neutral-400">
+                  Choose a folder from your computer
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-12 border-none bg-transparent cursor-pointer hover:bg-neutral-50 transition-colors"
+              onClick={() => {
+                setAddModalOpen(false);
+                setUrlModalOpen(true);
+              }}
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-10 bg-neutral-100 text-neutral-700">
+                <IconFile size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-label-sm text-neutral-950">Import from URL</span>
+                <span className="block text-para-xs text-neutral-400">Paste a direct document link</span>
+              </span>
+            </button>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-neutral-100">
+            <p className="text-subheading-sm text-neutral-400 tracking-[0.06em] m-0 mb-2 px-1">
+              Integrations
+            </p>
+            <div className="flex flex-col gap-1">
+              {ALL_PROVIDERS.map((provider) => {
+                const connected = connectedProviders.has(provider);
+                return (
+                  <button
+                    key={provider}
+                    type="button"
+                    className="flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-12 border-none bg-transparent cursor-pointer hover:bg-neutral-50 transition-colors"
+                    onClick={() => {
+                      setAddModalOpen(false);
+                      if (!connected) {
+                        void integrationMutations.connect
+                          .mutateAsync(provider)
+                          .then((data) => {
+                            window.location.assign(data.url);
+                          })
+                          .catch((err) =>
+                            notify.error(getErrorMessage(err, 'Could not start connect')),
+                          );
+                        return;
+                      }
+                      setCloudProvider(provider);
+                      setCloudImportOpen(true);
+                    }}
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-10 bg-neutral-100 text-neutral-700">
+                      <IconDocFile size={18} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-label-sm text-neutral-950">
+                        {PROVIDER_LABELS[provider]}
+                      </span>
+                      <span className="block text-para-xs text-neutral-400">
+                        {connected ? 'Import from cloud' : 'Connect account'}
+                      </span>
+                    </span>
+                    <span
+                      className={`text-[11px] shrink-0 ${connected ? 'text-success-base' : 'text-neutral-400'}`}
+                    >
+                      {connected ? 'Connected' : 'Not connected'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <ModalFooter>
+            <Button variant="neutral" mode="stroke" className="w-fit" onClick={() => setAddModalOpen(false)}>
+              Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <SideDrawer open={queueOpen} onOpenChange={setQueueOpen}>
+        <SideDrawerContent width="sm">
+          <SideDrawerHeader
+            title="Upload queue"
+            description="Uploads, processing, and failures for this library."
+          />
+          <SideDrawerBody className="px-4 py-3">
+            {queueItems.length === 0 ? (
+              <EmptyState
+                title="Queue is empty"
+                description="Uploads and processing jobs will show up here."
+              />
+            ) : (
+              <ul className="flex flex-col gap-2 m-0 p-0 list-none">
+                {queueItems.map((item) => (
+                  <li
+                    key={item.id}
+                    className="rounded-12 border border-neutral-200 bg-white p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-label-sm text-neutral-950 m-0 truncate">{item.name}</p>
+                        <p
+                          className={`text-para-xs m-0 mt-0.5 ${
+                            item.status === 'failed'
+                              ? 'text-error-base'
+                              : item.status === 'ready'
+                                ? 'text-success-base'
+                                : 'text-neutral-500'
+                          }`}
+                        >
+                          {queueStatusLabel(item)}
+                        </p>
+                      </div>
+                      {item.status === 'failed' && item.documentId ? (
+                        <Button
+                          size="xs"
+                          variant="neutral"
+                          mode="stroke"
+                          className="w-fit shrink-0"
+                          onClick={() => {
+                            const doc = (documentsQuery.data ?? []).find(
+                              (d) => d.id === item.documentId,
+                            );
+                            if (doc) void retryDocument(doc);
+                          }}
+                        >
+                          Retry
+                        </Button>
+                      ) : null}
+                    </div>
+                    {(item.status === 'uploading' || item.status === 'processing') && (
+                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
+                        <div
+                          className={`h-full rounded-full bg-primary-base ${
+                            typeof item.percent !== 'number' ? 'w-1/2 animate-pulse' : ''
+                          }`}
+                          style={
+                            typeof item.percent === 'number'
+                              ? { width: `${Math.min(100, Math.max(0, item.percent))}%` }
+                              : undefined
+                          }
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SideDrawerBody>
+        </SideDrawerContent>
+      </SideDrawer>
     </div>
   );
 }

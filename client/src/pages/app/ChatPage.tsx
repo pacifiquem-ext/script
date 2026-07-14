@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { MarkdownContent } from '../../components/ui/MarkdownContent';
+import { SideDrawer, SideDrawerContent } from '../../components/ui/SideDrawer';
 import { uniqueSourceChips } from '../../lib/citations';
 import { notify } from '../../components/ui/toast-alert';
 import {
@@ -739,31 +740,33 @@ export function ChatPage() {
           </p>
         </div>
       </div>
-      {preview && (
-        <DocumentCanvas
-          file={{
-            id: preview.documentId,
-            name: previewQuery.data?.name || 'Document',
-            status: previewQuery.data?.status,
-            mimeType: previewQuery.data?.mimeType,
-          }}
-          content={previewQuery.data?.extractedText ?? null}
-          downloadUrl={previewQuery.data?.downloadUrl ?? null}
-          loading={previewQuery.isLoading}
-          highlight={
-            preview.startOffset != null &&
-            preview.endOffset != null &&
-            preview.endOffset > preview.startOffset
-              ? {
-                  startOffset: preview.startOffset,
-                  endOffset: preview.endOffset,
-                  label: preview.label,
-                }
-              : null
-          }
-          onClose={() => setPreview(null)}
-        />
-      )}
+      <SideDrawer open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
+        <SideDrawerContent showClose={false} width="md" className="p-0" accessibleTitle="Document preview">
+          <DocumentCanvas
+            file={{
+              id: preview?.documentId ?? '',
+              name: previewQuery.data?.name || 'Document',
+              status: previewQuery.data?.status,
+              mimeType: previewQuery.data?.mimeType,
+            }}
+            content={previewQuery.data?.extractedText ?? null}
+            downloadUrl={previewQuery.data?.downloadUrl ?? null}
+            loading={previewQuery.isLoading}
+            highlight={
+              preview?.startOffset != null &&
+              preview?.endOffset != null &&
+              preview.endOffset > preview.startOffset
+                ? {
+                    startOffset: preview.startOffset,
+                    endOffset: preview.endOffset,
+                    label: preview.label,
+                  }
+                : null
+            }
+            onClose={() => setPreview(null)}
+          />
+        </SideDrawerContent>
+      </SideDrawer>
     </div>
   );
 }

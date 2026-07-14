@@ -1,10 +1,6 @@
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
-// pdf-parse v2 exports differently across builds; use dynamic require for CJS interop.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse') as (
-  buffer: Buffer,
-) => Promise<{ text: string; numpages?: number }>;
+import { PDFParse } from 'pdf-parse';
 import { CHUNK_OVERLAP_CHARS, CHUNK_SIZE_CHARS } from '@script/shared';
 import { env } from '../../config/env';
 
@@ -13,6 +9,24 @@ export interface TextChunk {
   startOffset: number;
   endOffset: number;
   pageNumber: number | null;
+}
+
+async function extractPdfText(buffer: Buffer): Promise<{ text: string; pageCount: number | null }> {
+  // pdfjs may transfer TypedArrays to a worker. Node pooled Buffers and parallel
+  // getText/getInfo on the same payload trigger DataCloneError on Node 21+.
+  const data = new Uint8Array(buffer.byteLength);
+  data.set(buffer);
+  const parser = new PDFParse({ data });
+  try {
+    const textResult = await parser.getText();
+    const info = await parser.getInfo();
+    return {
+      text: textResult.text?.trim() || '',
+      pageCount: typeof info.total === 'number' ? info.total : null,
+    };
+  } finally {
+    await parser.destroy();
+  }
 }
 
 export async function extractText(
@@ -24,12 +38,7 @@ export async function extractText(
   const mime = mimeType.toLowerCase();
 
   if (mime.includes('pdf') || lower.endsWith('.pdf')) {
-    const parse =
-      typeof pdfParse === 'function'
-        ? pdfParse
-        : (pdfParse as { default: typeof pdfParse }).default;
-    const result = await parse(buffer);
-    return { text: result.text?.trim() || '', pageCount: result.numpages ?? null };
+    return extractPdfText(buffer);
   }
 
   if (

@@ -398,7 +398,7 @@ export function SettingsModal({ open, onClose }: Props) {
                             {(activeWorkspace?.creditBalance ?? 0).toLocaleString()} credits
                           </span>
                         </div>
-                        <SegmentedBar percentage={72.5} color="#00B258" />
+                        <SegmentedBar percentage={72.5} color="#6060FF" />
                       </div>
                       <div className="flex items-center gap-3 pt-2">
                         <Button variant="primary" size="sm">

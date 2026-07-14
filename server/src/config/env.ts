@@ -21,7 +21,11 @@ const envSchema = z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
     // Single origin or comma-separated allowlist (e.g. http://localhost:5173,http://localhost:5174)
-    CORS_ORIGIN: z.string().default('http://localhost:5173,http://localhost:5174'),
+    CORS_ORIGIN: z
+      .string()
+      .default(
+        'http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174',
+      ),
 
     DATABASE_URL: z
       .string()

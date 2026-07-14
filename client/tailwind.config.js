@@ -20,11 +20,30 @@ export default {
           950: '#0a0a0a',
         },
         primary: {
-          base: '#00B258',
-          darker: '#009348',
-          dark: '#007a3c',
-          'alpha-10': 'rgba(0,178,88,0.08)',
-          'alpha-16': 'rgba(0,178,88,0.14)',
+          DEFAULT: '#6060FF',
+          base: '#6060FF',
+          darker: '#4B4BED',
+          dark: '#3A3AD4',
+          selection: '#4F4FFE',
+          border: '#4F4FFE',
+          'alpha-8': 'rgba(96, 96, 255, 0.08)',
+          'alpha-10': 'rgba(96, 96, 255, 0.10)',
+          'alpha-16': 'rgba(96, 96, 255, 0.16)',
+          'alpha-20': 'rgba(96, 96, 255, 0.20)',
+          'alpha-82': 'rgba(96, 96, 255, 0.82)',
+        },
+        destructive: {
+          base: '#FF4444',
+          darker: '#E53E3E',
+          dark: '#CC3333',
+          border: '#FF5555',
+        },
+        surface: {
+          chip: '#F1F2FF',
+          hero: '#FBFBFF',
+        },
+        avatar: {
+          placeholder: '#C7C7F5',
         },
         blue: {
           50: '#eff6ff',
@@ -65,6 +84,15 @@ export default {
         xl: '0 20px 25px rgba(0,0,0,0.10), 0 10px 10px rgba(0,0,0,0.04)',
         '2xl': '0 25px 50px rgba(0,0,0,0.25)',
         'button-primary-focus': '0 0 0 3px rgba(10,10,10,0.12)',
+        chip: '0 4px 60px 0 rgba(0, 0, 0, 0.10)',
+        'button-primary': '0px 10px 24px -8px rgba(58, 13, 240, 0.20)',
+        'button-primary-hover': '0px 12px 28px -6px rgba(58, 13, 240, 0.28)',
+        'button-destructive': '0px 10px 24px -8px rgba(255, 68, 68, 0.30)',
+        'button-destructive-hover': '0px 12px 28px -6px rgba(255, 68, 68, 0.38)',
+        'hero-screenshot': '0 4px 60px 0 rgba(0, 0, 0, 0.08)',
+      },
+      backdropBlur: {
+        glass: '40px',
       },
       borderRadius: {
         4: '4px',
@@ -74,16 +102,19 @@ export default {
         12: '12px',
         16: '16px',
         20: '20px',
+        21: '21px',
         full: '9999px',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['"DM Mono"', 'ui-monospace', 'monospace'],
+        serif: ['"Instrument Serif"', 'Georgia', 'serif'],
+        mono: ['"DM Mono"', 'ui-monospace', 'monospace'],
       },
       backgroundImage: {
         'primary-gradient':
-          'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 100%), #00B258',
+          'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 100%), #6060FF',
         'primary-gradient-hover':
-          'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 100%), #009348',
+          'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 100%), #4B4BED',
       },
       keyframes: {
         fadeInUp: {

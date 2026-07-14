@@ -22,10 +22,10 @@ export function ModalContent({
   const max = size === 'sm' ? 'max-w-[360px]' : size === 'lg' ? 'max-w-[520px]' : 'max-w-[420px]';
   return (
     <Dialog.Portal>
-      <Dialog.Overlay className="fixed inset-0 z-50 bg-neutral-950/40 backdrop-blur-[10px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+      <Dialog.Overlay className="fixed inset-0 z-[200] bg-neutral-950/40 backdrop-blur-[10px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
       <Dialog.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-20 bg-white p-5 shadow-xl focus:outline-none',
+          'fixed left-1/2 top-1/2 z-[201] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-20 bg-white p-5 shadow-xl focus:outline-none',
           max,
           className,
         )}

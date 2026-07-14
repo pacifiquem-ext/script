@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { IntegrationProvider } from '@script/shared';
 import { Modal, ModalContent, ModalFooter, ModalHeader } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -18,10 +18,12 @@ export function CloudImportModal({
   open,
   onOpenChange,
   folderId,
+  initialProvider = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   folderId: string | null;
+  initialProvider?: IntegrationProvider | null;
 }) {
   const integrations = useIntegrations(open);
   const mutations = useIntegrationMutations();
@@ -29,8 +31,12 @@ export function CloudImportModal({
     () => (integrations.data?.providers ?? []).filter((p) => p.connected).map((p) => p.provider),
     [integrations.data],
   );
-  const [provider, setProvider] = useState<IntegrationProvider | null>(null);
-  const activeProvider = provider ?? connected[0] ?? null;
+  const [provider, setProvider] = useState<IntegrationProvider | null>(initialProvider);
+  const activeProvider = provider ?? initialProvider ?? connected[0] ?? null;
+
+  useEffect(() => {
+    if (open) setProvider(initialProvider);
+  }, [open, initialProvider]);
   const [parentStack, setParentStack] = useState<Array<{ id: string | null; name: string }>>([
     { id: null, name: 'Root' },
   ]);
