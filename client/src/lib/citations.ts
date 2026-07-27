@@ -63,3 +63,20 @@ export function parseCitationHref(href: string | undefined): number | null {
   if (!match) return null;
   return Number(match[1]);
 }
+
+/**
+ * Pull a short window of assistant text around citation marker [n]
+ * so the document canvas can match env vars / code the model actually quoted.
+ */
+export function citationContextHint(messageContent: string, index1Based: number): string {
+  if (!messageContent || !Number.isFinite(index1Based)) return '';
+  const marker = `[${Math.trunc(index1Based)}]`;
+  const idx = messageContent.indexOf(marker);
+  if (idx < 0) {
+    // Fall back to whole message (still helps match distinctive phrases).
+    return messageContent.slice(0, 1200);
+  }
+  const start = Math.max(0, idx - 500);
+  const end = Math.min(messageContent.length, idx + marker.length + 280);
+  return messageContent.slice(start, end);
+}

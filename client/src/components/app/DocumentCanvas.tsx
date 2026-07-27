@@ -1,4 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  MAX_CITATION_HIGHLIGHT_CHARS,
+  normalizeDocumentText,
+  refineCitationRange,
+} from '@script/shared';
 import { IconClose } from '../../lib/icons';
 import { detectPreviewKind, typeBadgeLabel } from '../../lib/file-preview';
 import { MarkdownContent } from '../ui/MarkdownContent';
@@ -9,6 +14,8 @@ export type TextHighlight = {
   startOffset: number;
   endOffset: number;
   label?: string;
+  /** Optional assistant-message context near the citation marker for tighter matching. */
+  hint?: string | null;
 };
 
 interface Props {
@@ -73,18 +80,38 @@ function ProseExtracted({ text }: { text: string }) {
 
 function HighlightedExcerpt({ text, highlight }: { text: string; highlight: TextHighlight }) {
   const markRef = useRef<HTMLElement>(null);
-  const start = Math.max(0, Math.min(text.length, Math.floor(highlight.startOffset)));
-  const end = Math.max(start, Math.min(text.length, Math.floor(highlight.endOffset)));
-  const before = text.slice(0, start);
-  const mid = text.slice(start, end);
-  const after = text.slice(end);
+  // Match offsets produced by the chunker (newline-normalized, trimmed body).
+  const normalized = useMemo(() => normalizeDocumentText(text), [text]);
+  const range = useMemo(() => {
+    const baseStart = Math.max(0, Math.min(normalized.length, Math.floor(highlight.startOffset)));
+    const baseEnd = Math.max(
+      baseStart,
+      Math.min(normalized.length, Math.floor(highlight.endOffset)),
+    );
+    if (baseEnd - baseStart <= MAX_CITATION_HIGHLIGHT_CHARS && !highlight.hint) {
+      return { startOffset: baseStart, endOffset: baseEnd };
+    }
+    return refineCitationRange(
+      normalized,
+      baseStart,
+      baseEnd,
+      highlight.hint ?? null,
+      MAX_CITATION_HIGHLIGHT_CHARS,
+    );
+  }, [normalized, highlight.startOffset, highlight.endOffset, highlight.hint]);
+
+  const start = range.startOffset;
+  const end = range.endOffset;
+  const before = normalized.slice(0, start);
+  const mid = normalized.slice(start, end);
+  const after = normalized.slice(end);
 
   useEffect(() => {
     markRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [highlight.startOffset, highlight.endOffset, text]);
+  }, [start, end, normalized]);
 
   if (!mid) {
-    return <ProseExtracted text={text} />;
+    return <ProseExtracted text={normalized || text} />;
   }
 
   return (

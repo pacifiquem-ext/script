@@ -2,7 +2,9 @@ import {
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
   INGESTION_CREDIT_COST,
+  humanizeIngestionFailure,
   needsEmbeddingBackfill,
+  normalizeDocumentText,
   type BackfillBody,
 } from '@script/shared';
 import { prisma } from '../../db/prisma';
@@ -212,6 +214,7 @@ export async function processIngestion(data: IngestionJobData): Promise<void> {
       await setVersionPhase(version.id, document.id, 'extracting');
     }
 
+    text = normalizeDocumentText(text);
     if (!text) throw new Error('No text could be extracted from document');
 
     await setVersionPhase(version.id, document.id, 'chunking');
@@ -287,9 +290,10 @@ export async function processIngestion(data: IngestionJobData): Promise<void> {
       'ingestion completed',
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Ingestion failed';
+    const raw = error instanceof Error ? error.message : 'Ingestion failed';
+    const message = humanizeIngestionFailure(raw);
     logger.error(
-      { err: error, documentId: document.id, versionId: version.id, mode },
+      { err: error, documentId: document.id, versionId: version.id, mode, failureReason: message },
       'ingestion failed',
     );
     const failedVersion = await prisma.documentVersion.update({

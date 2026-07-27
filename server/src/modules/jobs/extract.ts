@@ -1,7 +1,7 @@
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import { PDFParse } from 'pdf-parse';
-import { CHUNK_OVERLAP_CHARS, CHUNK_SIZE_CHARS } from '@script/shared';
+import { CHUNK_OVERLAP_CHARS, CHUNK_SIZE_CHARS, normalizeDocumentText } from '@script/shared';
 import { env } from '../../config/env';
 
 export interface TextChunk {
@@ -125,7 +125,8 @@ export function chunkText(
   chunkSize = CHUNK_SIZE_CHARS,
   overlap = CHUNK_OVERLAP_CHARS,
 ): TextChunk[] {
-  const normalized = text.replace(/\r\n/g, '\n').trim();
+  // Offsets are relative to the same normalized body stored as extractedText.
+  const normalized = normalizeDocumentText(text);
   if (!normalized) return [];
   const chunks: TextChunk[] = [];
   let start = 0;
@@ -138,12 +139,15 @@ export function chunkText(
         end = start + paraBreak + 2;
       }
     }
-    const content = normalized.slice(start, end).trim();
+    const raw = normalized.slice(start, end);
+    const content = raw.trim();
     if (content) {
+      const lead = raw.indexOf(content);
+      const absStart = start + Math.max(0, lead);
       chunks.push({
         content,
-        startOffset: start,
-        endOffset: end,
+        startOffset: absStart,
+        endOffset: absStart + content.length,
         pageNumber: null,
       });
     }

@@ -9,6 +9,7 @@ import {
   RAG_MIN_SIMILARITY,
   RAG_TOP_K,
   paginate,
+  refineCitationRange,
   toSkipTake,
   type CreateConversationBody,
   type ListConversationsQuery,
@@ -311,17 +312,38 @@ async function retrieveContext(
 }
 
 function toCitations(chunks: RetrievedChunk[]): MessageCitation[] {
-  return chunks.map((c) => ({
-    documentId: c.document_id,
-    documentName: c.name,
-    documentVersionId: c.document_version_id,
-    chunkId: c.id,
-    position: c.position,
-    score: Number(c.score.toFixed(4)),
-    startOffset: c.start_offset,
-    endOffset: c.end_offset,
-    pageNumber: c.page_number,
-  }));
+  return chunks.map((c) => {
+    let startOffset = c.start_offset;
+    let endOffset = c.end_offset;
+    // Prefer a tight highlight inside the retrieved chunk (paragraph / env-var dense span).
+    // `content` is aligned to [start_offset, end_offset] for newly ingested docs.
+    if (
+      startOffset != null &&
+      endOffset != null &&
+      endOffset > startOffset &&
+      c.content &&
+      endOffset - startOffset === c.content.length
+    ) {
+      const local = refineCitationRange(c.content, 0, c.content.length, null);
+      startOffset = startOffset + local.startOffset;
+      endOffset = startOffset + (local.endOffset - local.startOffset);
+    } else if (c.content && startOffset != null) {
+      const local = refineCitationRange(c.content, 0, c.content.length, null);
+      startOffset = startOffset + local.startOffset;
+      endOffset = startOffset + (local.endOffset - local.startOffset);
+    }
+    return {
+      documentId: c.document_id,
+      documentName: c.name,
+      documentVersionId: c.document_version_id,
+      chunkId: c.id,
+      position: c.position,
+      score: Number(c.score.toFixed(4)),
+      startOffset,
+      endOffset,
+      pageNumber: c.page_number,
+    };
+  });
 }
 
 export interface CompletionStreamer {

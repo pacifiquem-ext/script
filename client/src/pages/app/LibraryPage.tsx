@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { IntegrationProvider, PublicDocument, PublicFolder } from '@script/shared';
+import {
+  humanizeIngestionFailure,
+  type IntegrationProvider,
+  type PublicDocument,
+  type PublicFolder,
+} from '@script/shared';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 import { CloudImportModal } from '../../components/app/CloudImportModal';
 import { UploadProgressCard } from '../../components/app/UploadProgressCard';
@@ -152,12 +157,16 @@ function isDocProcessing(doc: PublicDocument): boolean {
   return doc.status === 'pending' || doc.status === 'processing' || doc.isUpdating;
 }
 
-/** Soft label for cards — never surface failure reasons on the file name row. */
+/** Soft label for cards — prefer short humanized copy, never raw provider dumps. */
 function cardStatusLabel(doc: PublicDocument): string | null {
   if (doc.isUpdating || doc.status === 'pending' || doc.status === 'processing') {
     return 'Processing…';
   }
-  if (doc.status === 'failed') return 'Needs attention';
+  if (doc.status === 'failed') {
+    return doc.failureReason
+      ? humanizeIngestionFailure(doc.failureReason)
+      : 'Processing failed';
+  }
   return null;
 }
 
@@ -168,7 +177,11 @@ function queueStatusLabel(item: QueueItem): string {
   if (item.status === 'processing') {
     return typeof item.percent === 'number' ? `Processing ${item.percent}%` : 'Processing…';
   }
-  if (item.status === 'failed') return item.error ? `Failed — ${item.error}` : 'Failed';
+  if (item.status === 'failed') {
+    return item.error
+      ? humanizeIngestionFailure(item.error)
+      : 'Processing failed';
+  }
   return 'Ready';
 }
 
@@ -583,7 +596,9 @@ export function LibraryPage() {
         const existing = byDoc.get(doc.id);
         if (doc.status === 'failed' || isDocProcessing(doc)) {
           const status: QueueItemStatus = doc.status === 'failed' ? 'failed' : 'processing';
-          const error = doc.failureReason ?? undefined;
+          const error = doc.failureReason
+            ? humanizeIngestionFailure(doc.failureReason)
+            : undefined;
           if (!existing) {
             next.unshift({
               id: `doc-${doc.id}`,
@@ -1541,7 +1556,9 @@ export function LibraryPage() {
                     </div>
                     <p className="text-para-sm text-neutral-500 mt-0.5">
                       {new Date(version.createdAt).toLocaleString()}
-                      {version.failureReason ? ` · ${version.failureReason}` : ''}
+                      {version.failureReason
+                        ? ` · ${humanizeIngestionFailure(version.failureReason)}`
+                        : ''}
                     </p>
                   </div>
                   {version.status === 'ready' && !version.isCurrent ? (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MessageCitation } from '@script/shared';
 import {
+  citationContextHint,
   citationFromIndex,
   linkifyCitationMarkers,
   parseCitationHref,
@@ -71,5 +72,12 @@ describe('citations helpers', () => {
     expect(chips[1]?.indices).toEqual([2, 3]);
     // best chunk is highest score for storage
     expect(chips[1]?.best.chunkId).toBe('c3');
+  });
+
+  it('extracts a local hint around a citation marker', () => {
+    const content = 'Intro about storage.\n\nUse `STORAGE_DRIVER=s3` [4] for Garage.\n\nFooter.';
+    const hint = citationContextHint(content, 4);
+    expect(hint).toContain('STORAGE_DRIVER');
+    expect(hint).toContain('[4]');
   });
 });

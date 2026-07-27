@@ -35,6 +35,9 @@ config.bat
 .pnpm-store/
 
 
+# Playwright MCP local artifacts
+.playwright-mcp/
+
 # test coverage
 coverage
 

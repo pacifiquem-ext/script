@@ -1,6 +1,7 @@
 export * from './api-error';
 export * from './auth';
 export * from './constants';
+export * from './citations';
 export * from './embeddings';
 export * from './enums';
 export * from './pagination';

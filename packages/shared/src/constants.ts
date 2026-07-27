@@ -10,8 +10,11 @@ export const CHAT_HISTORY_MESSAGE_LIMIT = 20 as const;
 export const RAG_TOP_K = 8 as const;
 export const RAG_MIN_SIMILARITY = 0.2 as const;
 
-export const CHUNK_SIZE_CHARS = 1200 as const;
-export const CHUNK_OVERLAP_CHARS = 200 as const;
+/** Smaller windows keep RAG citations tight enough to read in the document canvas. */
+export const CHUNK_SIZE_CHARS = 480 as const;
+export const CHUNK_OVERLAP_CHARS = 80 as const;
+/** Max characters to highlight for a single citation jump (paragraph-level focus). */
+export const MAX_CITATION_HIGHLIGHT_CHARS = 320 as const;
 
 export const CHAT_CREDIT_COST = 1 as const;
 export const INGESTION_CREDIT_COST = 1 as const;

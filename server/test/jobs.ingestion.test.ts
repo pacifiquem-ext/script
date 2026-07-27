@@ -46,7 +46,7 @@ async function seedWorkspace(emailPrefix: string, balance = 100) {
 describe('chunkText', () => {
   it('creates overlapping chunks with offsets', () => {
     const text = 'a'.repeat(2500);
-    const chunks = chunkText(text, 1200, 200);
+    const chunks = chunkText(text, 480, 80);
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks[0]?.startOffset).toBe(0);
     expect(chunks[0]?.endOffset).toBeGreaterThan(chunks[0]!.startOffset);

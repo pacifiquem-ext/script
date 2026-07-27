@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import type { MessageCitation, PublicDocument, PublicMessage } from '@script/shared';
+import {
+  humanizeIngestionFailure,
+  type MessageCitation,
+  type PublicDocument,
+  type PublicMessage,
+} from '@script/shared';
 import voiceBubble from '../../assets/1440w/voice-bubble.png';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 import { Alert } from '../../components/ui/Alert';
@@ -11,7 +16,7 @@ import { MarkdownContent, CHAT_BODY_CLASS } from '../../components/ui/MarkdownCo
 import { ResizeHandle } from '../../components/ui/ResizeHandle';
 import { useAuth } from '../../contexts/useAuth';
 import { useResizableWidth } from '../../lib/use-resizable-width';
-import { uniqueSourceChips } from '../../lib/citations';
+import { citationContextHint, uniqueSourceChips } from '../../lib/citations';
 import { notify } from '../../components/ui/toast-alert';
 import {
   appendMessageToCache,
@@ -98,6 +103,7 @@ export function ChatPage() {
     startOffset?: number | null;
     endOffset?: number | null;
     label?: string;
+    hint?: string | null;
   } | null>(null);
   const [selectedDocs, setSelectedDocs] = useState<PublicDocument[]>([]);
   const [atQuery, setAtQuery] = useState<string | null>(null);
@@ -202,7 +208,7 @@ export function ChatPage() {
         const first = blocked[0]!;
         const message =
           first.status === 'failed'
-            ? `"${first.name}" failed processing${first.failureReason ? `: ${first.failureReason.slice(0, 140)}` : ''}. Open Library → file menu → Retry.`
+            ? `"${first.name}" ${humanizeIngestionFailure(first.failureReason)}. Open Library → file menu → Retry.`
             : `Wait for ${blocked.map((d) => d.name).join(', ')} to finish processing before chatting.`;
         setError(message);
         notify.warning(message, 'Documents not ready');
@@ -362,11 +368,19 @@ export function ChatPage() {
     setInput((prev) => `${prev}${prev.endsWith(' ') || !prev ? '' : ' '}@${doc.name} `);
   }
 
-  function openCitation(citation: MessageCitation, index1Based?: number) {
+  function openCitation(
+    citation: MessageCitation,
+    index1Based?: number,
+    messageContent?: string | null,
+  ) {
     const hasRange =
       citation.startOffset != null &&
       citation.endOffset != null &&
       citation.endOffset > citation.startOffset;
+    const hint =
+      index1Based != null && messageContent
+        ? citationContextHint(messageContent, index1Based)
+        : null;
     setPreview({
       documentId: citation.documentId,
       documentName: citation.documentName,
@@ -377,10 +391,11 @@ export function ChatPage() {
         index1Based != null
           ? `Source [${index1Based}] · ${citation.documentName}`
           : citation.documentName,
+      hint,
     });
   }
 
-  function renderCitations(citations: MessageCitation[]) {
+  function renderCitations(citations: MessageCitation[], messageContent?: string | null) {
     const chips = uniqueSourceChips(citations);
     if (!chips.length) return null;
     return (
@@ -390,7 +405,7 @@ export function ChatPage() {
             type="button"
             key={chip.documentId}
             className="text-[11px] px-2 py-0.5 rounded-full border border-primary-base/20 bg-primary-alpha-10 text-primary-base hover:bg-primary-base hover:text-white transition-colors"
-            onClick={() => openCitation(chip.best, chip.indices[0])}
+            onClick={() => openCitation(chip.best, chip.indices[0], messageContent)}
             title={
               chip.best.score != null
                 ? `${chip.documentName} · refs ${chip.indices.map((n) => `[${n}]`).join(' ')} · relevance ${(chip.best.score * 100).toFixed(0)}%`
@@ -420,10 +435,10 @@ export function ChatPage() {
           content={content}
           compact
           citations={citations}
-          onCitationClick={(citation, index) => openCitation(citation, index)}
+          onCitationClick={(citation, index) => openCitation(citation, index, content)}
         />
         {partial ? <p className="mt-1 text-[11px] text-neutral-400">Stopped early</p> : null}
-        {renderCitations(citations)}
+        {renderCitations(citations, content)}
       </div>
     );
   }
@@ -809,6 +824,7 @@ export function ChatPage() {
                       startOffset: preview.startOffset,
                       endOffset: preview.endOffset,
                       label: preview.label,
+                      hint: preview.hint,
                     }
                   : null
               }
