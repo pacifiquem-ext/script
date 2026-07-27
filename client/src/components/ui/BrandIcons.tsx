@@ -34,9 +34,6 @@ export const IconOneDrive = ({ size = 18, className = '' }: BrandIconProps) => (
 
 export const IconBox = ({ size = 18, className = '' }: BrandIconProps) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="#0061D5" className={className}>
-    <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" fill="none" stroke="currentColor" strokeWidth="2" />
-    <path d="M12 22V12" stroke="currentColor" strokeWidth="2" />
-    <path d="M22 7L12 12L2 7" stroke="currentColor" strokeWidth="2" />
-    <path d="M17 4.5L7 9.5" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.5" />
+    <path d="M12.5 2.5L3 7.2v9.6l9.5 4.7 9.5-4.7V7.2L12.5 2.5zm0 1.85L19.7 8 12.5 11.5 5.3 8l7.2-3.65zM4.4 9.35l7.3 3.55v7.35L4.4 16.7V9.35zm16.2 0v7.35l-7.3 3.55v-7.35l7.3-3.55z" />
   </svg>
 );

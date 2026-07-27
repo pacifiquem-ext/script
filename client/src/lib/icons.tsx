@@ -50,6 +50,10 @@ import {
   HelpCircleIcon,
   Archive02Icon,
   MoreHorizontalIcon,
+  Mic01Icon,
+  Pdf01Icon,
+  Xls01Icon,
+  Doc01Icon,
 } from '@hugeicons/core-free-icons';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,3 +127,7 @@ export const IconArchive = ({ size = 18, className = '' }) =>
   icon(Archive02Icon, size, className);
 export const IconImage = ({ size = 18, className = '' }) => icon(Image01Icon, size, className);
 export const IconHelp = ({ size = 18, className = '' }) => icon(HelpCircleIcon, size, className);
+export const IconMic = ({ size = 18, className = '' }) => icon(Mic01Icon, size, className);
+export const IconPdf = ({ size = 18, className = '' }) => icon(Pdf01Icon, size, className);
+export const IconXls = ({ size = 18, className = '' }) => icon(Xls01Icon, size, className);
+export const IconDoc = ({ size = 18, className = '' }) => icon(Doc01Icon, size, className);

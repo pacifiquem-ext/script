@@ -34,9 +34,17 @@ import {
 import { getErrorMessage } from '../../lib/form-errors';
 import { queryKeys } from '../../lib/query-client';
 import {
+  getTextareaCaretCoordinates,
+  splitMentionSegments,
+} from '../../lib/textarea-caret';
+import {
   IconArrowUp,
   IconAttach,
-  IconDocFile,
+  IconCheck,
+  IconClose,
+  IconDocument,
+  IconMic,
+  IconSearch,
   IconZap,
 } from '../../lib/icons';
 
@@ -49,7 +57,16 @@ const THINKING_PHRASES = [
   'Connecting the dots…',
 ];
 
+const CAPABILITY_PROMPTS = [
+  { prompt: 'Summarize this document', Icon: IconDocument },
+  { prompt: 'Find key dates and numbers', Icon: IconSearch },
+  { prompt: 'Extract action items', Icon: IconCheck },
+] as const;
+
 const CHAT_MESSAGE_TEXT = `${CHAT_BODY_CLASS} text-neutral-950 whitespace-pre-wrap m-0`;
+
+/** Shared radius for attachment pills + toolbar buttons */
+const COMPOSER_CHIP_RADIUS = 'rounded-[10px]';
 
 function timeGreetingPrefix(): string {
   const hour = new Date().getHours();
@@ -57,14 +74,6 @@ function timeGreetingPrefix(): string {
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
 }
-
-const TYPE_DOT: Record<string, string> = {
-  pdf: '#e54d2e',
-  doc: '#0070f3',
-  xls: '#1a7f3c',
-  txt: '#737373',
-  other: '#737373',
-};
 
 function mimeKind(mime: string, name: string): string {
   const m = (mime || '').toLowerCase();
@@ -80,8 +89,31 @@ function mimeKind(mime: string, name: string): string {
     n.endsWith('.csv')
   )
     return 'xls';
+  if (
+    m.startsWith('image/') ||
+    n.endsWith('.png') ||
+    n.endsWith('.jpg') ||
+    n.endsWith('.jpeg') ||
+    n.endsWith('.gif') ||
+    n.endsWith('.webp')
+  )
+    return 'img';
   if (m.startsWith('text/') || n.endsWith('.txt') || n.endsWith('.md')) return 'txt';
   return 'other';
+}
+
+const FILE_TYPE_EMOJI: Record<string, string> = {
+  pdf: '📄',
+  img: '🖼️',
+  xls: '📊',
+  doc: '📘',
+  folder: '📂',
+  txt: '📝',
+  other: '📎',
+};
+
+function fileTypeEmoji(kind: string): string {
+  return FILE_TYPE_EMOJI[kind] ?? FILE_TYPE_EMOJI.other!;
 }
 
 export function ChatPage() {
@@ -109,10 +141,12 @@ export function ChatPage() {
   const [atQuery, setAtQuery] = useState<string | null>(null);
   const [atIndex, setAtIndex] = useState(0);
   const [thinkingIndex, setThinkingIndex] = useState(0);
+  const [mentionAnchor, setMentionAnchor] = useState<{ top: number; left: number } | null>(null);
   const handledInitial = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
   const messagesQuery = useMessages(conversationId);
   // pageSize 100 so files in nested folders still appear for @ and name matching.
   const documentsQuery = useDocuments(null, true, { pageSize: 100 });
@@ -143,6 +177,35 @@ export function ChatPage() {
       })
       .slice(0, 10);
   }, [atQuery, allDocs]);
+
+  const mentionNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const doc of selectedDocs) names.add(doc.name);
+    for (const doc of allDocs) names.add(doc.name);
+    return [...names];
+  }, [allDocs, selectedDocs]);
+
+  const highlightedInput = useMemo(
+    () => splitMentionSegments(input, mentionNames),
+    [input, mentionNames],
+  );
+
+  const syncMentionAnchor = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el || atQuery === null) {
+      setMentionAnchor(null);
+      return;
+    }
+    const caret = getTextareaCaretCoordinates(el, el.selectionStart);
+    const pickerWidth = 260;
+    const left = Math.max(8, Math.min(caret.left, Math.max(8, el.clientWidth - pickerWidth - 8)));
+    const top = caret.top - el.scrollTop + caret.height + 4;
+    setMentionAnchor({ top, left });
+  }, [atQuery]);
+
+  useEffect(() => {
+    syncMentionAnchor();
+  }, [atQuery, input, mentionOptions.length, syncMentionAnchor]);
 
   // Hide optimistic bubble once the real user message is in the cache.
   const showPendingUser = Boolean(
@@ -312,6 +375,7 @@ export function ChatPage() {
       setAtIndex(0);
     } else {
       setAtQuery(null);
+      setMentionAnchor(null);
     }
   }
 
@@ -333,6 +397,7 @@ export function ChatPage() {
     setInput(`${replaced}${after}`);
     setSelectedDocs((prev) => (prev.some((p) => p.id === doc.id) ? prev : [...prev, doc]));
     setAtQuery(null);
+    setMentionAnchor(null);
     requestAnimationFrame(() => {
       const pos = replaced.length;
       el?.focus();
@@ -445,247 +510,297 @@ export function ChatPage() {
 
   function renderAssistantAvatar() {
     return (
-      <div
-        className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[#E8EAFF]"
+      <img
+        src={voiceBubble}
+        alt=""
         aria-hidden
-      >
-        <img src={voiceBubble} alt="" className="h-[18px] w-[18px] object-contain" />
+        className="h-[30px] w-[30px] shrink-0 object-contain"
+      />
+    );
+  }
+
+  function applyCapabilityPrompt(prompt: string) {
+    const el = textareaRef.current;
+    const next = `${prompt} @`;
+    onInputChange(next, next.length);
+    requestAnimationFrame(() => {
+      if (el) {
+        el.style.height = '44px';
+        el.style.height = `${Math.min(Math.max(el.scrollHeight, 44), 160)}px`;
+        el.focus();
+        el.setSelectionRange(next.length, next.length);
+      }
+      syncMentionAnchor();
+    });
+  }
+
+  function renderCapabilityPrompts() {
+    return (
+      <div className="grid w-full max-w-[720px] grid-cols-3 gap-2.5">
+        {CAPABILITY_PROMPTS.map(({ prompt, Icon }) => (
+          <button
+            type="button"
+            key={prompt}
+            className={`flex min-h-[108px] cursor-pointer flex-col items-start justify-between gap-3 border border-neutral-200 bg-white p-3.5 text-left transition-colors hover:border-primary-base/35 hover:bg-surface-chip ${COMPOSER_CHIP_RADIUS}`}
+            onClick={() => applyCapabilityPrompt(prompt)}
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-8 bg-primary-alpha-10 text-primary-base">
+              <Icon size={16} />
+            </span>
+            <span className="text-[13px] font-medium leading-snug text-neutral-700">{prompt}</span>
+          </button>
+        ))}
       </div>
     );
   }
 
-  function renderComposer({ welcome = false }: { welcome?: boolean } = {}) {
-    return (
-      <div className="relative flex w-full max-w-[720px] flex-col">
-        {mentionOptions.length > 0 && (
-          <div
-            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-10 max-h-[260px] overflow-y-auto rounded-12 bg-white p-2 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.xl)]"
-            role="listbox"
-          >
-            <p className="text-subheading-md text-neutral-400 tracking-[0.06em] p-[4px_8px_6px] m-0">
-              Files
-            </p>
-            {mentionOptions.map((doc, i) => {
-              const kind = mimeKind(doc.mimeType, doc.name);
-              const folderLabel = doc.folderId
-                ? (folderNameById.get(doc.folderId) ?? 'Folder')
-                : null;
-              const ready = doc.status === 'ready';
-              return (
-                <button
-                  type="button"
-                  key={doc.id}
-                  role="option"
-                  aria-selected={i === atIndex}
-                  className={`flex items-center gap-2.5 w-full p-[7px_8px] bg-transparent border-none cursor-pointer font-sans rounded-8 text-left transition-colors duration-200 ${i === atIndex ? 'bg-neutral-50' : 'hover:bg-neutral-50'} ${ready ? '' : 'opacity-70'}`}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    insertMention(doc);
-                  }}
-                >
-                  <span
-                    className="shrink-0 px-1.5 py-0.5 rounded-4 text-[9px] font-bold tracking-[0.05em] text-white"
-                    style={{ background: TYPE_DOT[kind] || TYPE_DOT.other }}
-                  >
-                    {kind.toUpperCase()}
-                  </span>
-                  <span className="flex-1 min-w-0 flex flex-col">
-                    <span className="text-para-sm text-neutral-950 overflow-hidden text-ellipsis whitespace-nowrap">
-                      {doc.name}
-                    </span>
-                    <span className="text-[11px] text-neutral-400 truncate">
-                      {folderLabel ? `${folderLabel} · ` : ''}
-                      {ready
-                        ? 'Ready'
-                        : doc.status === 'failed'
-                          ? 'Failed — retry in Library'
-                          : doc.status}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+  function renderComposer() {
+    const openMentionPicker = () => {
+      const el = textareaRef.current;
+      const next = `${input}${input.endsWith(' ') || !input ? '' : ' '}@`;
+      onInputChange(next, next.length);
+      requestAnimationFrame(() => {
+        el?.focus();
+        el?.setSelectionRange(next.length, next.length);
+        syncMentionAnchor();
+      });
+    };
 
+    const mentionPicker =
+      mentionOptions.length > 0 && mentionAnchor ? (
+        <div
+          className="absolute z-30 max-h-[220px] w-[260px] overflow-y-auto rounded-[10px] border border-neutral-200 bg-white p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+          style={{ top: mentionAnchor.top, left: mentionAnchor.left }}
+          role="listbox"
+        >
+          {mentionOptions.map((doc, i) => {
+            const kind = mimeKind(doc.mimeType, doc.name);
+            const folderLabel = doc.folderId
+              ? (folderNameById.get(doc.folderId) ?? 'Folder')
+              : null;
+            const ready = doc.status === 'ready';
+            return (
+              <button
+                type="button"
+                key={doc.id}
+                role="option"
+                aria-selected={i === atIndex}
+                className={`flex w-full items-center gap-2 rounded-8 border-none bg-transparent p-[6px_8px] text-left font-sans transition-colors duration-200 ${i === atIndex ? 'bg-neutral-50' : 'hover:bg-neutral-50'} ${ready ? '' : 'opacity-70'}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  insertMention(doc);
+                }}
+              >
+                <span className="text-[14px] leading-none" aria-hidden>
+                  {fileTypeEmoji(kind)}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[13px] text-neutral-950">{doc.name}</span>
+                  <span className="truncate text-[11px] text-neutral-400">
+                    {folderLabel ? `${folderLabel} · ` : ''}
+                    {ready
+                      ? 'Ready'
+                      : doc.status === 'failed'
+                        ? 'Failed — retry in Library'
+                        : doc.status}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null;
+
+    return (
+      <div className="relative flex w-full max-w-[720px] flex-col gap-2 text-left">
         {error ? (
-          <div className="mb-2">
-            <Alert
-              status="error"
-              variant="stroke"
-              compact
-              title={
-                error.toLowerCase().includes('insufficient credits')
-                  ? 'Insufficient credits'
-                  : 'Chat error'
-              }
-              description={
-                error.toLowerCase().includes('insufficient credits')
-                  ? 'Insufficient credits for this reply.'
-                  : error
-              }
-              onDismiss={() => setError(null)}
-            />
-          </div>
+          <Alert
+            status="error"
+            variant="stroke"
+            compact
+            title={
+              error.toLowerCase().includes('insufficient credits')
+                ? 'Insufficient credits'
+                : 'Chat error'
+            }
+            description={
+              error.toLowerCase().includes('insufficient credits')
+                ? 'Insufficient credits for this reply.'
+                : error
+            }
+            onDismiss={() => setError(null)}
+          />
         ) : null}
 
-        <div
-          className={`flex w-full flex-col gap-1.5 rounded-[20px] p-[6px_6px_8px] transition-shadow duration-200 ${
-            welcome
-              ? 'bg-[#E8EAFF]'
-              : 'bg-neutral-50 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.lg)] focus-within:shadow-[0_0_0_1.5px_theme(colors.neutral.300),theme(boxShadow.lg)]'
-          }`}
-        >
-          <div className="flex flex-wrap items-center gap-2 px-3 pt-1 pb-1">
-            <IconZap size={14} className="text-neutral-400" />
-            <span className="text-[13px] text-neutral-600 font-medium">
-              You are remaining with{' '}
-              <span className="text-primary-base font-semibold">
-                {credits.data?.balance?.toLocaleString() ?? '—'}
-              </span>{' '}
-              credits
-            </span>
-          </div>
+        <div className="flex items-center gap-2 px-1">
+          <IconZap size={14} className="text-neutral-400" />
+          <span className="text-[13px] font-medium text-neutral-600">
+            You are remaining with{' '}
+            <span className="font-semibold text-primary-base">
+              {credits.data?.balance?.toLocaleString() ?? '—'}
+            </span>{' '}
+            credits
+          </span>
+        </div>
 
-          <div className="relative flex flex-col overflow-hidden rounded-[14px] bg-white">
-            <textarea
-              ref={textareaRef}
-              className="flex-1 border-none outline-none resize-none bg-transparent font-sans text-neutral-950 leading-[1.6] min-h-[60px] max-h-[200px] overflow-y-auto p-[8px_16px] placeholder:text-neutral-400 text-para-md disabled:opacity-60"
-              placeholder="Ask about your documents… use @ to mention"
-              value={input}
-              aria-label="Chat message"
-              disabled={loading}
-              onChange={(e) => {
-                onInputChange(e.target.value, e.target.selectionStart ?? e.target.value.length);
-                if (textareaRef.current) {
-                  textareaRef.current.style.height = 'auto';
-                  textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
-                }
-              }}
-              onKeyDown={(e) => {
-                if (mentionOptions.length > 0) {
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setAtIndex((i) => (i + 1) % mentionOptions.length);
-                    return;
-                  }
-                  if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setAtIndex(
-                      (i) => (i - 1 + mentionOptions.length) % mentionOptions.length,
-                    );
-                    return;
-                  }
-                  if (e.key === 'Enter' || e.key === 'Tab') {
-                    e.preventDefault();
-                    insertMention(mentionOptions[atIndex]!);
-                    return;
-                  }
-                  if (e.key === 'Escape') {
-                    setAtQuery(null);
-                    return;
-                  }
-                }
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  void send(input);
-                }
-              }}
-              rows={2}
-            />
-            <div className="flex items-center justify-between gap-2 p-[8px_12px_12px_12px]">
-              <div className="flex min-w-0 flex-wrap items-center gap-1">
-                <button
-                  type="button"
-                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-8 border-none bg-transparent text-neutral-400 transition-colors duration-200 hover:bg-neutral-200 hover:text-neutral-600"
-                  aria-label="Mention a document"
-                  title="Type @ to mention a document"
-                  onClick={() => {
-                    const el = textareaRef.current;
-                    const next = `${input}${input.endsWith(' ') || !input ? '' : ' '}@`;
-                    setInput(next);
-                    setAtQuery('');
-                    setAtIndex(0);
-                    requestAnimationFrame(() => {
-                      el?.focus();
-                      const pos = next.length;
-                      el?.setSelectionRange(pos, pos);
-                    });
-                  }}
-                >
-                  <IconAttach size={17} />
-                </button>
-                {selectedDocs.map((doc) => {
-                  const kind = mimeKind(doc.mimeType, doc.name);
-                  return (
-                    <span
-                      key={doc.id}
-                      className="inline-flex max-w-[180px] items-center gap-[5px] overflow-hidden whitespace-nowrap rounded-full border border-neutral-200 bg-white px-[8px] py-[3px] text-[11px] font-medium text-neutral-600"
-                    >
-                      <span
-                        className="h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{ background: TYPE_DOT[kind] || TYPE_DOT.other }}
-                      />
-                      <IconDocFile size={12} />
-                      <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                        {doc.name}
-                      </span>
-                      <button
-                        type="button"
-                        className="ml-0.5 cursor-pointer border-none bg-transparent p-0 text-[11px] leading-none text-neutral-400 hover:text-neutral-700"
-                        aria-label={`Remove ${doc.name}`}
-                        onClick={() =>
-                          setSelectedDocs((prev) => prev.filter((d) => d.id !== doc.id))
-                        }
-                      >
-                        ×
-                      </button>
+        <div className="flex w-full flex-col gap-2 rounded-[20px] bg-neutral-100 p-2 transition-shadow duration-200 focus-within:shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
+          {selectedDocs.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 px-1 pt-0.5">
+              {selectedDocs.map((doc) => {
+                const kind = mimeKind(doc.mimeType, doc.name);
+                return (
+                  <span
+                    key={doc.id}
+                    className={`inline-flex max-w-[200px] items-center gap-1.5 overflow-hidden whitespace-nowrap border border-neutral-200 bg-white py-[5px] pl-2 pr-1.5 text-[13px] font-medium text-neutral-700 ${COMPOSER_CHIP_RADIUS}`}
+                  >
+                    <span className="text-[14px] leading-none" aria-hidden>
+                      {fileTypeEmoji(kind)}
                     </span>
-                  );
-                })}
-                {readyDocs.slice(0, 6).map((doc) => {
-                  if (selectedDocs.some((s) => s.id === doc.id)) return null;
-                  return (
+                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                      {doc.name}
+                    </span>
                     <button
                       type="button"
-                      key={`chip-${doc.id}`}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('application/x-script-document-id', doc.id);
-                        e.dataTransfer.setData('application/x-script-document-name', doc.name);
-                      }}
-                      className="hidden max-w-[120px] cursor-pointer truncate rounded-full border border-dashed border-neutral-200 bg-transparent px-2 py-0.5 text-[10px] text-neutral-400 hover:border-neutral-300 hover:text-neutral-700 sm:inline-flex"
+                      className="ml-0.5 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-[6px] border-none bg-transparent p-0 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
+                      aria-label={`Remove ${doc.name}`}
                       onClick={() =>
-                        setSelectedDocs((prev) =>
-                          prev.some((p) => p.id === doc.id) ? prev : [...prev, doc],
-                        )
+                        setSelectedDocs((prev) => prev.filter((d) => d.id !== doc.id))
                       }
-                      title={`Attach ${doc.name}`}
                     >
-                      + {doc.name}
+                      <IconClose size={12} />
                     </button>
-                  );
-                })}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div
+            className={`relative z-20 flex flex-col overflow-visible border border-neutral-200/80 bg-white ${COMPOSER_CHIP_RADIUS}`}
+          >
+            <div className="relative">
+              <div
+                ref={highlightRef}
+                aria-hidden
+                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere] px-3 py-2.5 text-left font-sans text-[15px] font-normal leading-[22px] text-neutral-950"
+              >
+                {highlightedInput.map((segment, index) =>
+                  segment.mention ? (
+                    <span
+                      key={`m-${index}`}
+                      className="text-primary-base underline decoration-primary-base/55 underline-offset-[3px]"
+                    >
+                      {segment.text}
+                    </span>
+                  ) : (
+                    <span key={`t-${index}`}>{segment.text}</span>
+                  ),
+                )}
+                {input.endsWith('\n') ? '\n' : null}
               </div>
-              {loading ? (
-                <Button size="xs" variant="neutral" mode="stroke" onClick={stopStreaming}>
-                  Stop
-                </Button>
-              ) : (
+              <textarea
+                ref={textareaRef}
+                className="composer-input relative z-10 h-[44px] max-h-[160px] w-full resize-none overflow-y-auto border-none bg-transparent px-3 py-2.5 text-left font-sans text-[15px] font-normal leading-[22px] text-transparent caret-neutral-950 outline-none [overflow-wrap:anywhere] placeholder:text-neutral-400 disabled:opacity-60"
+                placeholder={
+                  selectedDocs.length
+                    ? 'Ask about the attached documents…'
+                    : 'Ask about your documents… use @ to mention'
+                }
+                value={input}
+                aria-label="Chat message"
+                disabled={loading}
+                rows={1}
+                onScroll={(e) => {
+                  if (highlightRef.current) {
+                    highlightRef.current.scrollTop = e.currentTarget.scrollTop;
+                  }
+                  syncMentionAnchor();
+                }}
+                onSelect={syncMentionAnchor}
+                onClick={syncMentionAnchor}
+                onKeyUp={syncMentionAnchor}
+                onChange={(e) => {
+                  onInputChange(e.target.value, e.target.selectionStart ?? e.target.value.length);
+                  const el = textareaRef.current;
+                  if (el) {
+                    el.style.height = '44px';
+                    el.style.height = `${Math.min(Math.max(el.scrollHeight, 44), 160)}px`;
+                  }
+                  requestAnimationFrame(syncMentionAnchor);
+                }}
+                onKeyDown={(e) => {
+                  if (mentionOptions.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setAtIndex((i) => (i + 1) % mentionOptions.length);
+                      return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setAtIndex((i) => (i - 1 + mentionOptions.length) % mentionOptions.length);
+                      return;
+                    }
+                    if (e.key === 'Enter' || e.key === 'Tab') {
+                      e.preventDefault();
+                      insertMention(mentionOptions[atIndex]!);
+                      return;
+                    }
+                    if (e.key === 'Escape') {
+                      setAtQuery(null);
+                      setMentionAnchor(null);
+                      return;
+                    }
+                  }
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    void send(input);
+                  }
+                }}
+              />
+              {mentionPicker}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
+              <button
+                type="button"
+                className={`flex h-8 w-8 cursor-pointer items-center justify-center border border-neutral-200 bg-white text-neutral-500 transition-colors duration-200 hover:bg-neutral-50 hover:text-neutral-700 ${COMPOSER_CHIP_RADIUS}`}
+                aria-label="Mention a document"
+                title="Type @ to mention a document"
+                onClick={openMentionPicker}
+              >
+                <IconAttach size={16} />
+              </button>
+
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  className={`flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-8 border-none transition-all duration-200 ${
-                    input.trim()
-                      ? 'bg-primary-base text-white hover:scale-105 hover:bg-primary-darker'
-                      : 'cursor-not-allowed bg-neutral-100 text-neutral-400'
-                  }`}
-                  onClick={() => void send(input)}
-                  disabled={!input.trim() || loading}
-                  aria-label="Send"
+                  className={`flex h-8 w-8 cursor-pointer items-center justify-center border border-neutral-200 bg-white text-neutral-500 transition-colors duration-200 hover:bg-neutral-50 hover:text-neutral-700 ${COMPOSER_CHIP_RADIUS}`}
+                  aria-label="Voice input"
+                  title="Voice coming soon"
+                  onClick={() => notify.info('Voice input is coming soon.', 'Coming soon')}
                 >
-                  <IconArrowUp size={16} />
+                  <IconMic size={16} />
                 </button>
-              )}
+                {loading ? (
+                  <Button size="xs" variant="neutral" mode="stroke" onClick={stopStreaming}>
+                    Stop
+                  </Button>
+                ) : (
+                  <button
+                    type="button"
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center border-none transition-all duration-200 ${COMPOSER_CHIP_RADIUS} ${
+                      input.trim()
+                        ? 'cursor-pointer bg-primary-base text-white hover:scale-105 hover:bg-primary-darker'
+                        : 'cursor-not-allowed bg-neutral-100 text-neutral-400'
+                    }`}
+                    onClick={() => void send(input)}
+                    disabled={!input.trim() || loading}
+                    aria-label="Send"
+                  >
+                    <IconArrowUp size={16} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -724,19 +839,21 @@ export function ChatPage() {
               description={getErrorMessage(messagesQuery.error, 'Try again in a moment.')}
             />
           ) : isEmpty ? (
-            <div className="mx-auto flex min-h-full w-full max-w-[720px] flex-col items-center justify-center gap-10 px-6 py-12 text-center">
-              <img
-                src={voiceBubble}
-                alt=""
-                className="h-32 w-32 object-contain md:h-36 md:w-36"
-              />
-              <h1 className="m-0 text-[28px] font-medium leading-[1.2] tracking-tight text-neutral-950 md:text-[32px]">
+            <div className="mx-auto flex min-h-full w-full max-w-[720px] flex-col items-center justify-center gap-8 px-6 py-12">
+              {!input && selectedDocs.length === 0 && atQuery === null ? (
+                <img
+                  src={voiceBubble}
+                  alt=""
+                  className="h-32 w-32 shrink-0 object-contain md:h-36 md:w-36"
+                />
+              ) : null}
+              <h1 className="m-0 text-center text-[28px] font-medium leading-[1.2] tracking-tight text-neutral-950 md:text-[32px]">
                 {timeGreetingPrefix()},{' '}
                 <span className="font-serif italic text-primary-base">{firstName}</span>
               </h1>
-              {renderComposer({ welcome: true })}
+              <div className="w-full text-left">{renderComposer()}</div>
               {!readyDocs.length && allDocs.some((d) => d.status === 'failed') ? (
-                <p className="text-para-xs m-0 max-w-[420px] text-neutral-500">
+                <p className="text-para-xs m-0 max-w-[420px] text-center text-neutral-500">
                   Some uploads failed processing (often embedding rate limits). Open Library, open
                   the file menu, and choose Retry once they are ready for chat.
                 </p>
@@ -744,6 +861,7 @@ export function ChatPage() {
               <p className="text-[11px] m-0 max-w-[700px] text-center leading-[1.6] text-neutral-400">
                 Script AI only provides insights based on your uploaded documents.
               </p>
+              {renderCapabilityPrompts()}
             </div>
           ) : (
             <div className="mx-auto flex max-w-[720px] flex-col gap-8">

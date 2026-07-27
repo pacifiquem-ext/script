@@ -3,6 +3,10 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { cn } from '../../lib/cn';
 import { IconClose } from '../../lib/icons';
 import { Button } from './Button';
+import modalImage1 from '../../assets/modal-image-1.jpg';
+import modalImage2 from '../../assets/modal-image-2.jpg';
+import modalImage3 from '../../assets/modal-image-3.jpg';
+import modalImage4 from '../../assets/modal-image-4.jpg';
 
 export const Modal = Dialog.Root;
 export const ModalTrigger = Dialog.Trigger;
@@ -10,112 +14,54 @@ export const ModalClose = Dialog.Close;
 
 type ModalTone = 'primary' | 'destructive';
 
-const DOT_GRID: Record<ModalTone, string> = {
-  primary: 'radial-gradient(circle, rgba(159,159,159,0.65) 1.5px, transparent 1.6px)',
-  destructive: 'radial-gradient(circle, rgba(255, 68, 68, 0.28) 1.5px, transparent 1.6px)',
-};
+export const MODAL_IMAGES = [modalImage1, modalImage2, modalImage3, modalImage4] as const;
 
-const BLOB_FILL: Record<ModalTone, string> = {
-  primary: '#8282FF',
-  destructive: '#FF4444',
-};
-
-const BORDER: Record<ModalTone, string> = {
-  primary: 'border-primary-alpha-10',
-  destructive: 'border-destructive-base/15',
-};
-
-function ModalHeaderBlob({
-  tone,
-  className,
-  mirror = false,
-}: {
-  tone: ModalTone;
-  className?: string;
-  mirror?: boolean;
-}) {
-  const filterId = React.useId().replace(/:/g, '');
-
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="286"
-      height="133"
-      viewBox="0 0 223 180"
-      fill="none"
-      preserveAspectRatio="none"
-      className={cn('absolute h-[133.085px] w-[285.822px]', className)}
-      style={mirror ? { transform: 'scaleX(-1)' } : undefined}
-      aria-hidden
-    >
-      <g filter={`url(#${filterId})`}>
-        <path
-          d="M374.048 94.6609C357.881 82.1609 291.148 63.3609 153.548 88.1609C15.9478 112.961 181.992 166.186 224.548 188.16C278.356 215.944 356.678 222.822 378.048 166.16C387.917 139.993 390.214 107.161 374.048 94.6609Z"
-          fill={BLOB_FILL[tone]}
-        />
-      </g>
-      <defs>
-        <filter
-          id={filterId}
-          x="0"
-          y="-24"
-          width="485.822"
-          height="333.086"
-          filterUnits="userSpaceOnUse"
-          colorInterpolationFilters="sRGB"
-        >
-          <feFlood floodOpacity="0" result="BackgroundImageFix" />
-          <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
-          <feGaussianBlur stdDeviation="50" result="effect1_foregroundBlur" />
-        </filter>
-      </defs>
-    </svg>
-  );
+function pickModalImage() {
+  return MODAL_IMAGES[Math.floor(Math.random() * MODAL_IMAGES.length)]!;
 }
 
-/** Shared modal chrome from the Figma card: decorative hero → body slots → close control. */
+/** Shared modal chrome: image hero → body slots → close control. */
 export function ModalContent({
   children,
   className,
+  bodyClassName,
   showClose = true,
   size = 'md',
   tone = 'primary',
+  heroSrc,
 }: {
   children: React.ReactNode;
   className?: string;
+  /** Extra classes on the padded body stack (title / copy / actions). */
+  bodyClassName?: string;
   showClose?: boolean;
   size?: 'sm' | 'md' | 'lg';
-  /** Soft top gradient + dot tint. Use `destructive` for delete / irreversible actions. */
   tone?: ModalTone;
+  /** Optional fixed hero image; otherwise one of the modal assets is picked at random. */
+  heroSrc?: string;
 }) {
-  const max = size === 'sm' ? 'max-w-[360px]' : size === 'lg' ? 'max-w-[520px]' : 'max-w-[440px]';
+  const max = size === 'sm' ? 'max-w-[360px]' : size === 'lg' ? 'max-w-[560px]' : 'max-w-[440px]';
+  const [randomHero] = React.useState(pickModalImage);
+  const resolvedHero = heroSrc ?? randomHero;
+
   return (
     <Dialog.Portal>
       <Dialog.Overlay className="fixed inset-0 z-[200] bg-neutral-950/40 backdrop-blur-[10px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
       <Dialog.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-[201] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-20 border bg-white p-0 shadow-[0_8px_32px_rgba(0,0,0,0.08)] focus:outline-none',
-          BORDER[tone],
+          'fixed left-1/2 top-1/2 z-[201] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-20 border-0 bg-white p-0 shadow-none focus:outline-none',
           max,
           className,
         )}
+        data-tone={tone}
       >
-        {/* Figma hero header: dot mesh with two blurred blobs. Keep it decorative only. */}
-        <div className="pointer-events-none relative h-[180px] overflow-hidden bg-white" aria-hidden>
-          <div
-            className="absolute inset-0 opacity-20"
-            style={{
-              backgroundImage: DOT_GRID[tone],
-              backgroundSize: '28px 28px',
-              backgroundPosition: '16px 12px',
-            }}
-          />
-          <ModalHeaderBlob tone={tone} mirror className="left-[-74px] top-[48px]" />
-          <ModalHeaderBlob tone={tone} className="right-[-72px] top-[48px]" />
+        <div className="pointer-events-none relative h-[108px] overflow-hidden bg-neutral-100" aria-hidden>
+          <img src={resolvedHero} alt="" className="absolute inset-0 h-full w-full object-cover" />
         </div>
 
-        {/* Body slots inherit this spacing: title, optional illustration, copy/form, actions. */}
-        <div className="relative z-[1] flex flex-col gap-6 px-8 pb-8 pt-7">{children}</div>
+        <div className={cn('relative z-[1] flex flex-col gap-4 px-7 pb-6 pt-5', bodyClassName)}>
+          {children}
+        </div>
 
         {showClose ? (
           <Dialog.Close asChild>
@@ -176,19 +122,6 @@ export function ModalHeader({
         ) : null}
       </div>
     </div>
-  );
-}
-
-/** Optional art between title and body. */
-export function ModalIllustration({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn('flex items-center justify-center py-1', className)}>{children}</div>
   );
 }
 

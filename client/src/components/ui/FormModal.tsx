@@ -2,14 +2,7 @@ import React, { useEffect, useId, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Button } from './Button';
 import { Input } from './Input';
-import {
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalIllustration,
-} from './Modal';
+import { Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from './Modal';
 
 export function FormModal({
   open,
@@ -17,7 +10,6 @@ export function FormModal({
   title,
   badge,
   description,
-  illustration,
   label,
   placeholder,
   initialValue = '',
@@ -34,7 +26,6 @@ export function FormModal({
   title: string;
   badge?: string;
   description?: string;
-  illustration?: React.ReactNode;
   footerAlign?: 'start' | 'center' | 'end';
   label: string;
   placeholder?: string;
@@ -74,7 +65,6 @@ export function FormModal({
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent showClose={!loading}>
         <ModalHeader title={title} badge={badge} />
-        {illustration ? <ModalIllustration>{illustration}</ModalIllustration> : null}
         {description ? (
           <ModalBody>{description}</ModalBody>
         ) : (

@@ -1,20 +1,12 @@
 import React from 'react';
 import { Button } from './Button';
-import {
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalIllustration,
-} from './Modal';
+import { Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from './Modal';
 
 export function ConfirmModal({
   open,
   onOpenChange,
   title,
   description,
-  illustration,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   destructive = false,
@@ -24,9 +16,7 @@ export function ConfirmModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
-  /** Friendly body copy under the illustration (not a header subtitle). */
   description?: string;
-  illustration?: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
@@ -41,7 +31,6 @@ export function ConfirmModal({
         tone={destructive ? 'destructive' : 'primary'}
       >
         <ModalHeader title={title} align="start" divider />
-        {illustration ? <ModalIllustration>{illustration}</ModalIllustration> : null}
         {description ? <ModalBody align="start">{description}</ModalBody> : null}
         <ModalFooter align="end">
           <Button

@@ -392,3 +392,18 @@
   font-weight: 600;
   color: theme('colors.neutral.950');
 }
+
+/* Transparent textarea over highlight mirror — keep caret, hide native glyphs */
+.composer-input {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.composer-input::placeholder {
+  color: theme('colors.neutral.400');
+  -webkit-text-fill-color: theme('colors.neutral.400');
+}
+.composer-input::selection {
+  background: theme('colors.primary.alpha-16');
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
