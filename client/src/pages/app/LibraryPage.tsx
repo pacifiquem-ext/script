@@ -10,7 +10,21 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { FormModal } from '../../components/ui/FormModal';
 import { LoadingState } from '../../components/ui/LoadingState';
-import { Modal, ModalContent, ModalFooter, ModalHeader } from '../../components/ui/Modal';
+import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalIllustration,
+} from '../../components/ui/Modal';
+import {
+  ModalIllustrationAdd,
+  ModalIllustrationDelete,
+  ModalIllustrationLink,
+  ModalIllustrationMove,
+  ModalIllustrationRename,
+} from '../../components/ui/ModalIllustrations';
 import {
   SideDrawer,
   SideDrawerBody,
@@ -549,6 +563,11 @@ export function LibraryPage() {
     if (!q) return documents;
     return documents.filter((d) => d.name.toLowerCase().includes(q));
   }, [documentsQuery.data, q]);
+  const previewListDocument = previewId
+    ? (documentsQuery.data ?? []).find((doc) => doc.id === previewId)
+    : undefined;
+  const previewLoading =
+    Boolean(previewId) && !previewQuery.data && (previewQuery.isLoading || previewQuery.isFetching);
 
   // Mirror in-flight / failed library docs into the upload queue (statuses live there, not on cards).
   useEffect(() => {
@@ -1465,13 +1484,13 @@ export function LibraryPage() {
           <DocumentCanvas
             file={{
               id: previewId ?? '',
-              name: previewQuery.data?.name || 'Document',
-              status: previewQuery.data?.status,
-              mimeType: previewQuery.data?.mimeType,
+              name: previewQuery.data?.name ?? previewListDocument?.name ?? 'Document',
+              status: previewQuery.data?.status ?? previewListDocument?.status,
+              mimeType: previewQuery.data?.mimeType ?? previewListDocument?.mimeType,
             }}
             content={previewQuery.data?.extractedText ?? null}
             downloadUrl={previewQuery.data?.downloadUrl ?? null}
-            loading={previewQuery.isLoading}
+            loading={previewLoading}
             onClose={() => setPreviewId(null)}
           />
         </SideDrawerContent>
@@ -1479,15 +1498,16 @@ export function LibraryPage() {
 
       <Modal open={Boolean(versionsDoc)} onOpenChange={(open) => !open && setVersionsDoc(null)}>
         <ModalContent className="max-w-lg" size="lg">
-          <ModalHeader
-            title="Version history"
-            description={
-              versionsDoc
-                ? `Past versions of ${versionsDoc.name}. Restoring creates a new version; history is never rewritten.`
-                : undefined
-            }
-          />
-          <div className="max-h-[360px] overflow-y-auto space-y-2">
+          <ModalHeader title="Version history" align="start" />
+          <ModalIllustration>
+            <ModalIllustrationRename />
+          </ModalIllustration>
+          <ModalBody align="start">
+            {versionsDoc
+              ? `Past versions of ${versionsDoc.name}. Restoring creates a new version; history is never rewritten.`
+              : 'Browse and restore earlier versions of this document.'}
+          </ModalBody>
+          <div className="max-h-[360px] overflow-y-auto space-y-2 text-left">
             {versionsQuery.isLoading ? (
               <LoadingState label="Loading versions…" />
             ) : versionsQuery.isError ? (
@@ -1555,10 +1575,12 @@ export function LibraryPage() {
           if (!open && !folderBusy) setFolderModalOpen(false);
         }}
         title="New folder"
-        description="Organize documents inside your library."
+        badge="New"
+        description="Give this folder a clear name so it’s easy to find later."
         label="Folder name"
         placeholder="e.g. Contracts"
         confirmLabel="Create"
+        footerAlign="center"
         loading={folderBusy}
         onSubmit={async (name) => {
           setFolderBusy(true);
@@ -1586,7 +1608,8 @@ export function LibraryPage() {
           }
         }}
         title="Import from URL"
-        description="Paste a direct link to a PDF or document."
+        description="Paste a direct link to a PDF or document — we’ll pull it into this library for you."
+        illustration={<ModalIllustrationLink />}
         label="Document URL"
         placeholder="https://example.com/document.pdf"
         initialValue={urlValue}
@@ -1616,6 +1639,7 @@ export function LibraryPage() {
           if (!open && !renameBusy) setRenameState(null);
         }}
         title={renameState?.kind === 'folder' ? 'Rename folder' : 'Rename file'}
+        illustration={<ModalIllustrationRename />}
         label="Name"
         initialValue={renameState?.item.name ?? ''}
         confirmLabel="Save"
@@ -1632,9 +1656,14 @@ export function LibraryPage() {
         <ModalContent showClose={!moveBusy}>
           <ModalHeader
             title={moveState?.kind === 'folder' ? 'Move folder' : 'Move file'}
-            description={`Choose a destination for “${moveState?.item.name ?? ''}”.`}
           />
-          <div className="flex flex-col gap-1 max-h-[280px] overflow-y-auto">
+          <ModalIllustration>
+            <ModalIllustrationMove />
+          </ModalIllustration>
+          <ModalBody>
+            {`Pick where “${moveState?.item.name ?? 'this item'}” should live. You can always move it again later.`}
+          </ModalBody>
+          <div className="flex flex-col gap-1 max-h-[280px] overflow-y-auto text-left">
             <button
               type="button"
               className={`text-left px-3 py-2.5 rounded-10 border-none cursor-pointer text-para-sm transition-colors ${
@@ -1663,7 +1692,7 @@ export function LibraryPage() {
                 </button>
               ))}
           </div>
-          <ModalFooter className="mt-3">
+          <ModalFooter>
             <Button
               type="button"
               size="sm"
@@ -1689,9 +1718,10 @@ export function LibraryPage() {
         title={deleteState?.kind === 'folder' ? 'Delete folder?' : 'Delete file?'}
         description={
           deleteState?.kind === 'folder'
-            ? `“${deleteState.item.name}” must be empty. This cannot be undone.`
-            : `“${deleteState?.item.name ?? ''}” will be permanently removed.`
+            ? `Are you sure you want to delete “${deleteState.item.name}”? Empty it first — once it’s gone, it’s gone for good.`
+            : `Are you sure you want to delete “${deleteState?.item.name ?? 'this file'}”? This can’t be undone, so only continue if you’re certain.`
         }
+        illustration={<ModalIllustrationDelete />}
         confirmLabel="Delete"
         destructive
         loading={deleteBusy}
@@ -1710,11 +1740,14 @@ export function LibraryPage() {
 
       <Modal open={addModalOpen} onOpenChange={setAddModalOpen}>
         <ModalContent size="md">
-          <ModalHeader
-            title="Add to library"
-            description="Create a folder, upload files, or import from a connected cloud drive."
-          />
-          <div className="flex flex-col gap-1">
+          <ModalHeader title="Add to library" />
+          <ModalIllustration>
+            <ModalIllustrationAdd />
+          </ModalIllustration>
+          <ModalBody>
+            Drop something new into this library — a folder, files, a link, or a cloud import.
+          </ModalBody>
+          <div className="flex flex-col gap-1 text-left">
             <button
               type="button"
               className="flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-12 border-none bg-transparent cursor-pointer hover:bg-neutral-50 transition-colors"

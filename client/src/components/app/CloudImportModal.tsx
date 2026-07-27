@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { IntegrationProvider } from '@script/shared';
-import { Modal, ModalContent, ModalFooter, ModalHeader } from '../ui/Modal';
+import { Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { LoadingState } from '../ui/LoadingState';
 import { EmptyState } from '../ui/EmptyState';
@@ -77,11 +77,10 @@ export function CloudImportModal({
       }}
     >
       <ModalContent size="lg" className="max-h-[80vh] flex flex-col">
-        <ModalHeader
-          title="Import from cloud"
-          description="Browse a connected provider and import files into this library folder."
-        />
-
+        <ModalHeader title="Import from cloud" align="start" />
+        <ModalBody align="start">
+          Browse a connected provider and import files into this library folder.
+        </ModalBody>
         {!connected.length ? (
           <EmptyState
             title="No cloud providers connected"

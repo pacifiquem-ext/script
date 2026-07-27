@@ -1,13 +1,23 @@
 import React, { useEffect, useId, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { Button } from './Button';
 import { Input } from './Input';
-import { Modal, ModalContent, ModalFooter, ModalHeader } from './Modal';
+import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalIllustration,
+} from './Modal';
 
 export function FormModal({
   open,
   onOpenChange,
   title,
+  badge,
   description,
+  illustration,
   label,
   placeholder,
   initialValue = '',
@@ -17,11 +27,15 @@ export function FormModal({
   allowEmpty = false,
   validate,
   onSubmit,
+  footerAlign = 'end',
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  badge?: string;
   description?: string;
+  illustration?: React.ReactNode;
+  footerAlign?: 'start' | 'center' | 'end';
   label: string;
   placeholder?: string;
   initialValue?: string;
@@ -59,7 +73,13 @@ export function FormModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent showClose={!loading}>
-        <ModalHeader title={title} description={description} />
+        <ModalHeader title={title} badge={badge} />
+        {illustration ? <ModalIllustration>{illustration}</ModalIllustration> : null}
+        {description ? (
+          <ModalBody>{description}</ModalBody>
+        ) : (
+          <Dialog.Description className="sr-only">{title}</Dialog.Description>
+        )}
         <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
           <Input
             id={inputId}
@@ -74,18 +94,19 @@ export function FormModal({
               if (error) setError(null);
             }}
           />
-          <ModalFooter className="mt-2">
+          <ModalFooter align={footerAlign}>
             <Button
               type="button"
               size="sm"
               variant="neutral"
               mode="stroke"
+              className="w-fit"
               disabled={loading}
               onClick={() => onOpenChange(false)}
             >
               {cancelLabel}
             </Button>
-            <Button type="submit" size="sm" loading={loading}>
+            <Button type="submit" size="sm" className="w-fit" loading={loading}>
               {confirmLabel}
             </Button>
           </ModalFooter>

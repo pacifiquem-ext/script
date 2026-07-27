@@ -1,0 +1,14 @@
+---
+description: UI redesign only — no functionality changes; reuse atoms; marketing vs in-app tracks
+alwaysApply: true
+---
+
+# UI-only redesign
+
+During marketing and in-app visual redesigns:
+
+- **Do not change functionality** — no API, route, schema, auth, RAG, or business-logic changes unless the user explicitly asks.
+- **Reuse atoms** — `Button`, inputs, toasts, modals from `client/src/components/ui/`. Do not fork one-offs.
+- **Two tracks:** marketing landing = creative; in-app product UI = strict consistency.
+- **Illustrations:** prefer empty light-gray `IllustrationFrame` placeholders over inventing permanent art; call out every placeholder to the user.
+- Voice/meetings may be teased as coming soon — do not invent working product UI for them.

@@ -1,12 +1,20 @@
 import React from 'react';
 import { Button } from './Button';
-import { Modal, ModalContent, ModalFooter, ModalHeader } from './Modal';
+import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalIllustration,
+} from './Modal';
 
 export function ConfirmModal({
   open,
   onOpenChange,
   title,
   description,
+  illustration,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   destructive = false,
@@ -16,7 +24,9 @@ export function ConfirmModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  /** Friendly body copy under the illustration (not a header subtitle). */
   description?: string;
+  illustration?: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
@@ -25,14 +35,21 @@ export function ConfirmModal({
 }) {
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
-      <ModalContent showClose={!loading}>
-        <ModalHeader title={title} description={description} />
-        <ModalFooter>
+      <ModalContent
+        showClose={!loading}
+        size="sm"
+        tone={destructive ? 'destructive' : 'primary'}
+      >
+        <ModalHeader title={title} align="start" divider />
+        {illustration ? <ModalIllustration>{illustration}</ModalIllustration> : null}
+        {description ? <ModalBody align="start">{description}</ModalBody> : null}
+        <ModalFooter align="end">
           <Button
             type="button"
             size="sm"
             variant="neutral"
             mode="stroke"
+            className="w-fit"
             disabled={loading}
             onClick={() => onOpenChange(false)}
           >
@@ -42,6 +59,7 @@ export function ConfirmModal({
             type="button"
             size="sm"
             variant={destructive ? 'error' : 'primary'}
+            className="w-fit"
             loading={loading}
             onClick={() => void onConfirm()}
           >

@@ -73,7 +73,7 @@ export function HeroSection() {
 
           <Reveal delayMs={140}>
             <p className="font-serif m-0 mb-6 max-w-3xl self-stretch text-center text-[36px] font-normal italic leading-[110%] text-primary-selection md:text-[56px] lg:text-[64px]">
-              Every document. Every decision. One place to ask.
+              Ask anything.
             </p>
           </Reveal>
 

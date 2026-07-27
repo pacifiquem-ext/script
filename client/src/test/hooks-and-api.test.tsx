@@ -13,7 +13,7 @@ import {
 } from '../lib/workspaces';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { FormModal } from '../components/ui/FormModal';
-import { Modal, ModalContent, ModalHeader, ModalFooter } from '../components/ui/Modal';
+import { Modal, ModalBody, ModalContent, ModalHeader, ModalFooter } from '../components/ui/Modal';
 import { showAlertToast } from '../components/ui/toast-alert';
 
 function withQuery(ui: React.ReactElement) {
@@ -245,9 +245,10 @@ describe('modals', () => {
         />
         <Modal open onOpenChange={onOpenChange}>
           <ModalContent size="lg" showClose>
-            <ModalHeader title="HiShell" description="There" />
-            <ModalHeader title="NoDescShell" />
-            <ModalFooter>
+            <ModalHeader title="HiShell" align="start" />
+            <ModalBody align="start">There</ModalBody>
+            <ModalHeader title="NoDescShell" align="start" />
+            <ModalFooter align="end">
               <button type="button">ok</button>
             </ModalFooter>
           </ModalContent>

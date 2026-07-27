@@ -31,6 +31,8 @@ import { notify } from '../ui/toast-alert';
 import { getErrorMessage } from '../../lib/form-errors';
 import { LoadingState } from '../ui/LoadingState';
 import { EmptyState } from '../ui/EmptyState';
+import { ResizeHandle } from '../ui/ResizeHandle';
+import { useResizableWidth } from '../../lib/use-resizable-width';
 
 export function AppLayout() {
   const [expanded, setExpanded] = useState(true);
@@ -63,6 +65,12 @@ export function AppLayout() {
   const [deleteTarget, setDeleteTarget] = useState<PublicConversation | null>(null);
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
   const [modalBusy, setModalBusy] = useState(false);
+  const sidebarPanel = useResizableWidth({
+    storageKey: 'script.sidebarWidth',
+    defaultWidth: 260,
+    minWidth: 200,
+    maxWidth: 400,
+  });
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -172,7 +180,10 @@ export function AppLayout() {
   return (
     <div className="flex h-screen overflow-hidden bg-white">
       <aside
-        className={`shrink-0 border-r border-neutral-200 bg-white flex flex-col transition-[width] duration-300 overflow-hidden relative ${expanded ? 'w-[260px]' : 'w-[56px]'}`}
+        className={`shrink-0 bg-white flex flex-col overflow-hidden relative ${
+          expanded ? '' : 'border-r border-neutral-200'
+        } ${expanded && !sidebarPanel.resizing ? 'transition-[width] duration-300' : ''}`}
+        style={{ width: expanded ? sidebarPanel.width : 56 }}
       >
         <div
           className="flex items-center justify-between p-[14px_12px_12px] shrink-0 min-h-[52px] relative"
@@ -446,6 +457,15 @@ export function AppLayout() {
         </div>
       </aside>
 
+      {expanded ? (
+        <ResizeHandle
+          growth="right"
+          label="Resize sidebar"
+          onResizeStart={sidebarPanel.beginResize}
+          onNudge={sidebarPanel.nudge}
+        />
+      ) : null}
+
       <main className="flex-1 overflow-hidden min-w-0 flex flex-col">
         <Outlet />
       </main>
@@ -474,8 +494,8 @@ export function AppLayout() {
         title="Delete chat?"
         description={
           deleteTarget
-            ? `“${deleteTarget.title}” and its messages will be permanently removed.`
-            : undefined
+            ? `Are you sure you want to delete “${deleteTarget.title}”? Its messages will be gone for good.`
+            : 'Are you sure you want to delete this chat? Its messages will be gone for good.'
         }
         confirmLabel="Delete"
         destructive

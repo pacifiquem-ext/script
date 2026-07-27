@@ -35,15 +35,13 @@ export function Input({
   return (
     <div className={`flex flex-col gap-1.5 ${wrapperClassName}`}>
       {label && (
-        <label className="text-neutral-950 text-label-sm" htmlFor={inputId}>
+        <label className="text-[#4B5563] text-label-sm" htmlFor={inputId}>
           {label}
         </label>
       )}
       <div
-        className={`flex items-center gap-2 bg-white transition-shadow duration-200 relative group focus-within:shadow-[inset_0_0_0_1.5px_theme(colors.neutral.950)] outline-none ${sizeStyles[size]} ${
-          error
-            ? 'shadow-[inset_0_0_0_1.5px_theme(colors.error.base)]'
-            : 'shadow-[inset_0_0_0_1px_theme(colors.neutral.200)]'
+        className={`flex items-center gap-2 border border-solid bg-[#F9FAFB] transition-colors duration-200 relative group outline-none ${sizeStyles[size]} ${
+          error ? 'border-error-base' : 'border-[#E5E7EB] focus-within:border-primary-base'
         }`}
       >
         {leftIcon && (
@@ -55,7 +53,7 @@ export function Input({
           id={inputId}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : hint ? hintId : undefined}
-          className={`flex-1 border-none outline-none bg-transparent font-sans text-sm leading-5 font-normal text-neutral-950 min-w-0 placeholder:text-neutral-400 focus:outline-none focus:shadow-none ${className}`}
+          className={`flex-1 border-none outline-none bg-transparent font-sans text-sm leading-5 font-normal text-neutral-950 min-w-0 placeholder:text-[#9CA3AF] focus:outline-none focus:shadow-none ${className}`}
           {...props}
         />
         {rightIcon && (

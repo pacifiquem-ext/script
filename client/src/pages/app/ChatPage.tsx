@@ -7,7 +7,8 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { MarkdownContent } from '../../components/ui/MarkdownContent';
-import { SideDrawer, SideDrawerContent } from '../../components/ui/SideDrawer';
+import { ResizeHandle } from '../../components/ui/ResizeHandle';
+import { useResizableWidth } from '../../lib/use-resizable-width';
 import { uniqueSourceChips } from '../../lib/citations';
 import { notify } from '../../components/ui/toast-alert';
 import {
@@ -72,6 +73,7 @@ export function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<{
     documentId: string;
+    documentName: string;
     versionId?: string | null;
     startOffset?: number | null;
     endOffset?: number | null;
@@ -339,6 +341,7 @@ export function ChatPage() {
       citation.endOffset > citation.startOffset;
     setPreview({
       documentId: citation.documentId,
+      documentName: citation.documentName,
       versionId: citation.documentVersionId ?? null,
       startOffset: hasRange ? citation.startOffset : null,
       endOffset: hasRange ? citation.endOffset : null,
@@ -402,6 +405,17 @@ export function ChatPage() {
 
   const showInitialLoading = messagesQuery.isLoading && !messagesQuery.data && !pendingUser;
   const isEmpty = messages.length === 0 && !streaming && !showPendingUser && !showInitialLoading;
+  const previewListDocument = preview
+    ? allDocs.find((doc) => doc.id === preview.documentId)
+    : undefined;
+  const previewLoading =
+    Boolean(preview) && !previewQuery.data && (previewQuery.isLoading || previewQuery.isFetching);
+  const previewPanel = useResizableWidth({
+    storageKey: 'script.chatPreviewWidth',
+    defaultWidth: 480,
+    minWidth: 280,
+    maxWidth: 900,
+  });
 
   return (
     <div className="flex h-full overflow-hidden bg-white relative">
@@ -740,33 +754,44 @@ export function ChatPage() {
           </p>
         </div>
       </div>
-      <SideDrawer open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
-        <SideDrawerContent showClose={false} width="md" className="p-0" accessibleTitle="Document preview">
-          <DocumentCanvas
-            file={{
-              id: preview?.documentId ?? '',
-              name: previewQuery.data?.name || 'Document',
-              status: previewQuery.data?.status,
-              mimeType: previewQuery.data?.mimeType,
-            }}
-            content={previewQuery.data?.extractedText ?? null}
-            downloadUrl={previewQuery.data?.downloadUrl ?? null}
-            loading={previewQuery.isLoading}
-            highlight={
-              preview?.startOffset != null &&
-              preview?.endOffset != null &&
-              preview.endOffset > preview.startOffset
-                ? {
-                    startOffset: preview.startOffset,
-                    endOffset: preview.endOffset,
-                    label: preview.label,
-                  }
-                : null
-            }
-            onClose={() => setPreview(null)}
+      {preview ? (
+        <>
+          <ResizeHandle
+            growth="left"
+            label="Resize document preview"
+            onResizeStart={previewPanel.beginResize}
           />
-        </SideDrawerContent>
-      </SideDrawer>
+          <div
+            className="h-full shrink-0 min-w-0 overflow-hidden"
+            style={{ width: previewPanel.width }}
+          >
+            <DocumentCanvas
+              file={{
+                id: preview.documentId,
+                name: previewQuery.data?.name ?? previewListDocument?.name ?? preview.documentName,
+                status: previewQuery.data?.status ?? previewListDocument?.status,
+                mimeType: previewQuery.data?.mimeType ?? previewListDocument?.mimeType,
+              }}
+              content={previewQuery.data?.extractedText ?? null}
+              downloadUrl={previewQuery.data?.downloadUrl ?? null}
+              loading={previewLoading}
+              highlight={
+                preview.startOffset != null &&
+                preview.endOffset != null &&
+                preview.endOffset > preview.startOffset
+                  ? {
+                      startOffset: preview.startOffset,
+                      endOffset: preview.endOffset,
+                      label: preview.label,
+                    }
+                  : null
+              }
+              onClose={() => setPreview(null)}
+              className="h-full w-full min-h-0 border-l border-neutral-200"
+            />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
