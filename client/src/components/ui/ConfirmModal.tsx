@@ -49,7 +49,6 @@ export function ConfirmModal({
             size="sm"
             variant="neutral"
             mode="stroke"
-            className="w-fit"
             disabled={loading}
             onClick={() => onOpenChange(false)}
           >
@@ -59,7 +58,6 @@ export function ConfirmModal({
             type="button"
             size="sm"
             variant={destructive ? 'error' : 'primary'}
-            className="w-fit"
             loading={loading}
             onClick={() => void onConfirm()}
           >

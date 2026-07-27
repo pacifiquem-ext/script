@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import type { MessageCitation, PublicDocument, PublicMessage } from '@script/shared';
+import voiceBubble from '../../assets/1440w/voice-bubble.png';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { LoadingState } from '../../components/ui/LoadingState';
-import { MarkdownContent } from '../../components/ui/MarkdownContent';
+import { MarkdownContent, CHAT_BODY_CLASS } from '../../components/ui/MarkdownContent';
 import { ResizeHandle } from '../../components/ui/ResizeHandle';
+import { useAuth } from '../../contexts/useAuth';
 import { useResizableWidth } from '../../lib/use-resizable-width';
 import { uniqueSourceChips } from '../../lib/citations';
 import { notify } from '../../components/ui/toast-alert';
@@ -19,7 +21,6 @@ import {
   useMessages,
 } from '../../lib/chat-api';
 import {
-  buildDocumentPrompts,
   matchDocumentsInText,
   useDocument,
   useDocuments,
@@ -31,10 +32,26 @@ import {
   IconArrowUp,
   IconAttach,
   IconDocFile,
-  IconFile,
-  IconSparkles,
   IconZap,
 } from '../../lib/icons';
+
+const THINKING_PHRASES = [
+  'Preparing…',
+  'Noodling…',
+  'Organizing thoughts…',
+  'Synthesizing context…',
+  'Reading your library…',
+  'Connecting the dots…',
+];
+
+const CHAT_MESSAGE_TEXT = `${CHAT_BODY_CLASS} text-neutral-950 whitespace-pre-wrap m-0`;
+
+function timeGreetingPrefix(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 
 const TYPE_DOT: Record<string, string> = {
   pdf: '#e54d2e',
@@ -64,6 +81,9 @@ function mimeKind(mime: string, name: string): string {
 
 export function ChatPage() {
   const location = useLocation();
+  const { user } = useAuth();
+  const displayName = user?.name ?? 'there';
+  const firstName = displayName.split(/\s+/)[0] ?? displayName;
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +102,7 @@ export function ChatPage() {
   const [selectedDocs, setSelectedDocs] = useState<PublicDocument[]>([]);
   const [atQuery, setAtQuery] = useState<string | null>(null);
   const [atIndex, setAtIndex] = useState(0);
+  const [thinkingIndex, setThinkingIndex] = useState(0);
   const handledInitial = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -103,7 +124,6 @@ export function ChatPage() {
     for (const f of foldersQuery.data ?? []) map.set(f.id, f.name);
     return map;
   }, [foldersQuery.data]);
-  const suggestedPrompts = useMemo(() => buildDocumentPrompts(allDocs, 4), [allDocs]);
   const mentionOptions = useMemo(() => {
     if (atQuery === null) return [];
     const q = atQuery.toLowerCase();
@@ -126,6 +146,14 @@ export function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streaming, showPendingUser]);
+
+  useEffect(() => {
+    if (!loading || streaming) return;
+    const id = window.setInterval(() => {
+      setThinkingIndex((index) => (index + 1) % THINKING_PHRASES.length);
+    }, 2200);
+    return () => window.clearInterval(id);
+  }, [loading, streaming]);
 
   useEffect(() => {
     const state = location.state as { conversationId?: string } | null;
@@ -356,7 +384,7 @@ export function ChatPage() {
     const chips = uniqueSourceChips(citations);
     if (!chips.length) return null;
     return (
-      <div className="flex flex-wrap gap-1.5 mt-2">
+      <div className="mt-0 flex flex-wrap gap-1.5">
         {chips.map((chip) => (
           <button
             type="button"
@@ -381,25 +409,273 @@ export function ChatPage() {
     );
   }
 
-  function renderMessageBody(message: PublicMessage) {
-    if (message.role === 'assistant') {
-      const citations = message.citations ?? [];
-      return (
-        <>
-          <MarkdownContent
-            content={message.content}
-            compact
-            citations={citations}
-            onCitationClick={(citation, index) => openCitation(citation, index)}
-          />
-          {message.partial ? (
-            <p className="mt-1 text-[11px] text-neutral-400">Stopped early</p>
-          ) : null}
-          {renderCitations(citations)}
-        </>
-      );
-    }
-    return <p className="whitespace-pre-wrap m-0">{message.content}</p>;
+  function renderAssistantContent(
+    content: string,
+    citations: MessageCitation[],
+    partial?: boolean,
+  ) {
+    return (
+      <div className="flex min-w-0 flex-1 flex-col gap-3 text-neutral-800">
+        <MarkdownContent
+          content={content}
+          compact
+          citations={citations}
+          onCitationClick={(citation, index) => openCitation(citation, index)}
+        />
+        {partial ? <p className="mt-1 text-[11px] text-neutral-400">Stopped early</p> : null}
+        {renderCitations(citations)}
+      </div>
+    );
+  }
+
+  function renderAssistantAvatar() {
+    return (
+      <div
+        className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[#E8EAFF]"
+        aria-hidden
+      >
+        <img src={voiceBubble} alt="" className="h-[18px] w-[18px] object-contain" />
+      </div>
+    );
+  }
+
+  function renderComposer({ welcome = false }: { welcome?: boolean } = {}) {
+    return (
+      <div className="relative flex w-full max-w-[720px] flex-col">
+        {mentionOptions.length > 0 && (
+          <div
+            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-10 max-h-[260px] overflow-y-auto rounded-12 bg-white p-2 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.xl)]"
+            role="listbox"
+          >
+            <p className="text-subheading-md text-neutral-400 tracking-[0.06em] p-[4px_8px_6px] m-0">
+              Files
+            </p>
+            {mentionOptions.map((doc, i) => {
+              const kind = mimeKind(doc.mimeType, doc.name);
+              const folderLabel = doc.folderId
+                ? (folderNameById.get(doc.folderId) ?? 'Folder')
+                : null;
+              const ready = doc.status === 'ready';
+              return (
+                <button
+                  type="button"
+                  key={doc.id}
+                  role="option"
+                  aria-selected={i === atIndex}
+                  className={`flex items-center gap-2.5 w-full p-[7px_8px] bg-transparent border-none cursor-pointer font-sans rounded-8 text-left transition-colors duration-200 ${i === atIndex ? 'bg-neutral-50' : 'hover:bg-neutral-50'} ${ready ? '' : 'opacity-70'}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    insertMention(doc);
+                  }}
+                >
+                  <span
+                    className="shrink-0 px-1.5 py-0.5 rounded-4 text-[9px] font-bold tracking-[0.05em] text-white"
+                    style={{ background: TYPE_DOT[kind] || TYPE_DOT.other }}
+                  >
+                    {kind.toUpperCase()}
+                  </span>
+                  <span className="flex-1 min-w-0 flex flex-col">
+                    <span className="text-para-sm text-neutral-950 overflow-hidden text-ellipsis whitespace-nowrap">
+                      {doc.name}
+                    </span>
+                    <span className="text-[11px] text-neutral-400 truncate">
+                      {folderLabel ? `${folderLabel} · ` : ''}
+                      {ready
+                        ? 'Ready'
+                        : doc.status === 'failed'
+                          ? 'Failed — retry in Library'
+                          : doc.status}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {error ? (
+          <div className="mb-2">
+            <Alert
+              status="error"
+              variant="stroke"
+              compact
+              title={
+                error.toLowerCase().includes('insufficient credits')
+                  ? 'Insufficient credits'
+                  : 'Chat error'
+              }
+              description={
+                error.toLowerCase().includes('insufficient credits')
+                  ? 'Insufficient credits for this reply.'
+                  : error
+              }
+              onDismiss={() => setError(null)}
+            />
+          </div>
+        ) : null}
+
+        <div
+          className={`flex w-full flex-col gap-1.5 rounded-[20px] p-[6px_6px_8px] transition-shadow duration-200 ${
+            welcome
+              ? 'bg-[#E8EAFF]'
+              : 'bg-neutral-50 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.lg)] focus-within:shadow-[0_0_0_1.5px_theme(colors.neutral.300),theme(boxShadow.lg)]'
+          }`}
+        >
+          <div className="flex flex-wrap items-center gap-2 px-3 pt-1 pb-1">
+            <IconZap size={14} className="text-neutral-400" />
+            <span className="text-[13px] text-neutral-600 font-medium">
+              You are remaining with{' '}
+              <span className="text-primary-base font-semibold">
+                {credits.data?.balance?.toLocaleString() ?? '—'}
+              </span>{' '}
+              credits
+            </span>
+          </div>
+
+          <div className="relative flex flex-col overflow-hidden rounded-[14px] bg-white">
+            <textarea
+              ref={textareaRef}
+              className="flex-1 border-none outline-none resize-none bg-transparent font-sans text-neutral-950 leading-[1.6] min-h-[60px] max-h-[200px] overflow-y-auto p-[8px_16px] placeholder:text-neutral-400 text-para-md disabled:opacity-60"
+              placeholder="Ask about your documents… use @ to mention"
+              value={input}
+              aria-label="Chat message"
+              disabled={loading}
+              onChange={(e) => {
+                onInputChange(e.target.value, e.target.selectionStart ?? e.target.value.length);
+                if (textareaRef.current) {
+                  textareaRef.current.style.height = 'auto';
+                  textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
+                }
+              }}
+              onKeyDown={(e) => {
+                if (mentionOptions.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setAtIndex((i) => (i + 1) % mentionOptions.length);
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setAtIndex(
+                      (i) => (i - 1 + mentionOptions.length) % mentionOptions.length,
+                    );
+                    return;
+                  }
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    insertMention(mentionOptions[atIndex]!);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    setAtQuery(null);
+                    return;
+                  }
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void send(input);
+                }
+              }}
+              rows={2}
+            />
+            <div className="flex items-center justify-between gap-2 p-[8px_12px_12px_12px]">
+              <div className="flex min-w-0 flex-wrap items-center gap-1">
+                <button
+                  type="button"
+                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-8 border-none bg-transparent text-neutral-400 transition-colors duration-200 hover:bg-neutral-200 hover:text-neutral-600"
+                  aria-label="Mention a document"
+                  title="Type @ to mention a document"
+                  onClick={() => {
+                    const el = textareaRef.current;
+                    const next = `${input}${input.endsWith(' ') || !input ? '' : ' '}@`;
+                    setInput(next);
+                    setAtQuery('');
+                    setAtIndex(0);
+                    requestAnimationFrame(() => {
+                      el?.focus();
+                      const pos = next.length;
+                      el?.setSelectionRange(pos, pos);
+                    });
+                  }}
+                >
+                  <IconAttach size={17} />
+                </button>
+                {selectedDocs.map((doc) => {
+                  const kind = mimeKind(doc.mimeType, doc.name);
+                  return (
+                    <span
+                      key={doc.id}
+                      className="inline-flex max-w-[180px] items-center gap-[5px] overflow-hidden whitespace-nowrap rounded-full border border-neutral-200 bg-white px-[8px] py-[3px] text-[11px] font-medium text-neutral-600"
+                    >
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ background: TYPE_DOT[kind] || TYPE_DOT.other }}
+                      />
+                      <IconDocFile size={12} />
+                      <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+                        {doc.name}
+                      </span>
+                      <button
+                        type="button"
+                        className="ml-0.5 cursor-pointer border-none bg-transparent p-0 text-[11px] leading-none text-neutral-400 hover:text-neutral-700"
+                        aria-label={`Remove ${doc.name}`}
+                        onClick={() =>
+                          setSelectedDocs((prev) => prev.filter((d) => d.id !== doc.id))
+                        }
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
+                {readyDocs.slice(0, 6).map((doc) => {
+                  if (selectedDocs.some((s) => s.id === doc.id)) return null;
+                  return (
+                    <button
+                      type="button"
+                      key={`chip-${doc.id}`}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('application/x-script-document-id', doc.id);
+                        e.dataTransfer.setData('application/x-script-document-name', doc.name);
+                      }}
+                      className="hidden max-w-[120px] cursor-pointer truncate rounded-full border border-dashed border-neutral-200 bg-transparent px-2 py-0.5 text-[10px] text-neutral-400 hover:border-neutral-300 hover:text-neutral-700 sm:inline-flex"
+                      onClick={() =>
+                        setSelectedDocs((prev) =>
+                          prev.some((p) => p.id === doc.id) ? prev : [...prev, doc],
+                        )
+                      }
+                      title={`Attach ${doc.name}`}
+                    >
+                      + {doc.name}
+                    </button>
+                  );
+                })}
+              </div>
+              {loading ? (
+                <Button size="xs" variant="neutral" mode="stroke" onClick={stopStreaming}>
+                  Stop
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  className={`flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-8 border-none transition-all duration-200 ${
+                    input.trim()
+                      ? 'bg-primary-base text-white hover:scale-105 hover:bg-primary-darker'
+                      : 'cursor-not-allowed bg-neutral-100 text-neutral-400'
+                  }`}
+                  onClick={() => void send(input)}
+                  disabled={!input.trim() || loading}
+                  aria-label="Send"
+                >
+                  <IconArrowUp size={16} />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
 
@@ -418,341 +694,91 @@ export function ChatPage() {
   });
 
   return (
-    <div className="flex h-full overflow-hidden bg-white relative">
+    <div className="relative flex h-full overflow-hidden bg-white">
       <div
-        className="flex-1 flex flex-col min-w-0 relative h-full"
+        className="relative flex h-full min-w-0 flex-1 flex-col"
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDropChat}
       >
-        <div
-          className="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.neutral.200)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.neutral.200)_1px,transparent_1px)] bg-[size:64px_64px] pointer-events-none z-0"
-          aria-hidden
-        />
-        <div
-          className="absolute inset-0 bg-[radial-gradient(ellipse_110%_55%_at_50%_0%,transparent_0%,theme(colors.neutral.0)_72%)] pointer-events-none z-10"
-          aria-hidden
-        />
-
-        <div className="flex-1 overflow-y-auto p-[24px_16px] relative z-20">
-          <div className="max-w-[720px] mx-auto flex flex-col gap-5">
-            {showInitialLoading ? (
-              <LoadingState label="Loading conversation…" />
-            ) : messagesQuery.isError ? (
-              <EmptyState
-                title="Couldn’t load messages"
-                description={getErrorMessage(messagesQuery.error, 'Try again in a moment.')}
+        <div className="relative z-20 flex-1 overflow-y-auto p-[24px_16px]">
+          {showInitialLoading ? (
+            <LoadingState label="Loading conversation…" />
+          ) : messagesQuery.isError ? (
+            <EmptyState
+              title="Couldn’t load messages"
+              description={getErrorMessage(messagesQuery.error, 'Try again in a moment.')}
+            />
+          ) : isEmpty ? (
+            <div className="mx-auto flex min-h-full w-full max-w-[720px] flex-col items-center justify-center gap-10 px-6 py-12 text-center">
+              <img
+                src={voiceBubble}
+                alt=""
+                className="h-32 w-32 object-contain md:h-36 md:w-36"
               />
-            ) : isEmpty ? (
-              <div className="flex flex-col items-center text-center p-[80px_24px] gap-4">
-                <div className="w-14 h-14 bg-neutral-50 rounded-16 border border-neutral-200 flex items-center justify-center text-neutral-400">
-                  <IconFile size={28} />
-                </div>
-                <h2 className="text-h6 text-neutral-950 m-0">Ask about your documents</h2>
-                <p className="text-para-sm text-neutral-600 max-w-[400px] leading-[1.7] m-0">
-                  Upload a document or open one from your library.
-                  <br />
-                  Extract details, find information, and get answers instantly.
+              <h1 className="m-0 text-[28px] font-medium leading-[1.2] tracking-tight text-neutral-950 md:text-[32px]">
+                {timeGreetingPrefix()},{' '}
+                <span className="font-serif italic text-primary-base">{firstName}</span>
+              </h1>
+              {renderComposer({ welcome: true })}
+              {!readyDocs.length && allDocs.some((d) => d.status === 'failed') ? (
+                <p className="text-para-xs m-0 max-w-[420px] text-neutral-500">
+                  Some uploads failed processing (often embedding rate limits). Open Library, open
+                  the file menu, and choose Retry once they are ready for chat.
                 </p>
-                <div className="flex flex-wrap gap-2 justify-center w-full max-w-[560px] mt-2">
-                  {suggestedPrompts.map((prompt) => (
-                    <button
-                      type="button"
-                      key={prompt}
-                      className="px-3.5 py-[7px] bg-white border border-neutral-200 rounded-full text-neutral-600 cursor-pointer font-sans text-[13px] transition-colors duration-200 text-para-sm hover:bg-neutral-50 hover:text-neutral-950 hover:border-neutral-300"
-                      onClick={() => void send(prompt)}
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-                {!readyDocs.length && allDocs.some((d) => d.status === 'failed') ? (
-                  <p className="text-para-xs text-neutral-500 m-0 max-w-[420px]">
-                    Some uploads failed processing (often embedding rate limits). Open Library, open
-                    the file menu, and choose Retry once they are ready for chat.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {messages.map((message: PublicMessage) => (
-              <div
-                key={message.id}
-                className={`max-w-[80%] rounded-16 px-4 py-3 text-para-sm ${
-                  message.role === 'user'
-                    ? 'ml-auto bg-primary-alpha-10 text-neutral-950'
-                    : 'bg-white shadow-[inset_0_0_0_1px_theme(colors.neutral.200)] text-neutral-800'
-                }`}
-              >
-                {renderMessageBody(message)}
-              </div>
-            ))}
-            {showPendingUser && pendingUser ? (
-              <div className="max-w-[80%] ml-auto rounded-16 px-4 py-3 text-para-sm whitespace-pre-wrap bg-primary-alpha-10 text-neutral-950">
-                {pendingUser}
-              </div>
-            ) : null}
-            {(streaming || (loading && !streaming)) && (
-              <div className="flex gap-3 items-end max-w-[80%]">
-                <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 bg-neutral-950 text-white">
-                  <IconSparkles size={13} />
-                </div>
-                <div className="rounded-16 rounded-bl-4 px-4 py-3 text-para-sm bg-white shadow-[inset_0_0_0_1px_theme(colors.neutral.200)] text-neutral-800 min-w-0">
-                  {streaming ? (
-                    <MarkdownContent
-                      content={streaming}
-                      compact
-                      citations={liveCitations}
-                      onCitationClick={(citation, index) => openCitation(citation, index)}
-                    />
-                  ) : (
-                    <div className="flex items-center gap-1 py-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse [animation-delay:0.2s]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse [animation-delay:0.4s]" />
-                    </div>
-                  )}
-                  {renderCitations(liveCitations)}
-                </div>
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-        </div>
-
-        <div className="p-[16px_16px_20px] bg-transparent flex flex-col items-center gap-2 relative z-20">
-          <div className="w-full max-w-[720px] relative flex flex-col">
-            {mentionOptions.length > 0 && (
-              <div
-                className="absolute bottom-[calc(100%+8px)] left-0 right-0 bg-white rounded-12 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.xl)] p-2 max-h-[260px] overflow-y-auto z-10"
-                role="listbox"
-              >
-                <p className="text-subheading-md text-neutral-400 tracking-[0.06em] p-[4px_8px_6px] m-0">
-                  Files
-                </p>
-                {mentionOptions.map((doc, i) => {
-                  const kind = mimeKind(doc.mimeType, doc.name);
-                  const folderLabel = doc.folderId
-                    ? folderNameById.get(doc.folderId) ?? 'Folder'
-                    : null;
-                  const ready = doc.status === 'ready';
-                  return (
-                    <button
-                      type="button"
-                      key={doc.id}
-                      role="option"
-                      aria-selected={i === atIndex}
-                      className={`flex items-center gap-2.5 w-full p-[7px_8px] bg-transparent border-none cursor-pointer font-sans rounded-8 text-left transition-colors duration-200 ${i === atIndex ? 'bg-neutral-50' : 'hover:bg-neutral-50'} ${ready ? '' : 'opacity-70'}`}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        insertMention(doc);
-                      }}
-                    >
-                      <span
-                        className="shrink-0 px-1.5 py-0.5 rounded-4 text-[9px] font-bold tracking-[0.05em] text-white"
-                        style={{ background: TYPE_DOT[kind] || TYPE_DOT.other }}
-                      >
-                        {kind.toUpperCase()}
-                      </span>
-                      <span className="flex-1 min-w-0 flex flex-col">
-                        <span className="text-para-sm text-neutral-950 overflow-hidden text-ellipsis whitespace-nowrap">
-                          {doc.name}
-                        </span>
-                        <span className="text-[11px] text-neutral-400 truncate">
-                          {folderLabel ? `${folderLabel} · ` : ''}
-                          {ready
-                            ? 'Ready'
-                            : doc.status === 'failed'
-                              ? 'Failed — retry in Library'
-                              : doc.status}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {error ? (
-              <div className="mb-2">
-                <Alert
-                  status="error"
-                  variant="stroke"
-                  compact
-                  title={
-                    error.toLowerCase().includes('insufficient credits')
-                      ? 'Insufficient credits'
-                      : 'Chat error'
-                  }
-                  description={
-                    error.toLowerCase().includes('insufficient credits')
-                      ? 'Insufficient credits for this reply.'
-                      : error
-                  }
-                  onDismiss={() => setError(null)}
-                />
-              </div>
-            ) : null}
-
-            <div className="w-full bg-neutral-50 rounded-[20px] p-[6px_6px_8px] flex flex-col gap-1.5 shadow-[0_0_0_1px_theme(colors.neutral.200),theme(boxShadow.lg)] transition-shadow duration-200 focus-within:shadow-[0_0_0_1.5px_theme(colors.neutral.300),theme(boxShadow.lg)]">
-              <div className="flex items-center gap-2 px-3 pt-1 pb-1 flex-wrap">
-                <IconZap size={14} className="text-neutral-400" />
-                <span className="text-[13px] text-neutral-600 font-medium">
-                  You are remaining with{' '}
-                  <span className="text-primary-base font-semibold">
-                    {credits.data?.balance?.toLocaleString() ?? '—'}
-                  </span>{' '}
-                  credits
-                </span>
-              </div>
-
-              <div className="bg-white rounded-[14px] shadow-sm border border-neutral-200 flex flex-col overflow-hidden relative">
-                <textarea
-                  ref={textareaRef}
-                  className="flex-1 border-none outline-none resize-none bg-transparent font-sans text-neutral-950 leading-[1.6] min-h-[60px] max-h-[200px] overflow-y-auto p-[8px_16px] placeholder:text-neutral-400 text-para-md disabled:opacity-60"
-                  placeholder="Ask about your documents… use @ to mention"
-                  value={input}
-                  aria-label="Chat message"
-                  disabled={loading}
-                  onChange={(e) => {
-                    onInputChange(
-                      e.target.value,
-                      e.target.selectionStart ?? e.target.value.length,
-                    );
-                    if (textareaRef.current) {
-                      textareaRef.current.style.height = 'auto';
-                      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (mentionOptions.length > 0) {
-                      if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        setAtIndex((i) => (i + 1) % mentionOptions.length);
-                        return;
-                      }
-                      if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        setAtIndex((i) => (i - 1 + mentionOptions.length) % mentionOptions.length);
-                        return;
-                      }
-                      if (e.key === 'Enter' || e.key === 'Tab') {
-                        e.preventDefault();
-                        insertMention(mentionOptions[atIndex]!);
-                        return;
-                      }
-                      if (e.key === 'Escape') {
-                        setAtQuery(null);
-                        return;
-                      }
-                    }
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      void send(input);
-                    }
-                  }}
-                  rows={2}
-                />
-                <div className="flex items-center justify-between p-[8px_12px_12px_12px] gap-2">
-                  <div className="flex items-center gap-1 flex-wrap min-w-0">
-                    <button
-                      type="button"
-                      className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 rounded-8 transition-colors duration-200 hover:text-neutral-600 hover:bg-neutral-200"
-                      aria-label="Mention a document"
-                      title="Type @ to mention a document"
-                      onClick={() => {
-                        const el = textareaRef.current;
-                        const next = `${input}${input.endsWith(' ') || !input ? '' : ' '}@`;
-                        setInput(next);
-                        setAtQuery('');
-                        setAtIndex(0);
-                        requestAnimationFrame(() => {
-                          el?.focus();
-                          const pos = next.length;
-                          el?.setSelectionRange(pos, pos);
-                        });
-                      }}
-                    >
-                      <IconAttach size={17} />
-                    </button>
-                    {selectedDocs.map((doc) => {
-                      const kind = mimeKind(doc.mimeType, doc.name);
-                      return (
-                        <span
-                          key={doc.id}
-                          className="inline-flex items-center gap-[5px] px-[8px] py-[3px] bg-white border border-neutral-200 rounded-full text-[11px] font-medium text-neutral-600 whitespace-nowrap max-w-[180px] overflow-hidden"
-                        >
-                          <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ background: TYPE_DOT[kind] || TYPE_DOT.other }}
-                          />
-                          <IconDocFile size={12} />
-                          <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-                            {doc.name}
-                          </span>
-                          <button
-                            type="button"
-                            className="ml-0.5 p-0 bg-transparent border-none cursor-pointer text-neutral-400 hover:text-neutral-700 text-[11px] leading-none"
-                            aria-label={`Remove ${doc.name}`}
-                            onClick={() =>
-                              setSelectedDocs((prev) => prev.filter((d) => d.id !== doc.id))
-                            }
-                          >
-                            ×
-                          </button>
-                        </span>
-                      );
-                    })}
-                    {readyDocs.slice(0, 6).map((doc) => {
-                      if (selectedDocs.some((s) => s.id === doc.id)) return null;
-                      return (
-                        <button
-                          type="button"
-                          key={`chip-${doc.id}`}
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('application/x-script-document-id', doc.id);
-                            e.dataTransfer.setData('application/x-script-document-name', doc.name);
-                          }}
-                          className="hidden sm:inline-flex text-[10px] px-2 py-0.5 rounded-full border border-dashed border-neutral-200 text-neutral-400 hover:text-neutral-700 hover:border-neutral-300 cursor-pointer bg-transparent max-w-[120px] truncate"
-                          onClick={() =>
-                            setSelectedDocs((prev) =>
-                              prev.some((p) => p.id === doc.id) ? prev : [...prev, doc],
-                            )
-                          }
-                          title={`Attach ${doc.name}`}
-                        >
-                          + {doc.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {loading ? (
-                    <Button size="xs" variant="neutral" mode="stroke" onClick={stopStreaming}>
-                      Stop
-                    </Button>
-                  ) : (
-                    <button
-                      type="button"
-                      className={`flex items-center justify-center w-8 h-8 border-none rounded-8 cursor-pointer transition-all duration-200 shrink-0 ${
-                        input.trim()
-                          ? 'bg-primary-base text-white hover:bg-primary-darker hover:scale-105'
-                          : 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
-                      }`}
-                      onClick={() => void send(input)}
-                      disabled={!input.trim() || loading}
-                      aria-label="Send"
-                    >
-                      <IconArrowUp size={16} />
-                    </button>
-                  )}
-                </div>
-              </div>
+              ) : null}
+              <p className="text-[11px] m-0 max-w-[700px] text-center leading-[1.6] text-neutral-400">
+                Script AI only provides insights based on your uploaded documents.
+              </p>
             </div>
-          </div>
-          <p className="text-[11px] text-neutral-400 text-center max-w-[700px] leading-[1.6] mt-2 mb-0">
-            Script AI only provides insights based on your uploaded documents.
-          </p>
+          ) : (
+            <div className="mx-auto flex max-w-[720px] flex-col gap-8">
+              {messages.map((message: PublicMessage) =>
+                message.role === 'user' ? (
+                  <div
+                    key={message.id}
+                    className="ml-auto max-w-[80%] rounded-16 bg-primary-alpha-10 px-4 py-3 text-neutral-950"
+                  >
+                    <p className={CHAT_MESSAGE_TEXT}>{message.content}</p>
+                  </div>
+                ) : (
+                  <div key={message.id} className="flex max-w-[85%] gap-3">
+                    {renderAssistantAvatar()}
+                    {renderAssistantContent(message.content, message.citations ?? [], message.partial)}
+                  </div>
+                ),
+              )}
+              {showPendingUser && pendingUser ? (
+                <div className="ml-auto max-w-[80%] rounded-16 bg-primary-alpha-10 px-4 py-3 text-neutral-950">
+                  <p className={CHAT_MESSAGE_TEXT}>{pendingUser}</p>
+                </div>
+              ) : null}
+              {(streaming || (loading && !streaming)) && (
+                <div className="flex max-w-[85%] gap-3">
+                  {renderAssistantAvatar()}
+                  <div className="flex min-w-0 flex-1 flex-col gap-3 text-neutral-800">
+                    {streaming ? (
+                      renderAssistantContent(streaming, liveCitations)
+                    ) : (
+                      <p className={`${CHAT_BODY_CLASS} m-0 text-neutral-500`}>
+                        {THINKING_PHRASES[thinkingIndex]}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+          )}
         </div>
+
+        {!isEmpty ? (
+          <div className="relative z-20 flex flex-col items-center gap-2 bg-transparent p-[16px_16px_20px]">
+            {renderComposer()}
+            <p className="text-[11px] m-0 max-w-[700px] text-center leading-[1.6] text-neutral-400">
+              Script AI only provides insights based on your uploaded documents.
+            </p>
+          </div>
+        ) : null}
       </div>
       {preview ? (
         <>

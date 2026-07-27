@@ -100,13 +100,12 @@ export function FormModal({
               size="sm"
               variant="neutral"
               mode="stroke"
-              className="w-fit"
               disabled={loading}
               onClick={() => onOpenChange(false)}
             >
               {cancelLabel}
             </Button>
-            <Button type="submit" size="sm" className="w-fit" loading={loading}>
+            <Button type="submit" size="sm" loading={loading}>
               {confirmLabel}
             </Button>
           </ModalFooter>

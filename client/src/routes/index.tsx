@@ -112,7 +112,7 @@ export const router = createBrowserRouter([
       {
         element: <AppLayout />,
         children: [
-          { index: true, element: <Navigate to="/app/library" replace /> },
+          { index: true, element: <Navigate to="/app/chat" replace /> },
           {
             path: 'chat',
             element: (

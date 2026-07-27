@@ -67,12 +67,5 @@ export function useResizableWidth({
     [maxWidth, minWidth, width],
   );
 
-  const nudge = useCallback(
-    (delta: number) => {
-      setWidth((prev) => clamp(prev + delta, minWidth, maxWidth));
-    },
-    [minWidth, maxWidth],
-  );
-
-  return { width, setWidth, beginResize, nudge, resizing };
+  return { width, setWidth, beginResize, resizing };
 }

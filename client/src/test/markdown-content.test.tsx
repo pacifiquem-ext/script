@@ -37,4 +37,16 @@ describe('MarkdownContent', () => {
     expect(html).toContain('>1<');
     expect(html).not.toContain('[1]');
   });
+
+  it('uses uniform compact spacing and strips nested list paragraph margins', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownContent
+        compact
+        content={'## Section\n\nFirst paragraph.\n\n- item one\n- item two\n\nSecond paragraph.'}
+      />,
+    );
+    expect(html).toContain('text-[14px]');
+    expect(html).toContain('gap-3');
+    expect(html).not.toContain('my-3.5');
+  });
 });

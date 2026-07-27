@@ -2,13 +2,9 @@ import React from 'react';
 import { cn } from '../../lib/cn';
 import type { ResizeGrowth } from '../../lib/use-resizable-width';
 
-const KEYBOARD_STEP = 20;
-
 type ResizeHandleProps = {
   growth: ResizeGrowth;
   onResizeStart: (clientX: number, growth: ResizeGrowth) => void;
-  /** Called when keyboard nudges the panel (±step px). */
-  onNudge: (delta: number) => void;
   className?: string;
   label?: string;
 };
@@ -16,7 +12,6 @@ type ResizeHandleProps = {
 export function ResizeHandle({
   growth,
   onResizeStart,
-  onNudge,
   className,
   label = 'Resize panel',
 }: ResizeHandleProps) {
@@ -31,12 +26,9 @@ export function ResizeHandle({
         onResizeStart(event.clientX, growth);
       }}
       onKeyDown={(event) => {
-        const expand = event.key === 'ArrowRight' || event.key === 'ArrowDown';
-        const shrink = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
-        if (!expand && !shrink) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
-        const step = expand ? KEYBOARD_STEP : -KEYBOARD_STEP;
-        onNudge(growth === 'right' ? step : -step);
+        onResizeStart(0, growth);
       }}
       className={cn(
         'group relative z-30 w-px shrink-0 cursor-col-resize bg-neutral-200',

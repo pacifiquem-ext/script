@@ -462,7 +462,6 @@ export function AppLayout() {
           growth="right"
           label="Resize sidebar"
           onResizeStart={sidebarPanel.beginResize}
-          onNudge={sidebarPanel.nudge}
         />
       ) : null}
 
