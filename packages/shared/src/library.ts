@@ -61,6 +61,8 @@ export const publicDocumentSchema = z.object({
   processingPhase: documentProcessingPhaseSchema.nullable(),
   failureReason: z.string().nullable(),
   pageCount: z.number().int().nullable(),
+  /** One-line inventory blurb for library intelligence / agent list tools. */
+  summary: z.string().nullable().optional(),
   downloadUrl: z.string().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

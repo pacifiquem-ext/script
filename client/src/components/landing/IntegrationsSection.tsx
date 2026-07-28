@@ -5,10 +5,13 @@ import { Reveal } from './motion/Reveal';
 
 const SOURCES = [
   { label: 'Drive', angle: 0 },
-  { label: 'Dropbox', angle: 72 },
-  { label: 'OneDrive', angle: 144 },
-  { label: 'Box', angle: 216 },
-  { label: 'URL', angle: 288 },
+  { label: 'Dropbox', angle: 45 },
+  { label: 'Slack', angle: 90 },
+  { label: 'GitHub', angle: 135 },
+  { label: 'Notion', angle: 180 },
+  { label: 'OneDrive', angle: 225 },
+  { label: 'Box', angle: 270 },
+  { label: 'URL', angle: 315 },
 ] as const;
 
 export function IntegrationsSection() {
@@ -19,8 +22,12 @@ export function IntegrationsSection() {
           <h2 className="m-0 mb-3 text-[36px] font-medium leading-[110%] text-[#111] md:text-[48px]">
             Plug in the places truth already lives.
           </h2>
-          <p className="m-0 mb-12 max-w-xl text-[15px] leading-relaxed text-[#555]">
-            Connect once. The Library grows. The brain keeps watching.
+          <p className="m-0 mb-4 max-w-xl text-[15px] leading-relaxed text-[#555]">
+            Files today. Systems next — chat, code, docs tools, and internal apps with scoped
+            credentials — so the company brain sees operational truth, not only PDFs.
+          </p>
+          <p className="m-0 mb-12 text-[12px] font-medium tracking-wide text-neutral-400">
+            Cloud file import is live · system connectors on the roadmap
           </p>
         </Reveal>
 
@@ -31,7 +38,9 @@ export function IntegrationsSection() {
                 <div
                   key={source.label}
                   className="absolute left-1/2 top-1/2"
-                  style={{ transform: `rotate(${source.angle}deg) translateY(-140px)` }}
+                  style={{
+                    transform: `rotate(${source.angle}deg) translateY(-150px)`,
+                  }}
                 >
                   <div className="landing-orbit-item -translate-x-1/2">
                     <div className="flex h-14 w-14 items-center justify-center rounded-20 border border-neutral-200 bg-neutral-0 text-[11px] font-medium text-[#333] shadow-sm md:h-16 md:w-16">

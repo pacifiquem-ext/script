@@ -41,7 +41,7 @@ export function LandingFooter() {
               <span className="text-[18px] font-medium text-[#111]">script</span>
             </div>
             <p className="m-0 max-w-sm text-[14px] leading-relaxed text-[#555]">
-              The company brain. Every document. Every decision. One place to ask.
+              The company brain. Documents, systems, and decisions — one place to ask.
             </p>
           </div>
           <Link to="/app/signup">

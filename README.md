@@ -1,18 +1,21 @@
 # script
 
-AI-powered document management: ingest documents from local upload, cloud providers, or URL, then
-chat with an AI layer that has RAG-based context over your Library.
+**The company brain.** Ingest the company’s truth. Ask anything. Get cited answers matched to your
+clearance.
 
-This is a production application being made **fully functional** — not a presentational demo.
-The UI already has a premium, consistent design; the work from here is making it real end to end
-without regressing that quality. This entire application — backend, AI integration, and the wiring
-between them and the existing frontend — is being built by AI agents. `AGENTS.md` is the contract
-that governs how.
+**script** is a production application: a workspace-scoped **company brain** that starts as a
+document memory + RAG chat layer (Library → embed → ask) and grows toward system connectors,
+agent tools, and workflows. See [`projectdef.md`](./projectdef.md) for vision vs shipped scope,
+and the marketing landing for the same story in product language.
+
+This is **fully functional** software for the document brain — not a presentational demo. The UI
+has a premium, consistent design; keep that quality as we extend the brain. Backend, AI, and
+frontend wiring are built by AI agents under the contract in `AGENTS.md`.
 
 ## Project introduction
 
-A short overview of what **script** is, how the monorepo fits together, the ingest → embed → RAG
-chat flow, and how to run it locally (`pnpm deps:up` + `pnpm dev:app`).
+Overview of what **script** is, monorepo layout, ingest → embed → RAG chat, and local run
+(`pnpm deps:up` + `pnpm dev:app`).
 
 [![Watch the project introduction](docs/assets/script-intro-poster.png)](docs/assets/script-intro.mp4)
 
@@ -22,8 +25,8 @@ built with [Hyperframes](https://hyperframes.heygen.com) + Kokoro TTS (see `.age
 <details>
 <summary>What’s covered</summary>
 
-1. What script is (Library + RAG chat)
-2. Product capabilities
+1. What script is (company brain · Library + RAG chat)
+2. Product capabilities (shipped document brain)
 3. Monorepo layout (`client` / `server` / `shared`)
 4. Ingest + retrieval data flow
 5. Local quickstart commands
@@ -45,8 +48,9 @@ Read in this order if you're new to the repo:
 
 | Doc                                                            | What it's for                                                                      |
 | -------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| [`AGENTS.md`](./AGENTS.md)                                     | The engineering constitution — rules, tech baseline, skills, workflow. Start here. |
-| [`projectdef.md`](./projectdef.md)                             | Product spec: what the app does, what the backend must provide.                    |
+| [`AGENTS.md`](./AGENTS.md)                                     | Engineering constitution — rules, tech baseline, skills, workflow. Start here.     |
+| [`projectdef.md`](./projectdef.md)                             | Product vision (company brain), shipped slice, backend requirements.               |
+| [`pipeline.md`](./pipeline.md)                                 | Roadmap ideas (voice, system connectors, agents, workflows) before they hit TODO.  |
 | [`understanding.md`](./understanding.md)                       | Frontend UI/design-system conventions (Align-UI, Huge Icons, tokens).              |
 | [`TODO.md`](./TODO.md)                                         | Live task ledger — what's done, in progress, next.                                 |
 | [`ENV.md`](./ENV.md)                                           | Every environment variable: what exists, what's missing.                           |

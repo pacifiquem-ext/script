@@ -56,6 +56,8 @@ const envSchema = z
     REDIS_URL: optionalString,
     ANTHROPIC_API_KEY: optionalString,
     VOYAGE_API_KEY: optionalString,
+    /** Optional Tavily key for agent `web_search` tool (P4). Chat works without it; tool returns a clear error. */
+    TAVILY_API_KEY: optionalString,
     RESEND_API_KEY: optionalString,
     EMAIL_FROM: optionalEmail,
     UNSTRUCTURED_API_KEY: optionalString,

@@ -17,8 +17,8 @@ export function DocumentsSection() {
             New and old. Signed and draft. All ingestible.
           </p>
           <p className="m-0 mb-8 max-w-md text-[15px] leading-relaxed text-[#555]">
-            The Library is the company&apos;s memory — folders, contracts, decks, and policies ready
-            for anyone with clearance to ask.
+            The Library is the document core of the company brain — folders, contracts, decks, and
+            policies ready for anyone with clearance to ask.
           </p>
           <Link to="/app/signup">
             <Button type="button">Connect your Library</Button>

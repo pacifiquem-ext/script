@@ -26,9 +26,9 @@ const PROBLEM_CARDS = [
 const SOLUTION = {
   title: 'The company brain',
   items: [
-    'Ask once — get cited answers from the Library',
+    'Ask once — get cited answers from company memory',
     'Clearance-aware truth for every role',
-    'Documents and decisions in one memory',
+    'Documents, systems, and decisions in one place to ask',
   ],
 } as const;
 
