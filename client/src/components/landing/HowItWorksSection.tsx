@@ -9,15 +9,15 @@ const BEATS = [
   {
     id: 'ingest',
     title: 'Ingest',
-    body: 'Upload files, connect Drive, Dropbox, OneDrive, Box, or drop in a URL. The Library takes it all.',
-    caption: 'Truth enters the brain from everywhere it already lives.',
+    body: 'Upload files, connect Drive, Dropbox, OneDrive, Box, or drop in a URL. Later: systems and voice feed the same brain.',
+    caption: 'Truth enters the company brain from everywhere it already lives.',
     frameLabel: 'Illustration — Ingest',
   },
   {
     id: 'remember',
     title: 'Remember',
-    body: 'script turns documents into lasting memory — ready to retrieve the moment someone asks.',
-    caption: 'Every file becomes searchable company memory.',
+    body: 'script turns documents into lasting memory — versioned, searchable, ready the moment someone asks.',
+    caption: 'Every file becomes company memory — not a second silo.',
     frameLabel: 'Illustration — Remember',
   },
   {

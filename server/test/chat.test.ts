@@ -114,6 +114,25 @@ describe('chat routes', () => {
     expect(Array.isArray(res.json().message.citations)).toBe(true);
   });
 
+  it('library inventory questions list documents with summaries (P0 agent tools)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/conversations/${conversationId}/messages/sync`,
+      headers: originHeaders(),
+      cookies,
+      payload: {
+        content: 'Tell me about my whole library, just a file and one line of its summary.',
+        documentIds: [],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const content = String(res.json().message.content);
+    expect(content).toMatch(/Library inventory/i);
+    expect(content).toMatch(/alpha\.txt/i);
+    expect(content).not.toMatch(/I don't have (visibility|access)/i);
+    expect(content).not.toMatch(/Call the API endpoint/i);
+  });
+
   it('stream endpoint emits structured SSE events', async () => {
     const res = await app.inject({
       method: 'POST',

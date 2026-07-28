@@ -1,122 +1,188 @@
-# script: AI-Powered Document Management
+# script: the company brain
 
-**script** is a production application, not a presentational demo: document management plus an AI
-layer, built as a `client/` + `server/` monorepo (see `AGENTS.md` for the full engineering
-contract, `README.md` for the repo index). This document is the product/requirements spec — what
-the app does and what the backend must provide to make the existing UI fully real, end to end,
-**without losing the consistency and premium feel the UI already has** — functional and
-well-designed are both requirements, not a trade-off between them.
+**script** is a production application, not a presentational demo. It is built as a `client/` +
+`server/` monorepo (see `AGENTS.md` for the engineering contract, `README.md` for the repo index).
+This document is the product/requirements source of truth: **what we are building, what ships
+today, and what the north star is.**
+
+Marketing and the landing page already frame the product as **the company brain** — one place to
+ingest truth, ask anything, and get clearance-aware answers. Engineering docs must use the same
+language. Functional and well-designed are both requirements, not a trade-off.
 
 ---
 
-## 1. Project overview
+## 1. Vision (north star)
 
-**script** lets users ingest documents from various sources into a workspace-scoped Library, and
-interact with them through an AI chat layer with RAG-based retrieval over that Library.
+**script is the company brain:** a workspace-scoped memory and intelligence layer that reduces
+human friction across how a company captures, finds, and acts on truth.
 
-## 2. Frontend
+People should not dig through Slack, Drive, email, GitHub, procurement tools, or tribal knowledge
+to answer “what did we decide?”, “what’s in our library?”, “was that tender approved?”, or “what
+do I do on day one?”. They should **ask the brain** — and get cited, permission-aware answers.
 
-Lives in `client/`. Built with **React 18**, **Vite** (SWC-based fast refresh), and
-**TypeScript**, styled with **Tailwind CSS** and **Align-UI**. Full UI/design-system rules are in
-`understanding.md`.
+### Product pillars
+
+| Pillar | Meaning |
+| --- | --- |
+| **Memory** | Company truth lives in one place: documents, (later) system events, voice, chat context |
+| **Ask** | Natural-language chat over that memory, with citations you can open and verify |
+| **Connect** | Plug in places truth already lives (files today; SaaS and internal systems next) |
+| **Act (later)** | Scoped agent tools and workflows (onboarding, reports, guided processes) — never free-form chaos |
+| **Clearance** | Answers match what each person is allowed to see (workspace today; finer ACLs over time) |
+
+Landing copy to stay aligned with: *“Ingest the company's truth. Ask anything. Get answers matched
+to your clearance.”* · *Ingest → Remember → Ask* · *Meetings become memory* (voice) · *Plug in the
+places truth already lives*.
+
+### What “company brain” is *not* (yet)
+
+- Not a generic multi-tenant ChatGPT wrapper with no grounding.
+- Not unscoped write access into customer databases.
+- Not a promise that every SaaS connector is live on day one — the **architecture** aims there;
+  **shipped** scope is called out below.
+
+---
+
+## 2. What ships today (document brain)
+
+The current product is a production-grade **document company brain** — the memory + ask layers for
+files:
+
+- **Library**: folders/files, multi-source ingest (local, Drive/Dropbox/OneDrive/Box OAuth import,
+  URL), version history, content-hash dedup, reprocess / upload-new-version / cloud re-import by
+  `sourceUrl`, side-by-side version diff.
+- **RAG chat**: precompute extract/chunk/embed at ingest (ADR 0001); query time is embed-query +
+  pgvector over **current** document versions only; streaming Claude answers; citations pinned to
+  version/chunk.
+- **Workspace tenancy**: auth, memberships, credits, API keys, settings, privacy export/delete.
+
+This is real, end-to-end software — not a mock. Gaps (library-wide inventory tools, system
+connectors, agent tool-use, workflows, fine-grained clearance) are **roadmap**, not “pretend they
+exist in the API.”
+
+---
+
+## 3. Roadmap toward full company brain
+
+Promoted product bets live in [`pipeline.md`](./pipeline.md). Summary:
+
+| Theme | Direction | Status |
+| --- | --- | --- |
+| **Library intelligence** | Catalog / one-line summaries / tools so “what’s in my library?” works without fake refusals | **Shipped** (P0: `summary` + list/get tools) |
+| **Agent runtime** | Tool-use loop over Library (+ later connectors); `web_search` optional | **Shipped** (P4 Library tools + Tavily web_search) |
+| **System connectors** | Slack, Teams, GitHub, Notion, procurement/ERP-style apps — scoped credentials per workspace | Planned (`pipeline.md` P2+) |
+| **Activity memory** | Events (who did what when) into the brain with citations | Planned (P2A) |
+| **Voice capture** | Speak → transcript → memory (landing “Meetings become memory”) | Planned (P1) |
+| **Workflows** | Onboarding and other guided paths with script as partner | Planned |
+| **Clearance** | Role / document / connector-scoped answers | Partial (workspace); deeper later |
+
+---
+
+## 4. Frontend
+
+Lives in `client/`. **React 18**, **Vite** (SWC), **TypeScript**, **Tailwind**, **Align-UI**.
+Visual rules: `understanding.md`. Marketing landing: `client/src/pages/landing/` +
+`client/src/components/landing/` — must stay consistent with this vision.
 
 ### Core UI standards
 
-- **Primary color**: `#00B258` (green).
-- **Border radius**: `rounded-20` (20px) for all modals.
-- **Iconography**: strictly Huge Icons.
-- **Button rule**: all buttons are `w-fit` with consistent padding.
+- **Primary color**: `#00B258` (green) in-app; marketing also uses product violet accents.
+- **Border radius**: `rounded-20` for modals.
+- **Iconography**: Huge Icons only in product UI.
+- **Button rule**: `w-fit` by default.
 
 ---
 
-## 3. Product capabilities (app layout)
+## 5. Product capabilities (app layout — current)
 
-### A. Library (Document Management)
+### A. Library (company memory — documents)
 
-- **File hierarchy**: folders and files in a nested structure.
-- **Smart ingestion (multi-source)**:
-  - **Local**: drag-and-drop or browse.
-  - **Cloud providers**: Google Drive, Dropbox, OneDrive, Box — hierarchical browsing and
-    multi-file selection within each provider's modal, via real OAuth (§5.III).
-  - **URL import**: direct document import via URL.
-- **Import progress**: real progress reporting for bulk ingestion (backed by the background job
-  that performs it, not a simulated timer).
-- **Context actions**: move, delete, and view file metadata.
+- Nested folders and files.
+- Ingest: local upload, cloud providers (Drive, Dropbox, OneDrive, Box), URL import.
+- Real import/processing progress (background jobs).
+- Version history, restore (append-only), compare extracted text, upload new version.
+- Context actions: move, rename, delete, preview.
 
-### B. AI Chat (contextual intelligence)
+### B. AI Chat (ask the brain)
 
-- **Persistent input**: a global chat bar at the bottom of the app.
-- **Context ingestion**: drag-and-drop a document from the Library into the chat to load it as
-  context for the conversation.
-- **Message history**: streaming AI responses, persisted conversation threads.
+- Persistent composer; @-mentions and drag-into-chat for document scope.
+- Streaming answers with citations into Library documents/versions.
+- Chat uses an **agent tool loop**: Library tools (`list_library_documents`, `get_document_summary`,
+  `search_library`) plus optional `web_search`. Inventory questions should call list tools — not
+  claim the brain has no Library access.
 
-### C. Settings & Integrations
+### C. Settings & integrations
 
-- **Account connections**: connect/disconnect cloud storage providers.
-- **Workspace management**: switch between workspaces.
-- **Developer tools**: generate and manage API keys.
-- **Security**: password management and authentication settings.
+- Cloud storage OAuth connect/disconnect (file import).
+- Workspace switch, members, credits, API keys, security/privacy.
+- Future: system connectors and scoped agent credentials surface here.
 
-### D. Authentication flow
+### D. Authentication
 
-- Signup, Login, OTP verification, and password reset — UI is fully built; backend must power all
-  of it for real (§5.IV).
+- Signup, login, OTP, password reset — backed by real auth (HttpOnly cookies, ADR 0003).
 
----
+### E. Marketing landing
 
-## 4. Data & storage strategy
-
-- **Database**: **Neon** (serverless Postgres) via **Prisma**, with the **pgvector** extension for
-  document/chunk embeddings — see `server/prisma/schema.prisma` and `AGENTS.md` §4.
-- **File storage**: an internal storage abstraction (`server/src/storage/`) rather than a hard
-  dependency on one vendor. Default is **UploadThing** (managed). Anyone self-hosting this app can
-  switch to any S3-compatible store via `STORAGE_DRIVER=s3` — **[Garage](https://garagehq.deuxfleurs.fr)**
-  is the recommended self-hosted option. Full detail and setup steps: `docs/storage.md`.
-
-## 5. Backend requirements (to support the frontend)
-
-### I. Document Processing API
-
-- **CRUD operations**: manage the folder/file tree structure, paginated.
-- **OCR & vectorization**: extract text and create embeddings for every ingested document so the
-  AI chat has real retrievable context. Runs as a background job, not inline in the request.
-- **Metadata**: store and serve document details (page count, source, creation date).
-
-### II. AI RAG Engine
-
-- **Search & retrieval**: semantic search across the Library based on chat input, via Anthropic
-  Claude (see `AGENTS.md` §4 and the `claude-api` skill).
-- **Ingestion, not query time, does the expensive work**: text extraction, chunking, and embedding
-  happen once per document at upload time in a background job; chat/query time is only
-  embed-the-query + a pgvector similarity search over precomputed chunks — never a re-read of the
-  source file. See [ADR 0001](docs/adr/0001-precompute-rag-context-at-ingestion.md).
-- **Context injection**: handle specific file references passed from the frontend's "drop into
-  chat" action.
-- **Streaming**: chat responses stream to the client rather than waiting for a full completion.
-
-### III. Integration Gateway (OAuth)
-
-- **Provider bridges**: real OAuth flows for Drive, Dropbox, OneDrive, Box (client IDs/secrets
-  pending — see `AGENTS.md` §13).
-- **File streaming**: transfer files from external providers into internal storage when the
-  frontend triggers an "Import," as a background job with progress the frontend can observe.
-
-### IV. Authentication Service
-
-- **JWT/session**: power the existing Login/Signup/OTP/Reset flows for real.
-- **Workspace siloing**: every API request is scoped to the user's active workspace — no
-  cross-workspace data leakage under any circumstance.
+- Hero: **The company brain. Ask anything.**
+- Problem → Ingest / Remember / Ask → services bento → demo Q&A → Library → voice (coming) →
+  clearance → integrations orbit → proof → CTA.
+- Landing describes the **product vision**; in-app must not invent capabilities that the API does
+  not support. When vision and shipping diverge, docs and UI copy use **Coming soon** / roadmap
+  labels (as voice already does).
 
 ---
 
-## 6. Key frontend files for reference
+## 6. Data & storage strategy
 
-- `client/src/pages/app/LibraryPage.tsx` — main document management logic (currently mock data,
-  see `AGENTS.md` §10).
-- `client/src/pages/app/ChatPage.tsx` — AI interaction layer (SSE streaming + citations; requires API keys, see
-  `AGENTS.md` §10).
-- `client/src/pages/app/SettingsModal.tsx` — account and integration management.
-- `client/src/components/ui/BrandIcons.tsx` — custom provider icons.
+- **Database**: Neon Postgres + Prisma + **pgvector**.
+- **File storage**: `StorageDriver` — UploadThing default, S3/Garage for self-host (`docs/storage.md`).
+- **RAG**: precompute at ingest; never re-parse files at chat time (ADR 0001).
+- **Versions**: append-only DocumentVersion; current-only RAG (ADR 0008).
 
-Domain entities are defined in `CONTEXT.md` and modeled in `server/prisma/schema.prisma`
-(shared enums in `@script/shared`).
+---
+
+## 7. Backend requirements
+
+### I. Document processing
+
+- Folder/document CRUD, pagination, versions.
+- Background extract → chunk → embed; status the UI can poll.
+- Metadata, summaries (future), version APIs.
+
+### II. AI / RAG (and later agents)
+
+- Semantic retrieval over current version chunks; streaming completion (Claude).
+- Mentions / document scope; citations with `documentVersionId`.
+- **Later:** tool-use orchestrator, library catalog tools, connector tools.
+
+### III. Integration gateway
+
+- **Now:** cloud *file* OAuth (Drive, Dropbox, OneDrive, Box) → import into Library.
+- **Later:** system connectors (chat, code, procurement, etc.) with scoped credentials and
+  optional event ingest — see `pipeline.md`.
+
+### IV. Auth & tenancy
+
+- JWT/session cookies; workspace siloing on every tenant route.
+- Credits gate AI usage (ADR 0006).
+
+---
+
+## 8. Key frontend files
+
+- `client/src/pages/app/LibraryPage.tsx` — Library / versions / import.
+- `client/src/pages/app/ChatPage.tsx` — ask the brain (stream + citations).
+- `client/src/pages/app/SettingsModal.tsx` — workspace, integrations, billing chrome.
+- `client/src/pages/landing/page.tsx` — marketing company-brain story.
+- Domain language: `CONTEXT.md`; schema: `server/prisma/schema.prisma`.
+
+---
+
+## 9. Consistency rules for agents
+
+1. Prefer **company brain** / **Library** / **ask** in product prose; reserve “document management
+   app” for describing the *current shipped slice*, not the whole product identity.
+2. Do not document unshipped connectors or agent writes as if they were live.
+3. Promote accepted roadmap items from `pipeline.md` into `TODO.md` only when we commit to build.
+4. Landing and `projectdef.md` should not contradict each other; if marketing moves first, update
+   this file in the same effort.

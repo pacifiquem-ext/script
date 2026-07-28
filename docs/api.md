@@ -1,7 +1,10 @@
 # Public API (API keys)
 
-Authenticate with `Authorization: Bearer sk_live_…` from Settings → Integrations → API Access.
+Programmatic access to the **company brain** for a workspace (Library + chat), authenticated with
+`Authorization: Bearer sk_live_…` from Settings → Integrations → API Access.
 API keys are workspace-scoped (`admin` role equivalent) and rate-limited per key (`rateLimitRpm`, default 60).
+
+Product scope: `projectdef.md`. Domain terms: `CONTEXT.md`.
 
 ## Endpoints
 

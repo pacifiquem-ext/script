@@ -208,6 +208,8 @@ model Document {
   failureReason       String?
   pageCount           Int?
   extractedText       String?        @db.Text
+  /// One-line library inventory blurb (from current version); used by list_library tools.
+  summary             String?        @db.Text
   embeddingModel      String?
   embeddingDimensions Int?
   /// SHA-256 of current version bytes (workspace upload dedup).
@@ -253,6 +255,7 @@ model DocumentVersion {
   storageKey            String
   contentHash           String?
   extractedText         String?                      @db.Text
+  summary               String?                      @db.Text
   pageCount             Int?
   embeddingModel        String?
   embeddingDimensions   Int?

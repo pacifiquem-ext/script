@@ -88,6 +88,8 @@ export function useChatMutations() {
 export type StreamHandlers = {
   onUserMessage?: (message: PublicMessage) => void;
   onCitations?: (citations: MessageCitation[]) => void;
+  onToolCall?: (name: string, input?: unknown) => void;
+  onToolResult?: (name: string, ok: boolean) => void;
   onDelta: (text: string) => void;
   onDone?: (message: PublicMessage) => void;
   signal?: AbortSignal;
@@ -133,11 +135,15 @@ export async function streamMessage(
       const payload = JSON.parse(line.slice(6)) as
         | { type: 'user_message'; message: PublicMessage }
         | { type: 'citations'; citations: MessageCitation[] }
+        | { type: 'tool_call'; name: string; input?: unknown }
+        | { type: 'tool_result'; name: string; ok: boolean }
         | { type: 'delta'; text: string }
         | { type: 'done'; message: PublicMessage }
         | { type: 'error'; code?: string; message?: string };
       if (payload.type === 'user_message') opts.onUserMessage?.(payload.message);
       if (payload.type === 'citations') opts.onCitations?.(payload.citations);
+      if (payload.type === 'tool_call') opts.onToolCall?.(payload.name, payload.input);
+      if (payload.type === 'tool_result') opts.onToolResult?.(payload.name, payload.ok);
       if (payload.type === 'delta' && payload.text) opts.onDelta(payload.text);
       if (payload.type === 'done') {
         doneMessage = payload.message;

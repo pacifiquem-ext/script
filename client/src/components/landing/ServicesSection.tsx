@@ -8,7 +8,7 @@ const CELLS = [
   {
     id: 'ask',
     title: 'Ask anything',
-    body: 'Instant answers from the whole Library — with citations you can trust.',
+    body: 'Instant answers from the company brain — grounded in your Library, with citations you can open.',
     className: 'md:col-span-2 md:row-span-2',
     frameClassName: 'h-[220px] md:h-[280px]',
     cta: true,
@@ -16,7 +16,7 @@ const CELLS = [
   {
     id: 'ingest',
     title: 'Ingest everything',
-    body: 'Old, new, signed, draft. Upload, cloud, or URL — it all becomes memory.',
+    body: 'Old, new, signed, draft. Upload, cloud, or URL — it all becomes company memory.',
     className: 'md:col-span-2',
     frameClassName: 'h-[140px]',
   },
@@ -28,16 +28,17 @@ const CELLS = [
     frameClassName: 'h-[200px] md:h-full md:min-h-[220px]',
   },
   {
-    id: 'truth',
-    title: 'One source of truth',
-    body: 'Stop hunting Slack, Drive, and email for the real answer.',
+    id: 'systems',
+    title: 'Systems of record',
+    body: 'Connect Slack, GitHub, Notion, procurement — scoped credentials, not tribal knowledge.',
     className: '',
     frameClassName: 'h-[120px]',
+    badge: 'Roadmap',
   },
   {
     id: 'voice',
     title: 'Voice memory',
-    body: 'Meetings become searchable truth.',
+    body: 'Meetings become searchable truth in the same brain.',
     className: '',
     frameClassName: 'h-[120px]',
     badge: 'Coming soon',
@@ -45,7 +46,7 @@ const CELLS = [
   {
     id: 'always',
     title: 'Always on',
-    body: 'The Library grows. The brain stays current.',
+    body: 'The Library grows. Connectors feed it. The brain stays current.',
     className: 'md:col-span-2',
     frameClassName: 'h-[140px]',
   },

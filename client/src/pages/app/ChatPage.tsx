@@ -127,6 +127,7 @@ export function ChatPage() {
   const [streaming, setStreaming] = useState('');
   const [pendingUser, setPendingUser] = useState<string | null>(null);
   const [liveCitations, setLiveCitations] = useState<MessageCitation[]>([]);
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<{
     documentId: string;
@@ -292,6 +293,7 @@ export function ChatPage() {
       setLoading(true);
       setStreaming('');
       setLiveCitations([]);
+      setToolStatus(null);
       setPendingUser(trimmed);
       setInput('');
       const controller = new AbortController();
@@ -306,17 +308,36 @@ export function ChatPage() {
             appendMessageToCache(queryClient, id, message);
             setPendingUser(null);
           },
-          onDelta: (delta) => setStreaming((prev) => prev + delta),
+          onToolCall: (name) => {
+            setToolStatus(
+              name === 'list_library_documents'
+                ? 'Listing Library…'
+                : name === 'search_library'
+                  ? 'Searching Library…'
+                  : name === 'web_search'
+                    ? 'Searching the web…'
+                    : name === 'get_document_summary'
+                      ? 'Loading document…'
+                      : `Running ${name}…`,
+            );
+          },
+          onToolResult: () => setToolStatus(null),
+          onDelta: (delta) => {
+            setToolStatus(null);
+            setStreaming((prev) => prev + delta);
+          },
           onCitations: (citations) => setLiveCitations(citations),
           onDone: (message) => {
             appendMessageToCache(queryClient, id, message);
             setStreaming('');
             setLiveCitations([]);
+            setToolStatus(null);
           },
         });
         setStreaming('');
         setPendingUser(null);
         setLiveCitations([]);
+        setToolStatus(null);
         setAtQuery(null);
         // Soft background refresh — do not await (avoids empty-state flicker).
         void queryClient.invalidateQueries({
@@ -345,6 +366,7 @@ export function ChatPage() {
         setStreaming('');
         setPendingUser(null);
         setLiveCitations([]);
+        setToolStatus(null);
         if (activeConversationId) {
           void queryClient.invalidateQueries({ queryKey: queryKeys.credits('current') });
         }
@@ -893,7 +915,7 @@ export function ChatPage() {
                       renderAssistantContent(streaming, liveCitations)
                     ) : (
                       <p className={`${CHAT_BODY_CLASS} m-0 text-neutral-500`}>
-                        {THINKING_PHRASES[thinkingIndex]}
+                        {toolStatus ?? THINKING_PHRASES[thinkingIndex]}
                       </p>
                     )}
                   </div>

@@ -25,13 +25,24 @@ import { logger } from '../../lib/logger';
 import { assertHasCredits, decrementCredits } from '../credits/credits-service';
 import { embedQuery, vectorLiteral } from '../jobs/embeddings';
 import { formatDocumentVersionChangelog } from '../library/document-versions';
+import {
+  AGENT_SYSTEM_PROMPT,
+  getAgentRunner,
+  setAgentRunnerForTests,
+  type AgentRunner,
+} from './agent';
 
 export type ChatStreamEvent =
   | { type: 'user_message'; message: ReturnType<typeof mapMessage> }
   | { type: 'citations'; citations: MessageCitation[] }
+  | { type: 'tool_call'; name: string; input?: unknown }
+  | { type: 'tool_result'; name: string; ok: boolean }
   | { type: 'delta'; text: string }
   | { type: 'done'; message: ReturnType<typeof mapMessage> }
   | { type: 'error'; code: string; message: string };
+
+export { setAgentRunnerForTests };
+export type { AgentRunner };
 
 function groupKey(date: Date): string {
   const today = new Date();
@@ -489,26 +500,6 @@ export async function* streamAssistantReply(input: {
   });
   yield { type: 'user_message', message: mapMessage(userMessage) };
 
-  const started = Date.now();
-  let contexts: RetrievedChunk[] = [];
-  try {
-    contexts = await retrieveContext(input.workspaceId, input.body.content, documentIds);
-  } catch (error) {
-    await prisma.message.delete({ where: { id: userMessage.id } }).catch(() => undefined);
-    throw error;
-  }
-  const citations = toCitations(contexts);
-  yield { type: 'citations', citations };
-  logger.info(
-    {
-      workspaceId: input.workspaceId,
-      conversationId: conversation.id,
-      hitCount: contexts.length,
-      retrievalMs: Date.now() - started,
-    },
-    'rag retrieval complete',
-  );
-
   const history = await prisma.message.findMany({
     where: { conversationId: conversation.id, id: { not: userMessage.id } },
     orderBy: { createdAt: 'desc' },
@@ -516,21 +507,10 @@ export async function* streamAssistantReply(input: {
   });
   history.reverse();
 
-  const contextBlock = contexts
-    .map((c, i) => `[${i + 1}] ${c.name} (chunk ${c.position})\n${c.content}`)
-    .join('\n\n');
-  const changelogDocIds = [
-    ...new Set([
-      ...documentIds,
-      ...contexts.map((c) => c.document_id),
-    ]),
-  ];
   const versionChangelog = await formatDocumentVersionChangelog(
     input.workspaceId,
-    changelogDocIds,
+    documentIds,
   );
-  const system =
-    'You are script, an AI assistant for workspace documents. Use only the provided context chunks for document content — they are always from the current version. Cite sources by their bracket numbers when relevant. If context is insufficient, say so clearly. Version history metadata (who/when/reason) may be provided separately; use it only to mention who changed a document, never as a source of prior document body text.';
 
   const modelMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   for (const msg of history) {
@@ -538,29 +518,95 @@ export async function* streamAssistantReply(input: {
       modelMessages.push({ role: msg.role, content: msg.content });
     }
   }
+
+  const scopeHint =
+    documentIds.length > 0
+      ? `\n\nThe user explicitly scoped these document ids (prefer search_library with documentIds when relevant): ${documentIds.join(', ')}`
+      : '';
+  const changelogHint = versionChangelog ? `\n\n${versionChangelog}` : '';
+
   modelMessages.push({
     role: 'user',
-    content: `Context:\n${contextBlock || '(no context)'}${
-      versionChangelog ? `\n\n${versionChangelog}` : ''
-    }\n\nQuestion: ${input.body.content}`,
+    content: `${input.body.content}${scopeHint}${changelogHint}`,
   });
 
   let full = '';
+  let citations: MessageCitation[] = [];
   let aborted = Boolean(input.signal?.aborted);
+  const started = Date.now();
+
   try {
-    for await (const text of completionStreamer.stream({
-      system,
-      messages: modelMessages,
-      signal: input.signal,
-    })) {
-      if (input.signal?.aborted) {
-        aborted = true;
-        break;
+    // Prefer agent tool loop (P0/P4). Legacy completionStreamer remains for tests that inject it.
+    const useLegacyStreamer =
+      env.NODE_ENV === 'test' && completionStreamer !== testStreamer;
+
+    if (useLegacyStreamer) {
+      let contexts: RetrievedChunk[] = [];
+      try {
+        contexts = await retrieveContext(input.workspaceId, input.body.content, documentIds);
+      } catch (error) {
+        await prisma.message.delete({ where: { id: userMessage.id } }).catch(() => undefined);
+        throw error;
       }
-      full += text;
-      yield { type: 'delta', text };
+      citations = toCitations(contexts);
+      yield { type: 'citations', citations };
+      const contextBlock = contexts
+        .map((c, i) => `[${i + 1}] ${c.name} (chunk ${c.position})\n${c.content}`)
+        .join('\n\n');
+      for await (const text of completionStreamer.stream({
+        system: AGENT_SYSTEM_PROMPT,
+        messages: [
+          ...modelMessages.slice(0, -1),
+          {
+            role: 'user',
+            content: `Context:\n${contextBlock || '(no context)'}\n\nQuestion: ${input.body.content}`,
+          },
+        ],
+        signal: input.signal,
+      })) {
+        if (input.signal?.aborted) {
+          aborted = true;
+          break;
+        }
+        full += text;
+        yield { type: 'delta', text };
+      }
+    } else {
+      const runner = getAgentRunner();
+      for await (const event of runner({
+        system: AGENT_SYSTEM_PROMPT,
+        messages: modelMessages,
+        toolContext: { workspaceId: input.workspaceId, userId: input.userId },
+        signal: input.signal,
+      })) {
+        if (input.signal?.aborted) {
+          aborted = true;
+          break;
+        }
+        if (event.type === 'delta') {
+          full += event.text;
+          yield { type: 'delta', text: event.text };
+        } else if (event.type === 'citations') {
+          citations = event.citations;
+          yield { type: 'citations', citations };
+        } else if (event.type === 'tool_call') {
+          yield { type: 'tool_call', name: event.name, input: event.input };
+        } else if (event.type === 'tool_result') {
+          yield { type: 'tool_result', name: event.name, ok: event.ok };
+        }
+      }
     }
     aborted = aborted || Boolean(input.signal?.aborted);
+    logger.info(
+      {
+        workspaceId: input.workspaceId,
+        conversationId: conversation.id,
+        citationCount: citations.length,
+        agentMs: Date.now() - started,
+        aborted,
+      },
+      'chat agent turn complete',
+    );
   } catch (error) {
     if (input.signal?.aborted) {
       aborted = true;

@@ -35,8 +35,8 @@ export function DemoSection() {
               Ask the brain.
             </h2>
             <p className="m-0 mb-8 max-w-lg text-[15px] leading-relaxed text-[#555]">
-              Try the kinds of questions your team already asks — answered from your Library, with
-              citations.
+              Try the kinds of questions your team already asks — answered from the company brain,
+              with citations into your Library.
             </p>
           </Reveal>
 

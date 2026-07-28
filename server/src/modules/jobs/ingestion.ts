@@ -11,6 +11,7 @@ import { prisma } from '../../db/prisma';
 import { logger } from '../../lib/logger';
 import { storage } from '../../storage';
 import { decrementCredits } from '../credits/credits-service';
+import { buildDocumentSummary } from '../chat/agent/document-summary';
 import {
   createDocumentVersion,
   hashDocumentBytes,
@@ -239,12 +240,14 @@ export async function processIngestion(data: IngestionJobData): Promise<void> {
       embeddings,
     );
 
+    const summary = buildDocumentSummary(text);
     const readyVersion = await prisma.documentVersion.update({
       where: { id: version.id },
       data: {
         status: 'ready',
         processingPhase: null,
         extractedText: text,
+        summary,
         pageCount,
         contentHash,
         embeddingModel: EMBEDDING_MODEL,
