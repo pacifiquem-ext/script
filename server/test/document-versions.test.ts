@@ -318,4 +318,196 @@ describe('document version history', () => {
     const countAfter = await prisma.document.count({ where: { workspaceId } });
     expect(countAfter).toBe(countBefore);
   });
+
+  it('upload new version same-hash is a no-op; list exposes actor; wouldCharge skips same hash', async () => {
+    const user = await prisma.user.findFirstOrThrow({ where: { email } });
+    const bodyV1 = 'Version one body for revise.';
+    const { document, version: v1 } = await createReadyDocumentWithVersion({
+      workspaceId,
+      name: 'revise-me.txt',
+      content: bodyV1,
+      storageKey: 'revise-v1',
+    });
+    const hashV1 = hashDocumentBytes(Buffer.from(bodyV1));
+    await prisma.documentVersion.update({
+      where: { id: v1.id },
+      data: { createdById: user.id, contentHash: hashV1 },
+    });
+    await prisma.document.update({
+      where: { id: document.id },
+      data: { contentHash: hashV1 },
+    });
+
+    const { uploadDocumentVersion } = await import('../src/modules/library/library-service');
+    const {
+      createDocumentVersion,
+      wouldChargeIngestion,
+    } = await import('../src/modules/library/document-versions');
+
+    const same = await uploadDocumentVersion({
+      workspaceId,
+      userId: user.id,
+      documentId: document.id,
+      filename: 'revise-me.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from(bodyV1),
+    });
+    expect(same.deduplicated).toBe(true);
+    expect(same.version?.id).toBe(v1.id);
+    expect(
+      await prisma.documentVersion.count({ where: { documentId: document.id } }),
+    ).toBe(1);
+
+    // Same-hash reprocess/upload must not require credits
+    expect(
+      await wouldChargeIngestion({
+        workspaceId,
+        documentId: document.id,
+        contentHash: hashV1,
+      }),
+    ).toBe(false);
+    expect(
+      await wouldChargeIngestion({
+        workspaceId,
+        documentId: document.id,
+        contentHash: hashDocumentBytes(Buffer.from('brand-new-bytes')),
+      }),
+    ).toBe(true);
+
+    // New version row (upload path after storage) keeps prior ready current until promote
+    const v2 = await createDocumentVersion({
+      documentId: document.id,
+      workspaceId,
+      mimeType: 'text/plain',
+      byteSize: 20,
+      storageKey: 'revise-v2',
+      contentHash: hashDocumentBytes(Buffer.from('Version two revised body content.')),
+      changeReason: 'upload',
+      createdById: user.id,
+      status: 'pending',
+    });
+    await prisma.document.update({
+      where: { id: document.id },
+      data: {
+        processingVersionId: v2.id,
+        status: 'ready',
+      },
+    });
+    const stillCurrent = await prisma.document.findUniqueOrThrow({ where: { id: document.id } });
+    expect(stillCurrent.currentVersionId).toBe(v1.id);
+    expect(stillCurrent.processingVersionId).toBe(v2.id);
+    expect(stillCurrent.status).toBe('ready');
+
+    const list = await app.inject({
+      method: 'GET',
+      url: `/documents/${document.id}/versions`,
+      headers: originHeaders(),
+      cookies,
+    });
+    expect(list.statusCode).toBe(200);
+    const versions = list.json().versions as Array<{
+      versionNumber: number;
+      createdByName: string | null;
+      changeReason: string;
+      isCurrent: boolean;
+    }>;
+    expect(versions.length).toBe(2);
+    expect(versions.find((v) => v.versionNumber === 1)?.createdByName).toBe('Versions User');
+    expect(versions.find((v) => v.versionNumber === 2)?.changeReason).toBe('upload');
+    expect(versions.find((v) => v.versionNumber === 1)?.isCurrent).toBe(true);
+  });
+
+  it('re-import same sourceUrl attaches a new version instead of a sibling document', async () => {
+    const user = await prisma.user.findFirstOrThrow({ where: { email } });
+    const sourceUrl = 'drive://file-reimport-abc';
+    const { document, version: v1 } = await createReadyDocumentWithVersion({
+      workspaceId,
+      name: 'cloud-doc.txt',
+      content: 'Cloud body version one.',
+      storageKey: 'cloud-v1',
+    });
+    const hash1 = hashDocumentBytes(Buffer.from('Cloud body version one.'));
+    await prisma.document.update({
+      where: { id: document.id },
+      data: { source: 'drive', sourceUrl, contentHash: hash1 },
+    });
+    await prisma.documentVersion.update({
+      where: { id: v1.id },
+      data: { contentHash: hash1, changeReason: 'import' },
+    });
+
+    const { createDocumentFromBuffer } = await import('../src/modules/library/library-service');
+    const { setStorageForTests } = await import('../src/storage');
+    setStorageForTests({
+      upload: async (input) => ({
+        key: `cloud-v2-${input.filename}`,
+        url: 'https://example.test/cloud-v2',
+        size: input.buffer.length,
+        contentType: input.contentType,
+      }),
+      getSignedDownloadUrl: async () => 'https://example.test/dl',
+      delete: async () => undefined,
+    });
+
+    try {
+      const sameBytes = await createDocumentFromBuffer({
+        workspaceId,
+        userId: user.id,
+        filename: 'cloud-doc.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('Cloud body version one.'),
+        source: 'drive',
+        sourceUrl,
+      });
+      expect(sameBytes.deduplicated).toBe(true);
+      expect(sameBytes.document.id).toBe(document.id);
+      expect(await prisma.document.count({ where: { workspaceId, sourceUrl } })).toBe(1);
+
+      const revised = await createDocumentFromBuffer({
+        workspaceId,
+        userId: user.id,
+        filename: 'cloud-doc-renamed.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('Cloud body version two revised.'),
+        source: 'drive',
+        sourceUrl,
+      });
+      expect(revised.deduplicated).toBe(false);
+      expect(revised.versioned).toBe(true);
+      expect(revised.document.id).toBe(document.id);
+      expect(await prisma.document.count({ where: { workspaceId, sourceUrl } })).toBe(1);
+      const versions = await prisma.documentVersion.findMany({
+        where: { documentId: document.id },
+        orderBy: { versionNumber: 'asc' },
+      });
+      expect(versions).toHaveLength(2);
+      expect(versions[1]!.changeReason).toBe('import');
+      expect(versions[1]!.status).toBe('pending');
+      expect(versions[0]!.id).toBe(v1.id);
+    } finally {
+      setStorageForTests(null);
+    }
+  });
+
+  it('formatDocumentVersionChangelog is metadata-only', async () => {
+    const user = await prisma.user.findFirstOrThrow({ where: { email } });
+    const { document, version } = await createReadyDocumentWithVersion({
+      workspaceId,
+      name: 'changelog-doc.txt',
+      content: 'SECRET_BODY_SHOULD_NOT_APPEAR',
+      storageKey: 'cl-1',
+    });
+    await prisma.documentVersion.update({
+      where: { id: version.id },
+      data: { createdById: user.id },
+    });
+    const { formatDocumentVersionChangelog } = await import(
+      '../src/modules/library/document-versions'
+    );
+    const text = await formatDocumentVersionChangelog(workspaceId, [document.id]);
+    expect(text).toContain('changelog-doc.txt');
+    expect(text).toContain('Versions User');
+    expect(text).toContain('v1');
+    expect(text).not.toContain('SECRET_BODY_SHOULD_NOT_APPEAR');
+  });
 });

@@ -94,6 +94,8 @@ export const publicDocumentVersionSchema = z.object({
   changeReason: documentVersionChangeReasonSchema,
   restoredFromVersionId: z.string().nullable(),
   isCurrent: z.boolean(),
+  createdById: z.string().nullable().optional(),
+  createdByName: z.string().nullable().optional(),
   createdAt: z.string().datetime(),
   processedAt: z.string().datetime().nullable(),
   supersededAt: z.string().datetime().nullable(),

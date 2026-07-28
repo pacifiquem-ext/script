@@ -24,6 +24,7 @@ import { prisma } from '../../db/prisma';
 import { logger } from '../../lib/logger';
 import { assertHasCredits, decrementCredits } from '../credits/credits-service';
 import { embedQuery, vectorLiteral } from '../jobs/embeddings';
+import { formatDocumentVersionChangelog } from '../library/document-versions';
 
 export type ChatStreamEvent =
   | { type: 'user_message'; message: ReturnType<typeof mapMessage> }
@@ -518,8 +519,18 @@ export async function* streamAssistantReply(input: {
   const contextBlock = contexts
     .map((c, i) => `[${i + 1}] ${c.name} (chunk ${c.position})\n${c.content}`)
     .join('\n\n');
+  const changelogDocIds = [
+    ...new Set([
+      ...documentIds,
+      ...contexts.map((c) => c.document_id),
+    ]),
+  ];
+  const versionChangelog = await formatDocumentVersionChangelog(
+    input.workspaceId,
+    changelogDocIds,
+  );
   const system =
-    'You are script, an AI assistant for workspace documents. Use only the provided context chunks. Cite sources by their bracket numbers when relevant. If context is insufficient, say so clearly.';
+    'You are script, an AI assistant for workspace documents. Use only the provided context chunks for document content — they are always from the current version. Cite sources by their bracket numbers when relevant. If context is insufficient, say so clearly. Version history metadata (who/when/reason) may be provided separately; use it only to mention who changed a document, never as a source of prior document body text.';
 
   const modelMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   for (const msg of history) {
@@ -529,7 +540,9 @@ export async function* streamAssistantReply(input: {
   }
   modelMessages.push({
     role: 'user',
-    content: `Context:\n${contextBlock || '(no context)'}\n\nQuestion: ${input.body.content}`,
+    content: `Context:\n${contextBlock || '(no context)'}${
+      versionChangelog ? `\n\n${versionChangelog}` : ''
+    }\n\nQuestion: ${input.body.content}`,
   });
 
   let full = '';

@@ -232,6 +232,8 @@ model Document {
   @@index([workspaceId, folderId])
   @@index([workspaceId, createdAt])
   @@index([workspaceId, contentHash])
+  /// Cloud re-import / URL identity — same sourceUrl attaches a new version, not a sibling Document.
+  @@index([workspaceId, sourceUrl])
   @@index([createdById])
   @@index([embeddingModel, embeddingDimensions, status])
 }

@@ -100,6 +100,7 @@ export async function toPublicDocumentDetail(
 export function toPublicDocumentVersion(
   version: DocumentVersion,
   currentVersionId: string | null,
+  actor?: { id: string | null; name: string | null } | null,
 ): PublicDocumentVersion {
   return {
     id: version.id,
@@ -115,10 +116,26 @@ export function toPublicDocumentVersion(
     changeReason: version.changeReason,
     restoredFromVersionId: version.restoredFromVersionId,
     isCurrent: currentVersionId === version.id,
+    createdById: actor?.id ?? version.createdById ?? null,
+    createdByName: actor?.name ?? null,
     createdAt: version.createdAt.toISOString(),
     processedAt: version.processedAt?.toISOString() ?? null,
     supersededAt: version.supersededAt?.toISOString() ?? null,
   };
+}
+
+async function resolveVersionActors(
+  versions: Array<{ createdById: string | null }>,
+): Promise<Map<string, string>> {
+  const ids = [
+    ...new Set(versions.map((v) => v.createdById).filter((id): id is string => Boolean(id))),
+  ];
+  if (ids.length === 0) return new Map();
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true },
+  });
+  return new Map(users.map((u) => [u.id, u.name]));
 }
 
 export async function toPublicDocumentVersionDetail(
@@ -131,8 +148,13 @@ export async function toPublicDocumentVersionDetail(
   } catch {
     downloadUrl = null;
   }
+  const names = await resolveVersionActors([version]);
+  const createdById = version.createdById ?? null;
   return {
-    ...toPublicDocumentVersion(version, currentVersionId),
+    ...toPublicDocumentVersion(version, currentVersionId, {
+      id: createdById,
+      name: createdById ? (names.get(createdById) ?? null) : null,
+    }),
     extractedText: version.extractedText,
     downloadUrl,
   };
@@ -146,6 +168,18 @@ export async function findDocumentByContentHash(workspaceId: string, contentHash
       status: 'ready',
       currentVersionId: { not: null },
     },
+    include: {
+      currentVersion: { select: { id: true, versionNumber: true } },
+      processingVersion: { select: { id: true, status: true } },
+    },
+  });
+}
+
+/** Match library identity for cloud/URL re-import (`provider://fileId` or absolute URL). */
+export async function findDocumentBySourceUrl(workspaceId: string, sourceUrl: string) {
+  if (!sourceUrl) return null;
+  return prisma.document.findFirst({
+    where: { workspaceId, sourceUrl },
     include: {
       currentVersion: { select: { id: true, versionNumber: true } },
       processingVersion: { select: { id: true, status: true } },
@@ -278,8 +312,14 @@ export async function listDocumentVersions(workspaceId: string, documentId: stri
     where: { documentId, workspaceId },
     orderBy: { versionNumber: 'desc' },
   });
+  const names = await resolveVersionActors(versions);
   return {
-    versions: versions.map((v) => toPublicDocumentVersion(v, doc.currentVersionId)),
+    versions: versions.map((v) =>
+      toPublicDocumentVersion(v, doc.currentVersionId, {
+        id: v.createdById,
+        name: v.createdById ? (names.get(v.createdById) ?? null) : null,
+      }),
+    ),
   };
 }
 
@@ -443,17 +483,22 @@ export async function rollbackDocumentVersion(
     },
   });
 
+  const names = await resolveVersionActors([newVersion]);
   return {
     document: await toPublicDocument(updated),
-    version: toPublicDocumentVersion(newVersion, updated.currentVersionId),
+    version: toPublicDocumentVersion(newVersion, updated.currentVersionId, {
+      id: newVersion.createdById,
+      name: newVersion.createdById ? (names.get(newVersion.createdById) ?? null) : null,
+    }),
   };
 }
 
-export async function shouldChargeIngestion(input: {
+/** True when ingestion of this content would debit credits (no prior ready version with same hash). */
+export async function wouldChargeIngestion(input: {
   workspaceId: string;
   documentId: string;
-  versionId: string;
   contentHash: string | null | undefined;
+  excludeVersionId?: string;
 }): Promise<boolean> {
   if (!input.contentHash) return true;
 
@@ -463,9 +508,84 @@ export async function shouldChargeIngestion(input: {
       workspaceId: input.workspaceId,
       contentHash: input.contentHash,
       status: 'ready',
-      id: { not: input.versionId },
+      ...(input.excludeVersionId ? { id: { not: input.excludeVersionId } } : {}),
     },
     select: { id: true },
   });
   return !priorReadySameHash;
+}
+
+export async function shouldChargeIngestion(input: {
+  workspaceId: string;
+  documentId: string;
+  versionId: string;
+  contentHash: string | null | undefined;
+}): Promise<boolean> {
+  return wouldChargeIngestion({
+    workspaceId: input.workspaceId,
+    documentId: input.documentId,
+    contentHash: input.contentHash,
+    excludeVersionId: input.versionId,
+  });
+}
+
+/** Last N versions as short audit lines for chat (metadata only — never body text). */
+export async function formatDocumentVersionChangelog(
+  workspaceId: string,
+  documentIds: string[],
+  limitPerDoc = 5,
+): Promise<string> {
+  if (documentIds.length === 0) return '';
+  const versions = await prisma.documentVersion.findMany({
+    where: { workspaceId, documentId: { in: documentIds } },
+    orderBy: [{ documentId: 'asc' }, { versionNumber: 'desc' }],
+    select: {
+      documentId: true,
+      versionNumber: true,
+      changeReason: true,
+      createdById: true,
+      createdAt: true,
+      status: true,
+    },
+  });
+  if (versions.length === 0) return '';
+
+  const docs = await prisma.document.findMany({
+    where: { id: { in: documentIds }, workspaceId },
+    select: { id: true, name: true, currentVersionId: true },
+  });
+  const docById = new Map(docs.map((d) => [d.id, d]));
+  const currentNumbers = new Map<string, number>();
+  const currentIds = docs.map((d) => d.currentVersionId).filter((id): id is string => Boolean(id));
+  if (currentIds.length) {
+    const currents = await prisma.documentVersion.findMany({
+      where: { id: { in: currentIds } },
+      select: { id: true, documentId: true, versionNumber: true },
+    });
+    for (const c of currents) currentNumbers.set(c.documentId, c.versionNumber);
+  }
+
+  const names = await resolveVersionActors(versions);
+  const byDoc = new Map<string, typeof versions>();
+  for (const v of versions) {
+    const list = byDoc.get(v.documentId) ?? [];
+    if (list.length < limitPerDoc) list.push(v);
+    byDoc.set(v.documentId, list);
+  }
+
+  const blocks: string[] = [];
+  for (const documentId of documentIds) {
+    const doc = docById.get(documentId);
+    const list = byDoc.get(documentId);
+    if (!doc || !list?.length) continue;
+    const currentN = currentNumbers.get(documentId);
+    const lines = list.map((v) => {
+      const who = v.createdById ? names.get(v.createdById) ?? 'someone' : 'system';
+      const when = v.createdAt.toISOString().slice(0, 10);
+      const current = currentN === v.versionNumber ? ' current' : '';
+      return `v${v.versionNumber}${current} (${v.changeReason} by ${who}, ${when}, ${v.status})`;
+    });
+    blocks.push(`${doc.name}: ${lines.join('; ')}`);
+  }
+  return blocks.length ? `Document version history (metadata only, not content):\n${blocks.join('\n')}` : '';
 }

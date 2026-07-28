@@ -49,4 +49,19 @@ describe('MarkdownContent', () => {
     expect(html).toContain('gap-3');
     expect(html).not.toContain('my-3.5');
   });
+
+  it('renders fenced code with light text on the dark pre shell', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownContent
+        compact
+        content={'```ts\nconst secret = \"abc\";\n```\n\n```\nSTORAGE_DRIVER=s3\n```'}
+      />,
+    );
+    expect(html).toContain('bg-neutral-900');
+    expect(html).toContain('text-neutral-100');
+    expect(html).toContain('language-ts');
+    expect(html).toContain('STORAGE_DRIVER=s3');
+    // Block code must not force dark text (was unreadable on dark pre)
+    expect(html).not.toMatch(/<code[^>]*text-neutral-900[^>]*>[\s\S]*STORAGE_DRIVER/);
+  });
 });

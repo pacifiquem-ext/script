@@ -23,3 +23,11 @@ export const storage: StorageDriver = new Proxy({} as StorageDriver, {
     return typeof value === 'function' ? value.bind(cached) : value;
   },
 });
+
+/** Test-only override so unit tests need not hit real UploadThing/S3. */
+export function setStorageForTests(driver: StorageDriver | null) {
+  if (env.NODE_ENV !== 'test') {
+    throw new Error('setStorageForTests is only available in test');
+  }
+  cached = driver;
+}

@@ -37,21 +37,23 @@ function parseUploadErrorBody(text: string, status: number): Error {
   return new Error(text || `Upload failed (${status})`);
 }
 
-/** Upload a single file; reports 0–100 progress when `onProgress` is provided (XHR path). */
-export async function uploadDocumentFile(
-  input: { file: File; folderId?: string | null },
-  options?: { onProgress?: (percent: number) => void },
-): Promise<{ document: PublicDocument }> {
-  const form = new FormData();
-  form.append('file', input.file);
-  if (input.folderId) form.append('folderId', input.folderId);
+type UploadResult = {
+  document: PublicDocument;
+  version?: import('@script/shared').PublicDocumentVersion | null;
+  deduplicated?: boolean;
+};
 
+async function postMultipartUpload(
+  urlPath: string,
+  form: FormData,
+  options?: { onProgress?: (percent: number) => void },
+): Promise<UploadResult> {
   // Progress callbacks need XHR; keep fetch when no progress (tests + simple callers).
   if (!options?.onProgress) {
     const headers = new Headers();
     const workspaceId = readWorkspaceCookie();
     if (workspaceId) headers.set(WORKSPACE_HEADER, workspaceId);
-    const response = await fetch(`${getApiBaseUrl()}/documents/upload`, {
+    const response = await fetch(`${getApiBaseUrl()}${urlPath}`, {
       method: 'POST',
       credentials: 'include',
       headers,
@@ -61,12 +63,12 @@ export async function uploadDocumentFile(
       const text = await response.text();
       throw parseUploadErrorBody(text, response.status);
     }
-    return response.json() as Promise<{ document: PublicDocument }>;
+    return response.json() as Promise<UploadResult>;
   }
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${getApiBaseUrl()}/documents/upload`);
+    xhr.open('POST', `${getApiBaseUrl()}${urlPath}`);
     xhr.withCredentials = true;
     const workspaceId = readWorkspaceCookie();
     if (workspaceId) xhr.setRequestHeader(WORKSPACE_HEADER, workspaceId);
@@ -82,7 +84,7 @@ export async function uploadDocumentFile(
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           options.onProgress?.(100);
-          resolve(JSON.parse(xhr.responseText) as { document: PublicDocument });
+          resolve(JSON.parse(xhr.responseText) as UploadResult);
         } catch {
           reject(new Error('Invalid upload response'));
         }
@@ -95,6 +97,27 @@ export async function uploadDocumentFile(
     xhr.onabort = () => reject(new Error('Upload cancelled'));
     xhr.send(form);
   });
+}
+
+/** Upload a single file; reports 0–100 progress when `onProgress` is provided (XHR path). */
+export async function uploadDocumentFile(
+  input: { file: File; folderId?: string | null },
+  options?: { onProgress?: (percent: number) => void },
+): Promise<{ document: PublicDocument }> {
+  const form = new FormData();
+  form.append('file', input.file);
+  if (input.folderId) form.append('folderId', input.folderId);
+  return postMultipartUpload('/documents/upload', form, options);
+}
+
+/** Upload revised bytes as a new version of an existing document. */
+export async function uploadDocumentVersionFile(
+  input: { documentId: string; file: File },
+  options?: { onProgress?: (percent: number) => void },
+): Promise<UploadResult> {
+  const form = new FormData();
+  form.append('file', input.file);
+  return postMultipartUpload(`/documents/${input.documentId}/versions`, form, options);
 }
 
 export function useFolders(parentId: string | null = null, enabled = true) {
@@ -269,6 +292,19 @@ export function useLibraryMutations() {
     onSuccess: invalidate,
   });
 
+  const uploadDocumentVersion = useMutation({
+    mutationFn: (input: {
+      documentId: string;
+      file: File;
+      onProgress?: (percent: number) => void;
+    }) =>
+      uploadDocumentVersionFile(
+        { documentId: input.documentId, file: input.file },
+        { onProgress: input.onProgress },
+      ),
+    onSuccess: invalidate,
+  });
+
   return {
     createFolder,
     updateFolder,
@@ -279,6 +315,7 @@ export function useLibraryMutations() {
     rollbackDocumentVersion,
     importUrl,
     uploadFile,
+    uploadDocumentVersion,
     invalidate,
   };
 }

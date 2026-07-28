@@ -15,15 +15,19 @@ import { storage } from '../../storage';
 import { assertHasCredits } from '../credits/credits-service';
 import { enqueueIngestion } from '../jobs/queue';
 import { INGESTION_CREDIT_COST } from '@script/shared';
+import type { DocumentVersionChangeReason } from '@prisma/client';
 import {
   createDocumentVersion,
   findDocumentByContentHash,
+  findDocumentBySourceUrl,
   getDocumentVersion,
   hashDocumentBytes,
   listDocumentVersions,
   rollbackDocumentVersion,
   toPublicDocument,
   toPublicDocumentDetail,
+  toPublicDocumentVersion,
+  wouldChargeIngestion,
 } from './document-versions';
 import { toPublicFolder } from './serialize';
 
@@ -193,7 +197,6 @@ export async function reprocessDocument(workspaceId: string, documentId: string,
   if (existing.processingVersionId) {
     throw new BadRequestError('Document is already processing');
   }
-  await assertHasCredits(workspaceId, INGESTION_CREDIT_COST);
 
   const sourceVersion =
     (existing.currentVersionId
@@ -204,13 +207,23 @@ export async function reprocessDocument(workspaceId: string, documentId: string,
       orderBy: { versionNumber: 'desc' },
     }));
 
+  const contentHash = sourceVersion?.contentHash ?? existing.contentHash;
+  const willCharge = await wouldChargeIngestion({
+    workspaceId,
+    documentId,
+    contentHash,
+  });
+  if (willCharge) {
+    await assertHasCredits(workspaceId, INGESTION_CREDIT_COST);
+  }
+
   const version = await createDocumentVersion({
     documentId,
     workspaceId,
     mimeType: sourceVersion?.mimeType ?? existing.mimeType,
     byteSize: sourceVersion?.byteSize ?? existing.byteSize,
     storageKey: sourceVersion?.storageKey ?? existing.storageKey,
-    contentHash: sourceVersion?.contentHash ?? existing.contentHash,
+    contentHash,
     changeReason: 'reprocess',
     createdById: userId,
     status: 'pending',
@@ -239,6 +252,121 @@ export async function reprocessDocument(workspaceId: string, documentId: string,
     { uniqueJobId: true },
   );
   return { document: await toPublicDocument(doc) };
+}
+
+/**
+ * Attach revised bytes as a new version of an existing document.
+ * Same content hash as current ready version → no-op (no charge, no new version).
+ */
+export async function uploadDocumentVersion(input: {
+  workspaceId: string;
+  userId: string;
+  documentId: string;
+  filename: string;
+  mimeType: string;
+  buffer: Buffer;
+  /** Defaults to `upload`; cloud/URL re-import should pass `import`. */
+  changeReason?: DocumentVersionChangeReason;
+  /** When true and name is provided, update the document display name. */
+  updateName?: boolean;
+}) {
+  const existing = await prisma.document.findFirst({
+    where: { id: input.documentId, workspaceId: input.workspaceId },
+    include: documentVersionInclude,
+  });
+  if (!existing) throw new NotFoundError('Document');
+  if (existing.processingVersionId) {
+    throw new BadRequestError('Document is already processing');
+  }
+
+  const mimeType = input.mimeType || 'application/octet-stream';
+  if (!ALLOWED_MIME.has(mimeType) && !mimeType.startsWith('text/')) {
+    throw new BadRequestError(`Unsupported file type: ${mimeType}`);
+  }
+
+  const changeReason = input.changeReason ?? 'upload';
+  const contentHash = hashDocumentBytes(input.buffer);
+  if (
+    existing.status === 'ready' &&
+    existing.currentVersionId &&
+    existing.contentHash &&
+    existing.contentHash === contentHash
+  ) {
+    const current = await prisma.documentVersion.findUnique({
+      where: { id: existing.currentVersionId },
+    });
+    return {
+      document: await toPublicDocument(existing),
+      version: current
+        ? toPublicDocumentVersion(current, existing.currentVersionId, {
+            id: current.createdById,
+            name: null,
+          })
+        : null,
+      deduplicated: true as const,
+      versioned: false as const,
+    };
+  }
+
+  const willCharge = await wouldChargeIngestion({
+    workspaceId: input.workspaceId,
+    documentId: input.documentId,
+    contentHash,
+  });
+  if (willCharge) {
+    await assertHasCredits(input.workspaceId, INGESTION_CREDIT_COST);
+  }
+
+  const uploaded = await storage.upload({
+    buffer: input.buffer,
+    filename: input.filename || existing.name,
+    contentType: mimeType,
+  });
+
+  const version = await createDocumentVersion({
+    documentId: existing.id,
+    workspaceId: input.workspaceId,
+    mimeType,
+    byteSize: uploaded.size,
+    storageKey: uploaded.key,
+    contentHash,
+    changeReason,
+    createdById: input.userId,
+    status: 'pending',
+  });
+
+  const doc = await prisma.document.update({
+    where: { id: existing.id },
+    data: {
+      processingVersionId: version.id,
+      status: existing.currentVersionId && existing.status === 'ready' ? 'ready' : 'pending',
+      processingPhase: null,
+      failureReason: null,
+      ...(input.updateName && input.filename ? { name: input.filename } : {}),
+    },
+    include: documentVersionInclude,
+  });
+
+  await enqueueIngestion(
+    {
+      documentId: doc.id,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      versionId: version.id,
+      mode: 'ingest',
+    },
+    { uniqueJobId: true },
+  );
+
+  return {
+    document: await toPublicDocument(doc),
+    version: toPublicDocumentVersion(version, doc.currentVersionId, {
+      id: input.userId,
+      name: null,
+    }),
+    deduplicated: false as const,
+    versioned: true as const,
+  };
 }
 
 async function createPendingDocument(input: {
@@ -324,10 +452,37 @@ export async function createDocumentFromBuffer(input: {
     throw new BadRequestError(`Unsupported file type: ${mimeType}`);
   }
 
+  // Prefer source identity for cloud/URL re-import: same external file → new version on that Document.
+  if (input.sourceUrl) {
+    const bySource = await findDocumentBySourceUrl(input.workspaceId, input.sourceUrl);
+    if (bySource) {
+      if (bySource.processingVersionId) {
+        throw new BadRequestError(
+          'This file is already processing a new version. Wait for it to finish, then import again.',
+        );
+      }
+      return uploadDocumentVersion({
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        documentId: bySource.id,
+        filename: input.filename,
+        mimeType,
+        buffer: input.buffer,
+        changeReason: input.source === 'local' ? 'upload' : 'import',
+        updateName: Boolean(input.filename && input.filename !== bySource.name),
+      });
+    }
+  }
+
   const contentHash = hashDocumentBytes(input.buffer);
   const duplicate = await findDocumentByContentHash(input.workspaceId, contentHash);
   if (duplicate) {
-    return { document: await toPublicDocument(duplicate), deduplicated: true as const };
+    return {
+      document: await toPublicDocument(duplicate),
+      version: null,
+      deduplicated: true as const,
+      versioned: false as const,
+    };
   }
 
   const uploaded = await storage.upload({
@@ -347,7 +502,7 @@ export async function createDocumentFromBuffer(input: {
     sourceUrl: input.sourceUrl,
     folderId: input.folderId,
   });
-  return { ...result, deduplicated: false as const };
+  return { ...result, deduplicated: false as const, versioned: false as const };
 }
 
 export async function uploadLocalDocument(input: {

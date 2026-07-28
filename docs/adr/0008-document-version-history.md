@@ -48,3 +48,14 @@ Introduce **`DocumentVersion`** as an append-only content snapshot:
 - Retrieval SQL filters `c."documentVersionId" = d."currentVersionId"`.
 - Storage cleanup on document delete removes every version’s `storageKey`.
 - Existing rows are migrated to version `1` with ids `mig_<documentId>`.
+- **Upload new version** (`POST /documents/:id/versions` multipart) attaches revised
+  bytes to the same Document; same content hash as current ready version is a no-op.
+- **Cloud/URL re-import** with the same `sourceUrl` (`provider://fileId` or absolute URL)
+  attaches a new version (`changeReason: import`) instead of creating a sibling Document.
+  Indexed by `(workspaceId, sourceUrl)`.
+- Version list exposes `createdById` / `createdByName` for audit UI; Library **Compare**
+  shows a side-by-side extracted-text diff between two ready versions.
+- Chat may receive a short **version changelog** (who / when / reason labels only) —
+  never prior body text for retrieval.
+- Reprocess / upload-new-version skip the credit balance gate when
+  `wouldChargeIngestion` is false (prior ready same hash).

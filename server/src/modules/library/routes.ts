@@ -71,6 +71,22 @@ export async function libraryRoutes(app: FastifyInstance) {
     return library.rollbackDocumentVersion(workspace.id, documentId, versionId, user.id);
   });
 
+  app.post('/documents/:documentId/versions', async (request) => {
+    const { user, workspace } = await requireWorkspace(request);
+    const { documentId } = request.params as { documentId: string };
+    const file = await request.file();
+    if (!file) throw new BadRequestError('file is required');
+    const buffer = await file.toBuffer();
+    return library.uploadDocumentVersion({
+      workspaceId: workspace.id,
+      userId: user.id,
+      documentId,
+      filename: file.filename,
+      mimeType: file.mimetype,
+      buffer,
+    });
+  });
+
   app.patch('/documents/:documentId', async (request) => {
     const { workspace } = await requireWorkspace(request);
     const { documentId } = request.params as { documentId: string };

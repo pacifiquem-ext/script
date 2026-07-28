@@ -180,7 +180,7 @@ export function MarkdownContent({
           return (
             <code
               className={cn(
-                'font-mono leading-[1.6] text-neutral-900 block',
+                'font-mono leading-[1.6] block bg-transparent text-neutral-100',
                 compact ? 'text-[12px]' : 'text-[13px] leading-relaxed',
                 codeClass,
               )}
@@ -203,7 +203,8 @@ export function MarkdownContent({
       pre: ({ children }: { children?: React.ReactNode }) => (
         <pre
           className={cn(
-            'overflow-x-auto rounded-12 bg-neutral-900 p-3 text-neutral-100',
+            'overflow-x-auto rounded-12 border border-neutral-800 bg-neutral-900 p-3 text-neutral-100',
+            '[&_code]:bg-transparent [&_code]:text-neutral-100 [&_code]:p-0',
             compact ? 'm-0 text-[12px] leading-[1.6]' : 'my-4 rounded-14 p-4 text-[13px] leading-relaxed shadow-sm',
           )}
         >

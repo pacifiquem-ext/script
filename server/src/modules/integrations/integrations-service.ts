@@ -229,7 +229,13 @@ export async function importCloudFiles(
   const adapter = getProviderAdapter(provider);
   const { accessToken } = await getLiveAccessToken(workspaceId, provider);
 
-  const documents: Array<{ id: string; name: string; status: string }> = [];
+  const documents: Array<{
+    id: string;
+    name: string;
+    status: string;
+    deduplicated?: boolean;
+    versioned?: boolean;
+  }> = [];
   const failed: Array<{ fileId: string; name?: string; error: string }> = [];
 
   for (const fileId of body.fileIds) {
@@ -247,7 +253,7 @@ export async function importCloudFiles(
         });
         continue;
       }
-      const { document } = await createDocumentFromBuffer({
+      const result = await createDocumentFromBuffer({
         workspaceId,
         userId,
         filename: downloaded.filename,
@@ -257,7 +263,13 @@ export async function importCloudFiles(
         source: provider,
         sourceUrl: `${provider}://${fileId}`,
       });
-      documents.push({ id: document.id, name: document.name, status: document.status });
+      documents.push({
+        id: result.document.id,
+        name: result.document.name,
+        status: result.document.status,
+        deduplicated: result.deduplicated,
+        versioned: 'versioned' in result ? Boolean(result.versioned) : false,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Import failed';
       failed.push({ fileId, error: message });

@@ -9,6 +9,7 @@ import {
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 import { CloudImportModal } from '../../components/app/CloudImportModal';
 import { UploadProgressCard } from '../../components/app/UploadProgressCard';
+import { VersionDiffModal } from '../../components/app/VersionDiffModal';
 import { Button } from '../../components/ui/Button';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -500,6 +501,13 @@ export function LibraryPage() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [versionsDoc, setVersionsDoc] = useState<PublicDocument | null>(null);
   const [rollbackBusyId, setRollbackBusyId] = useState<string | null>(null);
+  const [previewVersionId, setPreviewVersionId] = useState<string | null>(null);
+  const [versionUploadBusy, setVersionUploadBusy] = useState(false);
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diffLeftId, setDiffLeftId] = useState<string | null>(null);
+  const [diffRightId, setDiffRightId] = useState<string | null>(null);
+  const versionFileInputRef = useRef<HTMLInputElement>(null);
+  const versionUploadDocRef = useRef<PublicDocument | null>(null);
 
   const [chatInput, setChatInput] = useState('');
   const [quotedDocs, setQuotedDocs] = useState<PublicDocument[]>([]);
@@ -537,7 +545,7 @@ export function LibraryPage() {
   const documentsQuery = useDocuments(currentFolderId);
   // Root folders for move picker (always top-level)
   const rootFoldersQuery = useFolders(null);
-  const previewQuery = useDocument(previewId);
+  const previewQuery = useDocument(previewId, { versionId: previewVersionId });
   const versionsQuery = useDocumentVersions(versionsDoc?.id ?? null);
   const mutations = useLibraryMutations();
   const credits = useCredits();
@@ -1043,7 +1051,10 @@ export function LibraryPage() {
         notify.success('Folder deleted');
       } else {
         await mutations.deleteDocument.mutateAsync(deleteState.item.id);
-        if (previewId === deleteState.item.id) setPreviewId(null);
+        if (previewId === deleteState.item.id) {
+          setPreviewId(null);
+          setPreviewVersionId(null);
+        }
         notify.success('File deleted');
       }
       setDeleteState(null);
@@ -1100,6 +1111,61 @@ export function LibraryPage() {
     }
   }
 
+  function openVersionPreview(versionId: string, documentId: string) {
+    setPreviewVersionId(versionId);
+    setPreviewId(documentId);
+    setVersionsDoc(null);
+  }
+
+  function openVersionDiff(leftId?: string, rightId?: string) {
+    setDiffLeftId(leftId ?? null);
+    setDiffRightId(rightId ?? null);
+    setDiffOpen(true);
+  }
+
+  function startUploadNewVersion(doc: PublicDocument) {
+    versionUploadDocRef.current = doc;
+    setContextMenu(null);
+    versionFileInputRef.current?.click();
+  }
+
+  async function onVersionFileSelected(files: FileList | null) {
+    const doc = versionUploadDocRef.current;
+    const file = files?.[0];
+    versionUploadDocRef.current = null;
+    if (!doc || !file) return;
+    setVersionUploadBusy(true);
+    setActiveProgress({
+      title: `Uploading new version of ${doc.name}`,
+      detail: file.name,
+      percent: 0,
+    });
+    setQueueOpen(true);
+    try {
+      const result = await mutations.uploadDocumentVersion.mutateAsync({
+        documentId: doc.id,
+        file,
+        onProgress: (percent) =>
+          setActiveProgress((prev) => (prev ? { ...prev, percent } : prev)),
+      });
+      if (result.deduplicated) {
+        notify.success('File matches the current version — nothing to update');
+      } else {
+        notify.success(
+          result.version
+            ? `Version ${result.version.versionNumber} queued for ${doc.name}`
+            : `New version queued for ${doc.name}`,
+        );
+      }
+      if (versionsDoc?.id === doc.id) await versionsQuery.refetch();
+    } catch (err) {
+      notify.error(getErrorMessage(err, 'Could not upload new version'));
+    } finally {
+      setVersionUploadBusy(false);
+      setActiveProgress(null);
+    }
+  }
+
   const isLoading = foldersQuery.isLoading || documentsQuery.isLoading;
   const loadError = foldersQuery.isError || documentsQuery.isError;
 
@@ -1113,6 +1179,16 @@ export function LibraryPage() {
         disabled={Boolean(activeProgress)}
         onChange={(e) => {
           void onUpload(e.target.files);
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={versionFileInputRef}
+        type="file"
+        className="hidden"
+        disabled={Boolean(activeProgress) || versionUploadBusy}
+        onChange={(e) => {
+          void onVersionFileSelected(e.target.files);
           e.target.value = '';
         }}
       />
@@ -1393,7 +1469,7 @@ export function LibraryPage() {
                     <FileCard
                       key={doc.id}
                       doc={doc}
-                      onOpen={() => setPreviewId(doc.id)}
+                      onOpen={() => { setPreviewVersionId(null); setPreviewId(doc.id); }}
                       onMenu={(e) => {
                         e.stopPropagation();
                         openContext(e, { kind: 'file', item: doc });
@@ -1413,11 +1489,12 @@ export function LibraryPage() {
                         draggable={doc.status === 'ready'}
                         onDragStart={(e) => onFileDragStart(e, doc)}
                         className="group flex items-center gap-4 p-[12px_16px] border-b border-neutral-200 last:border-0 hover:bg-neutral-50 cursor-pointer transition-colors relative"
-                        onClick={() => setPreviewId(doc.id)}
+                        onClick={() => { setPreviewVersionId(null); setPreviewId(doc.id); }}
                         onContextMenu={(e) => openContext(e, { kind: 'file', item: doc })}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
+                            setPreviewVersionId(null);
                             setPreviewId(doc.id);
                           }
                         }}
@@ -1667,6 +1744,22 @@ export function LibraryPage() {
                 Version history
               </button>
             ) : null}
+            {contextMenu.target.kind === 'file' &&
+            !contextMenu.target.item.isUpdating &&
+            contextMenu.target.item.status !== 'pending' &&
+            contextMenu.target.item.status !== 'processing' ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex items-center w-full p-[8px_10px] text-left text-para-sm text-neutral-950 bg-transparent border-none rounded-8 cursor-pointer hover:bg-neutral-50"
+                onClick={() => {
+                  const target = contextMenu.target;
+                  if (target.kind === 'file') startUploadNewVersion(target.item);
+                }}
+              >
+                Upload new version
+              </button>
+            ) : null}
             <div className="h-px bg-neutral-200 my-1" />
             <button
               type="button"
@@ -1683,7 +1776,15 @@ export function LibraryPage() {
         </div>
       )}
 
-      <SideDrawer open={Boolean(previewId)} onOpenChange={(open) => !open && setPreviewId(null)}>
+      <SideDrawer
+        open={Boolean(previewId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewId(null);
+            setPreviewVersionId(null);
+          }
+        }}
+      >
         <SideDrawerContent showClose={false} width="md" className="p-0" accessibleTitle="Document preview">
           <DocumentCanvas
             file={{
@@ -1695,7 +1796,10 @@ export function LibraryPage() {
             content={previewQuery.data?.extractedText ?? null}
             downloadUrl={previewQuery.data?.downloadUrl ?? null}
             loading={previewLoading}
-            onClose={() => setPreviewId(null)}
+            onClose={() => {
+              setPreviewId(null);
+              setPreviewVersionId(null);
+            }}
           />
         </SideDrawerContent>
       </SideDrawer>
@@ -1742,35 +1846,105 @@ export function LibraryPage() {
                     </div>
                     <p className="text-para-sm text-neutral-500 mt-0.5">
                       {new Date(version.createdAt).toLocaleString()}
+                      {version.createdByName ? ` · ${version.createdByName}` : ''}
                       {version.failureReason
                         ? ` · ${humanizeIngestionFailure(version.failureReason)}`
                         : ''}
                     </p>
                   </div>
-                  {version.status === 'ready' && !version.isCurrent ? (
-                    <Button
-                      variant="neutral"
-                      mode="stroke"
-                      size="xs"
-                      className="w-fit shrink-0"
-                      disabled={Boolean(rollbackBusyId)}
-                      loading={rollbackBusyId === version.id}
-                      onClick={() => void restoreVersion(version.id)}
-                    >
-                      Restore
-                    </Button>
-                  ) : null}
+                  <div className="flex flex-col gap-1.5 shrink-0">
+                    {version.status === 'ready' && versionsDoc ? (
+                      <Button
+                        variant="neutral"
+                        mode="stroke"
+                        size="xs"
+                        className="w-fit"
+                        onClick={() => openVersionPreview(version.id, versionsDoc.id)}
+                      >
+                        View
+                      </Button>
+                    ) : null}
+                    {version.status === 'ready' && versionsDoc ? (
+                      <Button
+                        variant="neutral"
+                        mode="stroke"
+                        size="xs"
+                        className="w-fit"
+                        onClick={() => {
+                          const current = (versionsQuery.data ?? []).find((v) => v.isCurrent);
+                          if (version.isCurrent) {
+                            const prior = (versionsQuery.data ?? [])
+                              .filter((v) => v.status === 'ready' && !v.isCurrent)
+                              .sort((a, b) => b.versionNumber - a.versionNumber)[0];
+                            openVersionDiff(prior?.id, version.id);
+                          } else {
+                            openVersionDiff(version.id, current?.id);
+                          }
+                        }}
+                      >
+                        Compare
+                      </Button>
+                    ) : null}
+                    {version.status === 'ready' && !version.isCurrent ? (
+                      <Button
+                        variant="neutral"
+                        mode="stroke"
+                        size="xs"
+                        className="w-fit"
+                        disabled={Boolean(rollbackBusyId)}
+                        loading={rollbackBusyId === version.id}
+                        onClick={() => void restoreVersion(version.id)}
+                      >
+                        Restore
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               ))
             )}
           </div>
           <ModalFooter>
+            <Button
+              variant="neutral"
+              mode="stroke"
+              className="w-fit"
+              disabled={
+                !versionsDoc ||
+                (versionsQuery.data ?? []).filter((v) => v.status === 'ready').length < 2
+              }
+              onClick={() => openVersionDiff()}
+            >
+              Compare versions
+            </Button>
+            <Button
+              variant="primary"
+              mode="filled"
+              className="w-fit"
+              disabled={!versionsDoc || versionUploadBusy || versionsDoc.isUpdating}
+              onClick={() => {
+                if (versionsDoc) startUploadNewVersion(versionsDoc);
+              }}
+            >
+              Upload new version
+            </Button>
             <Button variant="neutral" mode="stroke" className="w-fit" onClick={() => setVersionsDoc(null)}>
               Close
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {versionsDoc ? (
+        <VersionDiffModal
+          open={diffOpen}
+          onOpenChange={setDiffOpen}
+          documentId={versionsDoc.id}
+          documentName={versionsDoc.name}
+          versions={versionsQuery.data ?? []}
+          initialLeftId={diffLeftId}
+          initialRightId={diffRightId}
+        />
+      ) : null}
 
       <FormModal
         open={folderModalOpen}
