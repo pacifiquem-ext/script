@@ -50,7 +50,8 @@ Read in this order if you're new to the repo:
 | -------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | [`AGENTS.md`](./AGENTS.md)                                     | Engineering constitution — rules, tech baseline, skills, workflow. Start here.     |
 | [`projectdef.md`](./projectdef.md)                             | Product vision (company brain), shipped slice, backend requirements.               |
-| [`pipeline.md`](./pipeline.md)                                 | Roadmap ideas (voice, system connectors, agents, workflows) before they hit TODO.  |
+| [`pipeline.md`](./pipeline.md)                                 | Roadmap / org-ready build order (license, seats, …) before items hit TODO.         |
+| [`docs/pitch-ready.md`](./docs/pitch-ready.md)                 | Pitch checklist G1–G16 (packaging, security pack, pilot kit, legal, …).            |
 | [`understanding.md`](./understanding.md)                       | Frontend UI/design-system conventions (Align-UI, Huge Icons, tokens).              |
 | [`TODO.md`](./TODO.md)                                         | Live task ledger — what's done, in progress, next.                                 |
 | [`ENV.md`](./ENV.md)                                           | Every environment variable: what exists, what's missing.                           |
