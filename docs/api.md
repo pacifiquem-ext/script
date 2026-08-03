@@ -4,7 +4,12 @@ Programmatic access to the **company brain** for a workspace (Library + chat), a
 `Authorization: Bearer sk_live_…` from Settings → Integrations → API Access.
 API keys are workspace-scoped (`admin` role equivalent) and rate-limited per key (`rateLimitRpm`, default 60).
 
-Product scope: `projectdef.md`. Domain terms: `CONTEXT.md`.
+Product scope: `projectdef.md` (C1–C7 status in §2). Domain terms: `CONTEXT.md`.
+
+**Scope today is the document brain.** Chat turns run the agent tool loop (Library tools +
+optional `web_search` — `docs/agent-tools.md`), so API-key callers get the same grounded answers the
+SPA does. There are **no** connector, channel, meeting, or workflow endpoints; those capabilities
+are unbuilt (`docs/connectors.md`, `docs/workflows.md`).
 
 ## Endpoints
 
