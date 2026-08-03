@@ -10,6 +10,7 @@ import {
   listMeetings,
   searchMeetings,
 } from '../../meetings/meeting-tools';
+import { getWorkItemTool, listWorkItemsTool } from '../../connectors/work-tools';
 
 let registered = false;
 
@@ -244,6 +245,57 @@ export function registerBuiltinTools(): void {
           speaker: h.speaker,
         })),
       };
+    },
+  });
+
+  registerTool({
+    statusLabel: 'Listing work items…',
+    definition: {
+      name: 'list_work_items',
+      description:
+        'List normalized work items (issues) from connected work systems (e.g. GitHub). Use for "what issues are open?" inventory.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          q: { type: 'string' },
+          state: { type: 'string', description: 'open | closed' },
+          limit: { type: 'number' },
+        },
+        additionalProperties: false,
+      },
+    },
+    execute: async (input, ctx) => {
+      const data = await listWorkItemsTool(ctx, {
+        q: typeof input.q === 'string' ? input.q : undefined,
+        state: typeof input.state === 'string' ? input.state : undefined,
+        limit: typeof input.limit === 'number' ? input.limit : undefined,
+      });
+      return { ok: true, data };
+    },
+  });
+
+  registerTool({
+    statusLabel: 'Loading work item…',
+    definition: {
+      name: 'get_work_item',
+      description:
+        'Get a work item by externalId (e.g. github:org/repo#12) or title. Live-fetches assignee/state from GitHub when connected so status is not stale.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          externalId: { type: 'string' },
+          title: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+    execute: async (input, ctx) => {
+      const item = await getWorkItemTool(ctx, {
+        externalId: typeof input.externalId === 'string' ? input.externalId : undefined,
+        title: typeof input.title === 'string' ? input.title : undefined,
+      });
+      if (!item) return { ok: false, data: { error: 'Work item not found' } };
+      return { ok: true, data: item };
     },
   });
 }

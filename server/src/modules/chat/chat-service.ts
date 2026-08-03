@@ -271,6 +271,7 @@ async function retrieveContext(
   query: string,
   documentIds: string[],
   maxClearanceLevel = 0,
+  access?: { userId?: string; elevated?: boolean },
 ): Promise<RetrievedChunk[]> {
   const embedding = await embedQuery(query);
   const rows = await searchDocumentChunkVectors({
@@ -279,6 +280,8 @@ async function retrieveContext(
     limit: RAG_TOP_K,
     maxClearanceLevel,
     documentIds: documentIds.length ? documentIds : undefined,
+    userId: access?.userId,
+    elevated: access?.elevated,
   });
 
   return rows
@@ -442,6 +445,7 @@ export async function* streamAssistantReply(input: {
   await assertHasCredits(input.workspaceId, CHAT_CREDIT_COST);
 
   let maxClearance = input.maxClearanceLevel ?? 0;
+  let elevated = false;
   if (input.maxClearanceLevel === undefined) {
     const membership = await prisma.workspaceMember.findUnique({
       where: {
@@ -449,6 +453,7 @@ export async function* streamAssistantReply(input: {
       },
     });
     maxClearance = membership?.clearanceLevel ?? 0;
+    elevated = membership?.role === 'owner' || membership?.role === 'admin';
   }
 
   const explicitIds = [...new Set(input.body.documentIds ?? [])];
@@ -535,6 +540,7 @@ export async function* streamAssistantReply(input: {
           input.body.content,
           documentIds,
           maxClearance,
+          { userId: input.userId, elevated },
         );
       } catch (error) {
         await prisma.message.delete({ where: { id: userMessage.id } }).catch(() => undefined);
@@ -572,6 +578,8 @@ export async function* streamAssistantReply(input: {
           workspaceId: input.workspaceId,
           userId: input.userId,
           maxClearanceLevel: maxClearance,
+          elevated,
+          conversationId: input.conversationId,
         },
         signal: input.signal,
       })) {

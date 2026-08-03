@@ -66,16 +66,40 @@ export type DocumentVectorHit = {
   distance: number;
 };
 
-/** Current-version document RAG search with clearance filter. */
+/**
+ * Current-version document RAG with level clearance + restricted principal allow-list (ADR 0014).
+ * When userId is null, restricted documents are excluded (except none).
+ */
 export async function searchDocumentChunkVectors(input: {
   workspaceId: string;
   queryEmbedding: number[];
   limit: number;
   maxClearanceLevel: number;
   documentIds?: string[];
+  userId?: string | null;
+  /** owner/admin bypass restricted principal checks */
+  elevated?: boolean;
 }): Promise<DocumentVectorHit[]> {
   const vector = vectorLiteral(input.queryEmbedding);
   const documentIds = input.documentIds?.filter(Boolean) ?? [];
+  const userId = input.userId ?? null;
+  const elevated = input.elevated === true;
+
+  // Restricted: visibility=workspace OR elevated OR principal row exists for userId
+  const restrictedClause = elevated
+    ? Prisma.sql`TRUE`
+    : userId
+      ? Prisma.sql`(
+          d.visibility = 'workspace'::"ResourceVisibility"
+          OR EXISTS (
+            SELECT 1 FROM "ResourcePrincipal" rp
+            WHERE rp."workspaceId" = ${input.workspaceId}
+              AND rp."resourceKind" = 'document'::"ResourceKind"
+              AND rp."resourceId" = d.id
+              AND rp."userId" = ${userId}
+          )
+        )`
+      : Prisma.sql`d.visibility = 'workspace'::"ResourceVisibility"`;
 
   if (documentIds.length > 0) {
     return prisma.$queryRaw<DocumentVectorHit[]>`
@@ -93,6 +117,7 @@ export async function searchDocumentChunkVectors(input: {
         AND c.embedding IS NOT NULL
         AND d."clearanceLevel" <= ${input.maxClearanceLevel}
         AND d.id IN (${Prisma.join(documentIds)})
+        AND ${restrictedClause}
       ORDER BY c.embedding <=> ${vector}::vector
       LIMIT ${input.limit}
     `;
@@ -112,6 +137,7 @@ export async function searchDocumentChunkVectors(input: {
       AND c."documentVersionId" = d."currentVersionId"
       AND c.embedding IS NOT NULL
       AND d."clearanceLevel" <= ${input.maxClearanceLevel}
+      AND ${restrictedClause}
     ORDER BY c.embedding <=> ${vector}::vector
     LIMIT ${input.limit}
   `;

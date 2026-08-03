@@ -82,6 +82,8 @@ enum DocumentVersionChangeReason {
 enum MemorySourceType {
   document
   meeting
+  channel
+  work_item
 }
 
 enum MeetingStatus {
@@ -89,6 +91,19 @@ enum MeetingStatus {
   processing
   ready
   failed
+}
+
+enum ResourceVisibility {
+  workspace
+  restricted
+}
+
+enum ResourceKind {
+  document
+  meeting
+  channel
+  work_item
+  work_project
 }
 
 model User {
@@ -181,6 +196,13 @@ model Workspace {
   invites            WorkspaceInvite[]
   auditEvents        AuditEvent[]
   agentToolCalls     AgentToolCall[]
+  resourcePrincipals ResourcePrincipal[]
+  personIdentities   PersonIdentity[]
+  systemConnectors   SystemConnector[]
+  workProjects       WorkProject[]
+  workItems          WorkItem[]
+  slackInstalls      SlackInstall[]
+  channelBindings    ChannelBinding[]
 
   /// Org retention hint (days). Null = use install default / unlimited. Documented in runbooks.
   retentionDays      Int?
@@ -285,8 +307,9 @@ model Document {
   storageKey          String
   source              DocumentSource
   sourceUrl           String?
-  /// Min member clearance required to see this document (Org-P9b).
-  clearanceLevel      Int            @default(0)
+  /// Min member clearance required to see this document (Org-P9b / ADR 0014).
+  clearanceLevel      Int                @default(0)
+  visibility          ResourceVisibility @default(workspace)
   /// Retrieval-facing status: ready when currentVersion is ready. Stays ready while a
   /// newer version is processing so chat keeps serving the last good version.
   status              DocumentStatus @default(pending)
@@ -390,7 +413,7 @@ model DocumentChunk {
   @@index([documentVersionId])
 }
 
-/// Polymorphic memory identity (ADR 0012). Document and meeting rows plug in here.
+/// Polymorphic memory identity (ADR 0012). Document, meeting, channel, work_item plug in here.
 model MemorySource {
   id          String           @id @default(cuid())
   workspaceId String
@@ -398,6 +421,7 @@ model MemorySource {
   title       String
   documentId  String?          @unique
   meetingId   String?          @unique
+  externalKey String?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
@@ -406,6 +430,7 @@ model MemorySource {
   meeting   Meeting?      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   chunks    MemoryChunk[]
 
+  @@unique([workspaceId, type, externalKey])
   @@index([workspaceId, type])
 }
 
@@ -441,22 +466,24 @@ model MemoryChunk {
 }
 
 model Meeting {
-  id               String        @id @default(cuid())
+  id               String             @id @default(cuid())
   workspaceId      String
   title            String
-  summary          String?       @db.Text
-  transcriptText   String?       @db.Text
+  summary          String?            @db.Text
+  transcriptText   String?            @db.Text
   startedAt        DateTime?
   endedAt          DateTime?
-  sourceProvider   String        @default("fireflies")
+  sourceProvider   String             @default("fireflies")
   sourceExternalId String?
   sourceUrl        String?
-  participants     Json          @default("[]")
-  status           MeetingStatus @default(pending)
+  participants     Json               @default("[]")
+  status           MeetingStatus      @default(pending)
   failureReason    String?
+  clearanceLevel   Int                @default(0)
+  visibility       ResourceVisibility @default(workspace)
   createdById      String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
   processedAt      DateTime?
 
   workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -467,6 +494,153 @@ model Meeting {
   @@index([workspaceId, startedAt])
   @@index([workspaceId, status])
   @@index([workspaceId, sourceProvider, sourceExternalId])
+}
+
+/// Explicit allow-list when resource.visibility = restricted (ADR 0014).
+model ResourcePrincipal {
+  id           String       @id @default(cuid())
+  workspaceId  String
+  resourceKind ResourceKind
+  resourceId   String
+  userId       String
+  createdAt    DateTime     @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, resourceKind, resourceId, userId])
+  @@index([workspaceId, userId])
+  @@index([resourceKind, resourceId])
+}
+
+/// Maps external platform identities to script users (ADR 0014 X3).
+model PersonIdentity {
+  id          String   @id @default(cuid())
+  workspaceId String
+  provider    String
+  externalId  String
+  userId      String?
+  email       String?
+  displayName String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider, externalId])
+  @@index([workspaceId, email])
+  @@index([workspaceId, userId])
+}
+
+/// Work-system / messaging connector install (ADR 0015) — not file OAuth Integration.
+model SystemConnector {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  provider             String
+  encryptedCredentials String    @db.Text
+  scopes               Json      @default("[]")
+  status               String    @default("connected")
+  consentAt            DateTime?
+  installedById        String?
+  lastSyncAt           DateTime?
+  lastError            String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projects  WorkProject[]
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId])
+}
+
+model WorkProject {
+  id               String             @id @default(cuid())
+  workspaceId      String
+  connectorId      String
+  externalId       String
+  name             String
+  description      String?            @db.Text
+  url              String?
+  clearanceLevel   Int                @default(0)
+  visibility       ResourceVisibility @default(workspace)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connector SystemConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  items     WorkItem[]
+
+  @@unique([connectorId, externalId])
+  @@index([workspaceId])
+}
+
+model WorkItem {
+  id                   String             @id @default(cuid())
+  workspaceId          String
+  projectId            String?
+  externalId           String
+  title                String
+  body                 String?            @db.Text
+  state                String             @default("open")
+  assigneeExternalId   String?
+  assigneeUserId       String?
+  url                  String?
+  clearanceLevel       Int                @default(0)
+  visibility           ResourceVisibility @default(workspace)
+  externalUpdatedAt    DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   WorkProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, externalId])
+  @@index([workspaceId, state])
+  @@index([projectId])
+  @@index([assigneeUserId])
+}
+
+model SlackInstall {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  teamId            String
+  teamName          String?
+  encryptedBotToken String    @db.Text
+  botUserId         String?
+  scopes            Json      @default("[]")
+  installedById     String?
+  consentAt         DateTime?
+  status            String    @default("connected")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  bindings  ChannelBinding[]
+
+  @@unique([workspaceId])
+  @@unique([teamId])
+  @@index([workspaceId])
+}
+
+model ChannelBinding {
+  id             String             @id @default(cuid())
+  workspaceId    String
+  slackInstallId String
+  channelId      String
+  channelName    String?
+  boundByUserId  String?
+  retentionDays  Int?
+  announcedAt    DateTime?
+  clearanceLevel Int                @default(0)
+  visibility     ResourceVisibility @default(workspace)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  slackInstall SlackInstall @relation(fields: [slackInstallId], references: [id], onDelete: Cascade)
+
+  @@unique([slackInstallId, channelId])
+  @@index([workspaceId])
 }
 
 /// Per-workspace meetings connector credentials (Fireflies API key, etc.).

@@ -7,6 +7,8 @@ export type AgentToolContext = {
   workspaceId: string;
   userId?: string;
   maxClearanceLevel?: number;
+  /** owner/admin: bypass restricted principal checks */
+  elevated?: boolean;
   conversationId?: string;
 };
 

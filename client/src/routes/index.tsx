@@ -35,6 +35,9 @@ const InviteAcceptPage = lazy(() =>
 const MeetingsPage = lazy(() =>
   import('../pages/app/MeetingsPage').then((m) => ({ default: m.MeetingsPage })),
 );
+const ConnectorsPage = lazy(() =>
+  import('../pages/app/ConnectorsPage').then((m) => ({ default: m.ConnectorsPage })),
+);
 
 function Lazy({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<LoadingState />}>{children}</Suspense>;
@@ -148,6 +151,14 @@ export const router = createBrowserRouter([
             element: (
               <Lazy>
                 <MeetingsPage />
+              </Lazy>
+            ),
+          },
+          {
+            path: 'connectors',
+            element: (
+              <Lazy>
+                <ConnectorsPage />
               </Lazy>
             ),
           },

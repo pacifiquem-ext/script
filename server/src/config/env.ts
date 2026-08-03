@@ -83,6 +83,10 @@ const envSchema = z
     OIDC_REDIRECT_URL: optionalUrl,
     /** HMAC secret for Fireflies webhooks (`X-Hub-Signature`). Per-workspace API keys are stored encrypted. */
     FIREFLIES_WEBHOOK_SECRET: optionalString,
+    /** Slack Events API signing secret (ADR 0016). Bot tokens stored per workspace encrypted. */
+    SLACK_SIGNING_SECRET: optionalString,
+    SLACK_CLIENT_ID: optionalString,
+    SLACK_CLIENT_SECRET: optionalString,
     RESEND_API_KEY: optionalString,
     EMAIL_FROM: optionalEmail,
     UNSTRUCTURED_API_KEY: optionalString,
