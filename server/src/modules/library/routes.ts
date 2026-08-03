@@ -37,14 +37,17 @@ export async function libraryRoutes(app: FastifyInstance) {
   app.get('/documents', async (request) => {
     const { workspace } = await requireWorkspace(request);
     const query = listDocumentsQuerySchema.parse(request.query);
-    return library.listDocuments(workspace.id, query);
+    return library.listDocuments(workspace.id, query, workspace.clearanceLevel);
   });
 
   app.get('/documents/:documentId', async (request) => {
     const { workspace } = await requireWorkspace(request);
     const { documentId } = request.params as { documentId: string };
     const versionId = (request.query as { versionId?: string }).versionId;
-    return library.getDocument(workspace.id, documentId, { versionId });
+    return library.getDocument(workspace.id, documentId, {
+      versionId,
+      maxClearanceLevel: workspace.clearanceLevel,
+    });
   });
 
   app.get('/documents/:documentId/versions', async (request) => {

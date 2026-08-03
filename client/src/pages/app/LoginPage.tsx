@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { loginBodySchema } from '@script/shared';
 import { IconMail, IconLockPassword, IconEye, IconEyeOff } from '../../lib/icons';
@@ -9,14 +9,23 @@ import { getErrorMessage } from '../../lib/form-errors';
 import { useAuth } from '../../contexts/useAuth';
 import { Alert } from '../../components/ui/Alert';
 
+const apiBase = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
+
 export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ssoEnabled, setSsoEnabled] = useState(false);
   const navigate = useNavigate();
   const { refresh } = useAuth();
+
+  useEffect(() => {
+    void apiRequest<{ enabled: boolean }>('/auth/sso/status')
+      .then((data) => setSsoEnabled(Boolean(data.enabled)))
+      .catch(() => setSsoEnabled(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,10 +124,31 @@ export function LoginPage() {
               onDismiss={() => setError(null)}
             />
           )}
-          <Button type="submit" size="md" loading={loading} className="self-center min-w-[200px]">
+          <Button type="submit" size="md" loading={loading} className="self-center min-w-[200px] w-fit">
             Sign in
           </Button>
         </form>
+
+        {ssoEnabled && (
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-full flex items-center gap-3 text-neutral-400 text-[12px]">
+              <span className="flex-1 h-px bg-neutral-200" />
+              or
+              <span className="flex-1 h-px bg-neutral-200" />
+            </div>
+            <Button
+              type="button"
+              variant="neutral"
+              size="md"
+              className="w-fit min-w-[200px]"
+              onClick={() => {
+                window.location.href = `${apiBase}/auth/sso/start`;
+              }}
+            >
+              Continue with SSO
+            </Button>
+          </div>
+        )}
 
         <p className="text-para-sm text-neutral-600 text-center">
           Don&rsquo;t have an account?{' '}

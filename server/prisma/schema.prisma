@@ -88,6 +88,8 @@ model User {
   emailVerifiedAt DateTime?
   lastWorkspaceId String?
   preferences     Json      @default("{}")
+  /// password | oidc — set when user last authenticated via SSO
+  authProvider    String    @default("password")
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -99,6 +101,8 @@ model User {
   conversations   Conversation[]
   apiKeys         ApiKey[]          @relation("ApiKeyCreatedBy")
   creditLedger    CreditLedgerEntry[]
+  invitesSent     WorkspaceInvite[] @relation("InviteInvitedBy")
+  auditEvents     AuditEvent[]      @relation("AuditActor")
 
   @@index([lastWorkspaceId])
 }
@@ -157,16 +161,23 @@ model Workspace {
   creditBalance      CreditBalance?
   creditLedger       CreditLedgerEntry[]
   lastWorkspaceUsers User[] @relation("UserLastWorkspace")
+  invites            WorkspaceInvite[]
+  auditEvents        AuditEvent[]
+
+  /// Org retention hint (days). Null = use install default / unlimited. Documented in runbooks.
+  retentionDays      Int?
 }
 
 model WorkspaceMember {
-  id          String        @id @default(cuid())
-  workspaceId String
-  userId      String
-  role        WorkspaceRole @default(member)
-  creditShare Int?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  workspaceId    String
+  userId         String
+  role           WorkspaceRole @default(member)
+  creditShare    Int?
+  /// Max document/folder clearance this member may read (0 = public library).
+  clearanceLevel Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -176,12 +187,13 @@ model WorkspaceMember {
 }
 
 model Folder {
-  id          String   @id @default(cuid())
-  workspaceId String
-  parentId    String?
-  name        String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  workspaceId    String
+  parentId       String?
+  name           String
+  clearanceLevel Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   parent    Folder?    @relation("FolderTree", fields: [parentId], references: [id], onDelete: Restrict)
@@ -189,6 +201,60 @@ model Folder {
   documents Document[]
 
   @@index([workspaceId, parentId])
+}
+
+/// Install-scoped signed activation (Org-P7). Singleton id = "default".
+model LicenseActivation {
+  id             String   @id @default("default")
+  licenseId      String
+  customerId     String
+  seats          Int
+  issuedAt       DateTime
+  expiresAt      DateTime
+  features       Json     @default("{}")
+  keyFingerprint String
+  rawClaims      Json
+  activatedAt    DateTime @default(now())
+  activatedById  String?
+  updatedAt      DateTime @updatedAt
+}
+
+model WorkspaceInvite {
+  id          String        @id @default(cuid())
+  workspaceId String
+  email       String
+  role        WorkspaceRole @default(member)
+  tokenHash   String        @unique
+  expiresAt   DateTime
+  invitedById String
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation("InviteInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, email])
+  @@index([expiresAt])
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  workspaceId String?
+  actorUserId String?
+  action      String
+  targetType  String?
+  targetId    String?
+  metadata    Json     @default("{}")
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor     User?      @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
 }
 
 model Document {
@@ -201,6 +267,8 @@ model Document {
   storageKey          String
   source              DocumentSource
   sourceUrl           String?
+  /// Min member clearance required to see this document (Org-P9b).
+  clearanceLevel      Int            @default(0)
   /// Retrieval-facing status: ready when currentVersion is ready. Stays ready while a
   /// newer version is processing so chat keeps serving the last good version.
   status              DocumentStatus @default(pending)

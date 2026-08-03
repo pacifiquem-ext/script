@@ -22,6 +22,7 @@ export type UpdateFolderBody = z.infer<typeof updateFolderBodySchema>;
 export const updateDocumentBodySchema = z.object({
   name: z.string().trim().min(1).max(255).optional(),
   folderId: z.string().min(1).nullable().optional(),
+  clearanceLevel: z.number().int().min(0).max(100).optional(),
 });
 export type UpdateDocumentBody = z.infer<typeof updateDocumentBodySchema>;
 
@@ -57,6 +58,7 @@ export const publicDocumentSchema = z.object({
   byteSize: z.number().int().nonnegative(),
   source: documentSourceSchema,
   sourceUrl: z.string().nullable(),
+  clearanceLevel: z.number().int().min(0).max(100).optional(),
   status: documentStatusSchema,
   processingPhase: documentProcessingPhaseSchema.nullable(),
   failureReason: z.string().nullable(),

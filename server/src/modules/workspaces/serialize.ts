@@ -34,6 +34,7 @@ export function toPublicMember(
     name: member.user.name,
     role: member.role,
     creditShare: member.creditShare,
+    clearanceLevel: member.clearanceLevel ?? 0,
     createdAt: member.createdAt.toISOString(),
   };
 }

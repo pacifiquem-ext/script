@@ -46,8 +46,19 @@ export const publicMemberSchema = z.object({
   name: z.string(),
   role: workspaceRoleSchema,
   creditShare: z.number().int().min(0).max(100).nullable().optional(),
+  clearanceLevel: z.number().int().min(0).max(100).default(0),
   createdAt: z.string().datetime(),
 });
 export type PublicMember = z.infer<typeof publicMemberSchema>;
+
+export const updateMemberClearanceBodySchema = z.object({
+  clearanceLevel: z.number().int().min(0).max(100),
+});
+export type UpdateMemberClearanceBody = z.infer<typeof updateMemberClearanceBodySchema>;
+
+export const publicWorkspaceSchemaExtended = publicWorkspaceSchema.extend({
+  seatsUsed: z.number().int().nonnegative().optional(),
+  seatsLicensed: z.number().int().nonnegative().optional(),
+});
 
 export const SIGNUP_CREDIT_GRANT = 2000;

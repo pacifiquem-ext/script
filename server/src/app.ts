@@ -19,6 +19,9 @@ import { creditsRoutes } from './modules/credits/routes';
 import { jobsRoutes } from './modules/jobs/routes';
 import { registerIngestionProcessors } from './modules/jobs/ingestion';
 import { integrationRoutes } from './modules/integrations/routes';
+import { licenseRoutes } from './modules/license/routes';
+import { auditRoutes } from './modules/audit/routes';
+import { ssoRoutes } from './modules/sso/routes';
 
 export function buildApp() {
   registerIngestionProcessors();
@@ -60,6 +63,9 @@ export function buildApp() {
     await instance.register(creditsRoutes);
     await instance.register(jobsRoutes);
     await instance.register(integrationRoutes);
+    await instance.register(licenseRoutes);
+    await instance.register(auditRoutes);
+    await instance.register(ssoRoutes);
   });
   return app;
 }

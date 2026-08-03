@@ -58,6 +58,29 @@ const envSchema = z
     VOYAGE_API_KEY: optionalString,
     /** Optional Tavily key for agent `web_search` tool (P4). Chat works without it; tool returns a clear error. */
     TAVILY_API_KEY: optionalString,
+    /** Org-P7: PEM public key for verifying activation keys. Empty = open-dev unless LICENSE_ENFORCEMENT. */
+    LICENSE_PUBLIC_KEY: optionalString,
+    /** Optional bootstrap key applied at boot when no LicenseActivation row exists. */
+    LICENSE_KEY: optionalString,
+    LICENSE_ENFORCEMENT: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+    /** Org-P8 completion: anthropic (default) | openai_compatible */
+    COMPLETION_PROVIDER: z.enum(['anthropic', 'openai_compatible']).default('anthropic'),
+    COMPLETION_BASE_URL: optionalUrl,
+    COMPLETION_API_KEY: optionalString,
+    COMPLETION_MODEL: optionalString,
+    /** Org-P8 embeddings: voyage (default) | openai_compatible */
+    EMBEDDING_PROVIDER: z.enum(['voyage', 'openai_compatible']).default('voyage'),
+    EMBEDDING_BASE_URL: optionalUrl,
+    EMBEDDING_API_KEY: optionalString,
+    EMBEDDING_MODEL: optionalString,
+    /** Org-P9b OIDC SSO (optional) */
+    OIDC_ISSUER: optionalUrl,
+    OIDC_CLIENT_ID: optionalString,
+    OIDC_CLIENT_SECRET: optionalString,
+    OIDC_REDIRECT_URL: optionalUrl,
     RESEND_API_KEY: optionalString,
     EMAIL_FROM: optionalEmail,
     UNSTRUCTURED_API_KEY: optionalString,
@@ -105,6 +128,34 @@ const envSchema = z
         }
       }
     }
+    if (value.COMPLETION_PROVIDER === 'openai_compatible') {
+      if (!value.COMPLETION_BASE_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['COMPLETION_BASE_URL'],
+          message: 'COMPLETION_BASE_URL is required when COMPLETION_PROVIDER=openai_compatible',
+        });
+      }
+    }
+    if (value.EMBEDDING_PROVIDER === 'openai_compatible') {
+      if (!value.EMBEDDING_BASE_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['EMBEDDING_BASE_URL'],
+          message: 'EMBEDDING_BASE_URL is required when EMBEDDING_PROVIDER=openai_compatible',
+        });
+      }
+    }
+    if (value.OIDC_ISSUER || value.OIDC_CLIENT_ID || value.OIDC_CLIENT_SECRET) {
+      if (!value.OIDC_ISSUER || !value.OIDC_CLIENT_ID || !value.OIDC_CLIENT_SECRET || !value.OIDC_REDIRECT_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['OIDC_ISSUER'],
+          message:
+            'OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, and OIDC_REDIRECT_URL are all required when SSO is configured',
+        });
+      }
+    }
     if (value.NODE_ENV === 'production') {
       if (!value.TOKEN_ENCRYPTION_KEY) {
         ctx.addIssue({
@@ -113,18 +164,18 @@ const envSchema = z
           message: 'TOKEN_ENCRYPTION_KEY is required in production (encrypt OAuth tokens at rest)',
         });
       }
-      if (!value.VOYAGE_API_KEY) {
+      if (value.EMBEDDING_PROVIDER === 'voyage' && !value.VOYAGE_API_KEY) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['VOYAGE_API_KEY'],
-          message: 'VOYAGE_API_KEY is required in production',
+          message: 'VOYAGE_API_KEY is required in production when EMBEDDING_PROVIDER=voyage',
         });
       }
-      if (!value.ANTHROPIC_API_KEY) {
+      if (value.COMPLETION_PROVIDER === 'anthropic' && !value.ANTHROPIC_API_KEY) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['ANTHROPIC_API_KEY'],
-          message: 'ANTHROPIC_API_KEY is required in production',
+          message: 'ANTHROPIC_API_KEY is required in production when COMPLETION_PROVIDER=anthropic',
         });
       }
       if (!value.REDIS_URL) {
@@ -132,6 +183,13 @@ const envSchema = z
           code: z.ZodIssueCode.custom,
           path: ['REDIS_URL'],
           message: 'REDIS_URL is required in production (BullMQ worker topology)',
+        });
+      }
+      if (value.LICENSE_ENFORCEMENT && !value.LICENSE_PUBLIC_KEY) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['LICENSE_PUBLIC_KEY'],
+          message: 'LICENSE_PUBLIC_KEY is required when LICENSE_ENFORCEMENT=true',
         });
       }
     }

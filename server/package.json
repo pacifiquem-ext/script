@@ -18,6 +18,8 @@
     "db:seed": "prisma db seed",
     "worker": "node -r @swc-node/register src/worker/index.ts",
     "worker:start": "node dist/src/worker/index.js",
+    "license:mint": "node -r @swc-node/register src/cli/mint-license.ts",
+    "license:keypair": "node -r @swc-node/register src/cli/mint-license.ts --generate-keypair",
     "test:coverage": "vitest run --coverage test/unit.pure.test.ts test/unit.extract.test.ts test/password.test.ts test/pagination.test.ts",
     "test:coverage:all": "vitest run --coverage"
   },

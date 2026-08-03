@@ -74,6 +74,10 @@ Read in this order if you're new to the repo:
 | [`docs/connectors.md`](./docs/connectors.md)                   | **Roadmap spec** — messaging bots, channel context, work systems, calls.              |
 | [`docs/workflows.md`](./docs/workflows.md)                     | **Roadmap spec** — markdown-authored, run-tracked guided processes.                   |
 | [`docs/pitch-ready.md`](./docs/pitch-ready.md)                 | Pitch checklist G1–G16 (packaging, security pack, pilot kit, legal, …).               |
+| [`docs/org-deploy.md`](./docs/org-deploy.md)                   | Org deploy runbook (license, seats, backups, TLS).                                    |
+| [`docs/air-gap.md`](./docs/air-gap.md)                         | Air-gap / local LLM + embeddings profile.                                             |
+| [`docs/secret-rotation.md`](./docs/secret-rotation.md)         | JWT / license / OAuth secret rotation notes.                                          |
+| [`docs/retention.md`](./docs/retention.md)                     | Retention hints + clearance notes (Org-P9b).                                          |
 | [`understanding.md`](./understanding.md)                       | Frontend UI/design-system conventions (Align-UI, Huge Icons, tokens).                 |
 | [`TODO.md`](./TODO.md)                                         | Live task ledger — what's done, in progress, next.                                    |
 | [`ENV.md`](./ENV.md)                                           | Every environment variable: what exists, what's missing.                              |

@@ -11,6 +11,9 @@ import { prisma } from '../../db/prisma';
 import { setWorkspaceCookie } from '../../lib/cookies';
 import type { AuthUser, WorkspaceContext } from '../../plugins/auth';
 import { requireWorkspaceRole } from '../../plugins/auth';
+import { recordAudit } from '../audit/audit-service';
+import { assertLicenseAllowsWrite, assertSeatAvailable } from '../license/license-service';
+import { createInvite } from './invites-service';
 import { toPublicMember, toPublicWorkspace } from './serialize';
 
 export async function listWorkspaces(userId: string) {
@@ -128,13 +131,20 @@ export async function listMembers(workspace: WorkspaceContext) {
   return { members: members.map(toPublicMember) };
 }
 
-export async function inviteMember(workspace: WorkspaceContext, body: InviteMemberBody) {
+export async function inviteMember(
+  workspace: WorkspaceContext,
+  actor: AuthUser,
+  body: InviteMemberBody,
+  ip?: string | null,
+) {
   requireWorkspaceRole(workspace, ['owner', 'admin']);
+  await assertLicenseAllowsWrite();
   const email = body.email.toLowerCase();
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) throw new NotFoundError('User');
-  if (user.id && body.role === undefined) {
-    // no-op
+
+  // Existing account → immediate membership (seat-capped). New email → token invite.
+  if (!user) {
+    return createInvite(workspace, actor, body, ip);
   }
 
   const existing = await prisma.workspaceMember.findUnique({
@@ -142,17 +152,29 @@ export async function inviteMember(workspace: WorkspaceContext, body: InviteMemb
   });
   if (existing) throw new ConflictError('User is already a member');
 
+  await assertSeatAvailable(1);
   const member = await prisma.workspaceMember.create({
     data: { workspaceId: workspace.id, userId: user.id, role: body.role },
     include: { user: { select: { id: true, email: true, name: true } } },
+  });
+  await recordAudit({
+    workspaceId: workspace.id,
+    actorUserId: actor.id,
+    action: 'invite.accept',
+    targetType: 'member',
+    targetId: member.id,
+    metadata: { email, mode: 'direct_add' },
+    ip,
   });
   return { member: toPublicMember(member) };
 }
 
 export async function updateMemberRole(
   actor: WorkspaceContext,
+  actorUserId: string,
   memberId: string,
   body: UpdateMemberRoleBody,
+  ip?: string | null,
 ) {
   requireWorkspaceRole(actor, ['owner', 'admin']);
   const member = await prisma.workspaceMember.findFirst({
@@ -166,10 +188,54 @@ export async function updateMemberRole(
     data: { role: body.role },
     include: { user: { select: { id: true, email: true, name: true } } },
   });
+  await recordAudit({
+    workspaceId: actor.id,
+    actorUserId,
+    action: 'member.role_change',
+    targetType: 'member',
+    targetId: member.id,
+    metadata: { from: member.role, to: body.role },
+    ip,
+  });
   return { member: toPublicMember(updated) };
 }
 
-export async function removeMember(actor: WorkspaceContext, actorUserId: string, memberId: string) {
+export async function updateMemberClearance(
+  actor: WorkspaceContext,
+  actorUserId: string,
+  memberId: string,
+  clearanceLevel: number,
+  ip?: string | null,
+) {
+  requireWorkspaceRole(actor, ['owner', 'admin']);
+  const member = await prisma.workspaceMember.findFirst({
+    where: { id: memberId, workspaceId: actor.id },
+  });
+  if (!member) throw new NotFoundError('Member');
+
+  const updated = await prisma.workspaceMember.update({
+    where: { id: member.id },
+    data: { clearanceLevel },
+    include: { user: { select: { id: true, email: true, name: true } } },
+  });
+  await recordAudit({
+    workspaceId: actor.id,
+    actorUserId,
+    action: 'member.clearance_change',
+    targetType: 'member',
+    targetId: member.id,
+    metadata: { clearanceLevel },
+    ip,
+  });
+  return { member: toPublicMember(updated) };
+}
+
+export async function removeMember(
+  actor: WorkspaceContext,
+  actorUserId: string,
+  memberId: string,
+  ip?: string | null,
+) {
   requireWorkspaceRole(actor, ['owner', 'admin']);
   const member = await prisma.workspaceMember.findFirst({
     where: { id: memberId, workspaceId: actor.id },
@@ -179,5 +245,14 @@ export async function removeMember(actor: WorkspaceContext, actorUserId: string,
   if (member.userId === actorUserId) throw new BadRequestError('Cannot remove yourself');
 
   await prisma.workspaceMember.delete({ where: { id: member.id } });
+  await recordAudit({
+    workspaceId: actor.id,
+    actorUserId,
+    action: 'member.remove',
+    targetType: 'member',
+    targetId: memberId,
+    metadata: { removedUserId: member.userId },
+    ip,
+  });
   return { ok: true as const };
 }

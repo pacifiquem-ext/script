@@ -48,6 +48,7 @@ const SIDEBAR_NAV = [
     category: 'Workspace',
     items: [
       { id: 'people', label: 'People', icon: <IconUser size={16} /> },
+      { id: 'license', label: 'License', icon: <IconLock size={16} /> },
       { id: 'billing', label: 'Plans & Billing', icon: <IconGrid size={16} /> },
     ],
   },
@@ -120,10 +121,48 @@ export function SettingsModal({ open, onClose }: Props) {
   const membersQuery = useWorkspaceMembers(
     open && Boolean(user) && (activeItem === 'people' || activeItem === 'workspace'),
   );
+  const invitesQuery = useQuery({
+    queryKey: ['workspace-invites'],
+    enabled: open && Boolean(user) && activeItem === 'people',
+    queryFn: async () => {
+      const data = await apiRequest<{
+        invites: Array<{
+          id: string;
+          email: string;
+          role: string;
+          status: string;
+          expiresAt: string;
+        }>;
+      }>('/workspaces/current/invites');
+      return data.invites;
+    },
+  });
+  const licenseQuery = useQuery({
+    queryKey: ['license'],
+    enabled: open && Boolean(user) && activeItem === 'license',
+    queryFn: async () => {
+      const data = await apiRequest<{
+        license: {
+          phase: string;
+          enforced: boolean;
+          seats: number;
+          seatsUsed: number;
+          seatsRemaining: number | null;
+          canWrite: boolean;
+          message: string | null;
+          expiresAt: string | null;
+          customerId: string | null;
+        };
+      }>('/license');
+      return data.license;
+    },
+  });
   const workspaces = workspacesQuery.data ?? [];
   const activeWorkspace =
     workspaces.find((workspace) => workspace.id === user?.lastWorkspaceId) ?? workspaces[0];
   const members = membersQuery.data ?? [];
+  const invites = invitesQuery.data ?? [];
+  const license = licenseQuery.data;
   const displayName = user?.name ?? 'Account';
   const displayEmail = user?.email ?? '';
   const memberSince = user?.createdAt
@@ -138,7 +177,11 @@ export function SettingsModal({ open, onClose }: Props) {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [bulkEmails, setBulkEmails] = useState('');
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [licenseKey, setLicenseKey] = useState('');
+  const [licenseError, setLicenseError] = useState<string | null>(null);
+  const [licenseMessage, setLicenseMessage] = useState<string | null>(null);
   const [apiKeyName, setApiKeyName] = useState('');
   const [apiKeySecret, setApiKeySecret] = useState<string | null>(null);
   const [creditShareMember, setCreditShareMember] = useState<{
@@ -668,6 +711,7 @@ export function SettingsModal({ open, onClose }: Props) {
                 <Button
                   variant="primary"
                   size="sm"
+                  className="w-fit"
                   leftIcon={<IconPlus size={14} />}
                   onClick={() => {
                     setInviteError(null);
@@ -678,11 +722,47 @@ export function SettingsModal({ open, onClose }: Props) {
                       .then(async () => {
                         setInviteEmail('');
                         await membersQuery.refetch();
+                        await invitesQuery.refetch();
                       })
                       .catch((err) => setInviteError(getErrorMessage(err, 'Invite failed')));
                   }}
                 >
                   Invite Member
+                </Button>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[12px] text-neutral-500" htmlFor="bulk-invites">
+                  Bulk invite (one email per line)
+                </label>
+                <textarea
+                  id="bulk-invites"
+                  value={bulkEmails}
+                  onChange={(e) => setBulkEmails(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-neutral-200 rounded-8 text-[13px] resize-y"
+                />
+                <Button
+                  variant="neutral"
+                  size="sm"
+                  className="w-fit"
+                  onClick={() => {
+                    const emails = bulkEmails
+                      .split(/[\n,;]+/)
+                      .map((e) => e.trim())
+                      .filter(Boolean);
+                    setInviteError(null);
+                    void apiRequest('/workspaces/current/invites/bulk', {
+                      method: 'POST',
+                      body: { emails, role: 'member' },
+                    })
+                      .then(async () => {
+                        setBulkEmails('');
+                        await invitesQuery.refetch();
+                      })
+                      .catch((err) => setInviteError(getErrorMessage(err, 'Bulk invite failed')));
+                  }}
+                >
+                  Send bulk invites
                 </Button>
               </div>
               {inviteError && (
@@ -708,6 +788,29 @@ export function SettingsModal({ open, onClose }: Props) {
                     <span className="text-[12px] capitalize px-2 py-1 rounded-6 bg-neutral-50 border border-neutral-100">
                       {member.role}
                     </span>
+                    <label className="flex items-center gap-1 text-[11px] text-neutral-500">
+                      Clearance
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        defaultValue={member.clearanceLevel ?? 0}
+                        className="w-14 h-7 px-1 border border-neutral-200 rounded-6 text-[12px]"
+                        aria-label={`Clearance for ${member.name}`}
+                        onBlur={(e) => {
+                          const clearanceLevel = Number(e.target.value);
+                          if (Number.isNaN(clearanceLevel)) return;
+                          void apiRequest(`/workspaces/current/members/${member.id}/clearance`, {
+                            method: 'PATCH',
+                            body: { clearanceLevel },
+                          })
+                            .then(() => membersQuery.refetch())
+                            .catch((err) =>
+                              setInviteError(getErrorMessage(err, 'Clearance update failed')),
+                            );
+                        }}
+                      />
+                    </label>
                     <button
                       type="button"
                       className="text-[11px] text-primary-base bg-transparent border-none cursor-pointer"
@@ -724,6 +827,166 @@ export function SettingsModal({ open, onClose }: Props) {
                   </div>
                 </div>
               ))}
+              {invites.filter((i) => i.status === 'pending').length > 0 && (
+                <div className="flex flex-col gap-2 mt-2">
+                  <p className="text-[13px] font-medium text-neutral-950">Pending invites</p>
+                  {invites
+                    .filter((i) => i.status === 'pending')
+                    .map((invite) => (
+                      <div
+                        key={invite.id}
+                        className="flex items-center justify-between border border-neutral-200 rounded-10 p-3 gap-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-[13px] truncate">{invite.email}</p>
+                          <p className="text-[11px] text-neutral-500">
+                            Expires {new Date(invite.expiresAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <Button
+                            variant="neutral"
+                            size="sm"
+                            className="w-fit"
+                            onClick={() => {
+                              void apiRequest(
+                                `/workspaces/current/invites/${invite.id}/resend`,
+                                { method: 'POST' },
+                              ).catch((err) =>
+                                setInviteError(getErrorMessage(err, 'Resend failed')),
+                              );
+                            }}
+                          >
+                            Resend
+                          </Button>
+                          <Button
+                            variant="neutral"
+                            size="sm"
+                            className="w-fit"
+                            onClick={() => {
+                              void apiRequest(`/workspaces/current/invites/${invite.id}`, {
+                                method: 'DELETE',
+                              })
+                                .then(() => invitesQuery.refetch())
+                                .catch((err) =>
+                                  setInviteError(getErrorMessage(err, 'Revoke failed')),
+                                );
+                            }}
+                          >
+                            Revoke
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </>
+        );
+
+      case 'license':
+        return (
+          <>
+            <div className="flex items-start justify-between p-[32px_40px_24px]">
+              <div>
+                <h2 className="text-[18px] font-semibold text-neutral-950 mb-1">License</h2>
+                <p className="text-[14px] text-neutral-500">
+                  Install activation key, seats, and write access (Org-P7).
+                </p>
+              </div>
+              <button
+                type="button"
+                className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 rounded-8"
+                onClick={onClose}
+                aria-label="Close"
+              >
+                <IconClose size={18} />
+              </button>
+            </div>
+            <div className="px-[40px] pb-[40px] flex flex-col gap-4">
+              {licenseQuery.isLoading && (
+                <p className="text-[13px] text-neutral-500">Loading license…</p>
+              )}
+              {license && (
+                <div className="border border-neutral-200 rounded-10 p-4 flex flex-col gap-2">
+                  <p className="text-[13px]">
+                    Phase:{' '}
+                    <span className="font-medium capitalize">{license.phase.replace('_', ' ')}</span>
+                    {!license.enforced && (
+                      <span className="text-neutral-500"> (open-dev, not enforced)</span>
+                    )}
+                  </p>
+                  <p className="text-[13px] text-neutral-600">
+                    Seats: {license.seatsUsed}
+                    {license.enforced ? ` / ${license.seats}` : ' (unlimited)'}
+                  </p>
+                  {license.expiresAt && (
+                    <p className="text-[13px] text-neutral-600">
+                      Expires {new Date(license.expiresAt).toLocaleString()}
+                    </p>
+                  )}
+                  {license.customerId && (
+                    <p className="text-[12px] text-neutral-500">Customer {license.customerId}</p>
+                  )}
+                  {license.message && (
+                    <Alert status="warning" variant="stroke" compact description={license.message} />
+                  )}
+                </div>
+              )}
+              <div className="flex flex-col gap-2">
+                <label className="text-[12px] text-neutral-500" htmlFor="license-key">
+                  Activation key
+                </label>
+                <textarea
+                  id="license-key"
+                  value={licenseKey}
+                  onChange={(e) => setLicenseKey(e.target.value)}
+                  rows={3}
+                  placeholder="script1...."
+                  className="w-full px-3 py-2 border border-neutral-200 rounded-8 text-[12px] font-mono resize-y"
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="w-fit"
+                  onClick={() => {
+                    setLicenseError(null);
+                    setLicenseMessage(null);
+                    void apiRequest('/license/activate', {
+                      method: 'POST',
+                      body: { key: licenseKey.trim() },
+                    })
+                      .then(async () => {
+                        setLicenseKey('');
+                        setLicenseMessage('License activated.');
+                        await licenseQuery.refetch();
+                      })
+                      .catch((err) =>
+                        setLicenseError(getErrorMessage(err, 'Activation failed')),
+                      );
+                  }}
+                >
+                  Activate key
+                </Button>
+              </div>
+              {licenseError && (
+                <Alert
+                  status="error"
+                  variant="stroke"
+                  compact
+                  description={licenseError}
+                  onDismiss={() => setLicenseError(null)}
+                />
+              )}
+              {licenseMessage && (
+                <Alert
+                  status="success"
+                  variant="stroke"
+                  compact
+                  description={licenseMessage}
+                  onDismiss={() => setLicenseMessage(null)}
+                />
+              )}
             </div>
           </>
         );

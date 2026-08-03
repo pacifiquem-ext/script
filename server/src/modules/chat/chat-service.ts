@@ -24,6 +24,7 @@ import { prisma } from '../../db/prisma';
 import { logger } from '../../lib/logger';
 import { assertHasCredits, decrementCredits } from '../credits/credits-service';
 import { embedQuery, vectorLiteral } from '../jobs/embeddings';
+import { assertLicenseAllowsWrite } from '../license/license-service';
 import { formatDocumentVersionChangelog } from '../library/document-versions';
 import {
   AGENT_SYSTEM_PROMPT,
@@ -267,10 +268,12 @@ async function retrieveContext(
   workspaceId: string,
   query: string,
   documentIds: string[],
+  maxClearanceLevel = 0,
 ): Promise<RetrievedChunk[]> {
   const embedding = await embedQuery(query);
   const vector = vectorLiteral(embedding);
   // Only chunks belonging to each document's currentVersionId — never mix versions or stale content.
+  // Clearance: only documents the member is allowed to read (Org-P9b).
   const rows =
     documentIds.length > 0
       ? await prisma.$queryRaw<Array<Omit<RetrievedChunk, 'score'> & { distance: number }>>`
@@ -286,6 +289,7 @@ async function retrieveContext(
             AND d."currentVersionId" IS NOT NULL
             AND c."documentVersionId" = d."currentVersionId"
             AND c.embedding IS NOT NULL
+            AND d."clearanceLevel" <= ${maxClearanceLevel}
             AND d.id IN (${Prisma.join(documentIds)})
           ORDER BY c.embedding <=> ${vector}::vector
           LIMIT ${RAG_TOP_K}
@@ -303,6 +307,7 @@ async function retrieveContext(
             AND d."currentVersionId" IS NOT NULL
             AND c."documentVersionId" = d."currentVersionId"
             AND c.embedding IS NOT NULL
+            AND d."clearanceLevel" <= ${maxClearanceLevel}
           ORDER BY c.embedding <=> ${vector}::vector
           LIMIT ${RAG_TOP_K}
         `;
@@ -446,13 +451,16 @@ export async function* streamAssistantReply(input: {
   conversationId: string;
   body: SendMessageBody;
   signal?: AbortSignal;
+  maxClearanceLevel?: number;
 }): AsyncGenerator<ChatStreamEvent> {
-  if (env.NODE_ENV !== 'test' && !env.ANTHROPIC_API_KEY) {
+  await assertLicenseAllowsWrite();
+
+  if (env.NODE_ENV !== 'test' && env.COMPLETION_PROVIDER === 'anthropic' && !env.ANTHROPIC_API_KEY) {
     throw new ConfigurationError(
       'ANTHROPIC_API_KEY is required for chat. Add it to server/.env (see ENV.md).',
     );
   }
-  if (env.NODE_ENV !== 'test' && !env.VOYAGE_API_KEY) {
+  if (env.NODE_ENV !== 'test' && env.EMBEDDING_PROVIDER === 'voyage' && !env.VOYAGE_API_KEY) {
     throw new ConfigurationError(
       'VOYAGE_API_KEY is required for chat retrieval. Add it to server/.env (see ENV.md).',
     );
@@ -463,6 +471,16 @@ export async function* streamAssistantReply(input: {
   });
   if (!conversation) throw new NotFoundError('Conversation');
   await assertHasCredits(input.workspaceId, CHAT_CREDIT_COST);
+
+  let maxClearance = input.maxClearanceLevel ?? 0;
+  if (input.maxClearanceLevel === undefined) {
+    const membership = await prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: { workspaceId: input.workspaceId, userId: input.userId },
+      },
+    });
+    maxClearance = membership?.clearanceLevel ?? 0;
+  }
 
   const explicitIds = [...new Set(input.body.documentIds ?? [])];
   if (explicitIds.length) {
@@ -543,7 +561,12 @@ export async function* streamAssistantReply(input: {
     if (useLegacyStreamer) {
       let contexts: RetrievedChunk[] = [];
       try {
-        contexts = await retrieveContext(input.workspaceId, input.body.content, documentIds);
+        contexts = await retrieveContext(
+          input.workspaceId,
+          input.body.content,
+          documentIds,
+          maxClearance,
+        );
       } catch (error) {
         await prisma.message.delete({ where: { id: userMessage.id } }).catch(() => undefined);
         throw error;
@@ -576,7 +599,11 @@ export async function* streamAssistantReply(input: {
       for await (const event of runner({
         system: AGENT_SYSTEM_PROMPT,
         messages: modelMessages,
-        toolContext: { workspaceId: input.workspaceId, userId: input.userId },
+        toolContext: {
+          workspaceId: input.workspaceId,
+          userId: input.userId,
+          maxClearanceLevel: maxClearance,
+        },
         signal: input.signal,
       })) {
         if (input.signal?.aborted) {

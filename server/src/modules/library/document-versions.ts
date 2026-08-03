@@ -53,6 +53,7 @@ export async function toPublicDocument(
     byteSize: doc.byteSize,
     source: doc.source,
     sourceUrl: doc.sourceUrl,
+    clearanceLevel: doc.clearanceLevel ?? 0,
     status: doc.status,
     processingPhase: (doc.processingPhase as PublicDocument['processingPhase']) ?? null,
     failureReason: doc.failureReason,

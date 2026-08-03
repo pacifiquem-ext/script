@@ -11,3 +11,6 @@ export * from './chat';
 export * from './api-keys';
 export * from './user-settings';
 export * from './integrations';
+export * from './license';
+export * from './audit';
+export * from './invites';
