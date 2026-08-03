@@ -10,6 +10,7 @@ import { isAppError } from '../../common/errors';
 import { chatMessageRateLimitConfig } from '../../config/rate-limits';
 import { buildSseHeaders } from '../../lib/sse-headers';
 import { requireWorkspace } from '../../plugins/auth';
+import { assertLicenseAllowsWrite } from '../license/license-service';
 import * as chat from './chat-service';
 
 function writeEvent(reply: { raw: NodeJS.WritableStream }, payload: unknown) {
@@ -25,6 +26,7 @@ export async function chatRoutes(app: FastifyInstance) {
 
   app.post('/conversations', async (request) => {
     const { user, workspace } = await requireWorkspace(request);
+    await assertLicenseAllowsWrite();
     return chat.createConversation(
       workspace.id,
       user.id,
@@ -71,6 +73,7 @@ export async function chatRoutes(app: FastifyInstance) {
         userId: user.id,
         conversationId,
         body,
+        maxClearanceLevel: workspace.clearanceLevel,
       })) {
         if (event.type === 'delta') content += event.text;
         if (event.type === 'citations') citations = event.citations;
@@ -113,6 +116,7 @@ export async function chatRoutes(app: FastifyInstance) {
           conversationId,
           body,
           signal: controller.signal,
+          maxClearanceLevel: workspace.clearanceLevel,
         })) {
           if (controller.signal.aborted) break;
           writeEvent(reply, event);

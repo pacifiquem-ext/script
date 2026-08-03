@@ -13,6 +13,7 @@ import { prisma } from '../../db/prisma';
 import { assertSafeUrl } from '../../lib/ssrf';
 import { storage } from '../../storage';
 import { assertHasCredits } from '../credits/credits-service';
+import { assertLicenseAllowsWrite } from '../license/license-service';
 import { enqueueIngestion } from '../jobs/queue';
 import { INGESTION_CREDIT_COST } from '@script/shared';
 import type { DocumentVersionChangeReason } from '@prisma/client';
@@ -106,9 +107,14 @@ export async function deleteFolder(workspaceId: string, folderId: string) {
   return { ok: true as const };
 }
 
-export async function listDocuments(workspaceId: string, query: ListDocumentsQuery) {
+export async function listDocuments(
+  workspaceId: string,
+  query: ListDocumentsQuery,
+  maxClearanceLevel = 0,
+) {
   const where = {
     workspaceId,
+    clearanceLevel: { lte: maxClearanceLevel },
     folderId: query.folderId === undefined ? undefined : query.folderId,
     status: query.status,
     name: query.q ? { contains: query.q, mode: 'insensitive' as const } : undefined,
@@ -129,10 +135,11 @@ export async function listDocuments(workspaceId: string, query: ListDocumentsQue
 export async function getDocument(
   workspaceId: string,
   documentId: string,
-  options?: { versionId?: string | null },
+  options?: { versionId?: string | null; maxClearanceLevel?: number },
 ) {
+  const maxClearance = options?.maxClearanceLevel ?? 0;
   const doc = await prisma.document.findFirst({
-    where: { id: documentId, workspaceId },
+    where: { id: documentId, workspaceId, clearanceLevel: { lte: maxClearance } },
     include: documentVersionInclude,
   });
   if (!doc) throw new NotFoundError('Document');
@@ -164,6 +171,7 @@ export async function updateDocument(
     data: {
       name: body.name ?? undefined,
       folderId: body.folderId === undefined ? undefined : body.folderId,
+      clearanceLevel: body.clearanceLevel === undefined ? undefined : body.clearanceLevel,
     },
     include: documentVersionInclude,
   });
@@ -447,6 +455,7 @@ export async function createDocumentFromBuffer(input: {
   source: 'local' | 'url' | 'drive' | 'dropbox' | 'onedrive' | 'box';
   sourceUrl?: string | null;
 }) {
+  await assertLicenseAllowsWrite();
   const mimeType = input.mimeType || 'application/octet-stream';
   if (!ALLOWED_MIME.has(mimeType) && !mimeType.startsWith('text/')) {
     throw new BadRequestError(`Unsupported file type: ${mimeType}`);

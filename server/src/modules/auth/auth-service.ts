@@ -38,7 +38,7 @@ function clientMeta(request: FastifyRequest) {
   };
 }
 
-async function issueSession(
+export async function issueSession(
   reply: FastifyReply,
   request: FastifyRequest,
   user: User,

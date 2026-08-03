@@ -4,12 +4,14 @@ import { ensureVectorIndexes } from './db/ensure-vector-indexes';
 import { prisma } from './db/prisma';
 import { logger } from './lib/logger';
 import { closeQueues } from './modules/jobs/queue';
+import { bootstrapLicenseFromEnv } from './modules/license/license-service';
 
 const app = buildApp();
 
 async function start() {
   try {
     await ensureVectorIndexes();
+    await bootstrapLicenseFromEnv();
     await app.listen({ port: env.PORT, host: env.HOST });
     logger.info(`server listening on http://${env.HOST}:${env.PORT}`);
   } catch (error) {

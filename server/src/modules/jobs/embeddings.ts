@@ -2,13 +2,13 @@ import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, VOYAGE_EMBED_BATCH_SIZE } from '
 import { ConfigurationError } from '../../common/errors';
 import { env, requireVoyageApiKey } from '../../config/env';
 import { logger } from '../../lib/logger';
+import {
+  createConfiguredEmbedder,
+  type Embedder,
+  type EmbedInputType,
+} from '../ai/embeddings-provider';
 
-export type EmbedInputType = 'document' | 'query';
-
-export interface Embedder {
-  embedTexts(texts: string[], inputType?: EmbedInputType): Promise<number[][]>;
-  embedQuery(text: string): Promise<number[]>;
-}
+export type { Embedder, EmbedInputType };
 
 async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -116,7 +116,12 @@ const testEmbedder: Embedder = {
   embedQuery: async (text) => testEmbed(text),
 };
 
-let embedder: Embedder = env.NODE_ENV === 'test' ? testEmbedder : voyageEmbedder;
+function defaultEmbedder(): Embedder {
+  if (env.NODE_ENV === 'test') return testEmbedder;
+  return createConfiguredEmbedder();
+}
+
+let embedder: Embedder = defaultEmbedder();
 
 export function setEmbedderForTests(next: Embedder | null) {
   if (env.NODE_ENV !== 'test') {
@@ -129,19 +134,28 @@ export async function embedTexts(
   texts: string[],
   inputType: EmbedInputType = 'document',
 ): Promise<number[][]> {
-  if (env.NODE_ENV !== 'test' && !env.VOYAGE_API_KEY) {
-    throw new ConfigurationError(
-      'VOYAGE_API_KEY is required for embeddings. Add it to server/.env (see ENV.md).',
-    );
+  if (env.NODE_ENV !== 'test') {
+    if (env.EMBEDDING_PROVIDER === 'voyage' && !env.VOYAGE_API_KEY) {
+      throw new ConfigurationError(
+        'VOYAGE_API_KEY is required for embeddings. Add it to server/.env (see ENV.md).',
+      );
+    }
+    if (env.EMBEDDING_PROVIDER === 'openai_compatible' && !env.EMBEDDING_BASE_URL) {
+      throw new ConfigurationError(
+        'EMBEDDING_BASE_URL is required when EMBEDDING_PROVIDER=openai_compatible.',
+      );
+    }
   }
   return embedder.embedTexts(texts, inputType);
 }
 
 export async function embedQuery(text: string): Promise<number[]> {
-  if (env.NODE_ENV !== 'test' && !env.VOYAGE_API_KEY) {
-    throw new ConfigurationError(
-      'VOYAGE_API_KEY is required for query embedding. Add it to server/.env (see ENV.md).',
-    );
+  if (env.NODE_ENV !== 'test') {
+    if (env.EMBEDDING_PROVIDER === 'voyage' && !env.VOYAGE_API_KEY) {
+      throw new ConfigurationError(
+        'VOYAGE_API_KEY is required for query embedding. Add it to server/.env (see ENV.md).',
+      );
+    }
   }
   return embedder.embedQuery(text);
 }

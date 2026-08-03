@@ -21,7 +21,9 @@ export interface AuthUser {
 
 export interface WorkspaceContext {
   id: string;
+  name: string;
   role: 'owner' | 'admin' | 'member';
+  clearanceLevel: number;
 }
 
 declare module 'fastify' {
@@ -43,7 +45,12 @@ async function resolveUser(request: FastifyRequest, reply: FastifyReply): Promis
     });
     if (!apiKey) return null;
     request.authViaApiKey = true;
-    request.workspace = { id: apiKey.workspaceId, role: 'admin' };
+    request.workspace = {
+      id: apiKey.workspaceId,
+      name: 'api-key',
+      role: 'admin',
+      clearanceLevel: 100,
+    };
     if (apiKey.createdBy) {
       return {
         id: apiKey.createdBy.id,
@@ -129,9 +136,15 @@ export async function requireWorkspace(request: FastifyRequest): Promise<{
   if (user.id.startsWith('api-key:')) throw new ForbiddenError('Not a member of this workspace');
   const membership = await prisma.workspaceMember.findUnique({
     where: { workspaceId_userId: { workspaceId, userId: user.id } },
+    include: { workspace: { select: { name: true } } },
   });
   if (!membership) throw new ForbiddenError('Not a member of this workspace');
-  request.workspace = { id: workspaceId, role: membership.role };
+  request.workspace = {
+    id: workspaceId,
+    name: membership.workspace.name,
+    role: membership.role,
+    clearanceLevel: membership.clearanceLevel,
+  };
   return { user, workspace: request.workspace };
 }
 

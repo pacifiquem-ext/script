@@ -51,3 +51,39 @@ function canSendViaResend(): boolean {
   }
   return true;
 }
+
+export async function sendInviteEmail(input: {
+  to: string;
+  workspaceName: string;
+  inviterName: string;
+  acceptUrl: string;
+}): Promise<void> {
+  const subject = `You're invited to ${input.workspaceName} on script`;
+  const text = `${input.inviterName} invited you to the workspace "${input.workspaceName}" on script (the company brain).
+
+Accept: ${input.acceptUrl}
+
+This link expires in 7 days.`;
+
+  if (!canSendViaResend()) {
+    logger.info(
+      { to: input.to, workspaceName: input.workspaceName, acceptUrl: input.acceptUrl },
+      'invite email (dev log)',
+    );
+    return;
+  }
+
+  const resend = new Resend(env.RESEND_API_KEY!);
+  const result = await resend.emails.send({
+    from: env.EMAIL_FROM!,
+    to: input.to,
+    subject,
+    text,
+  });
+  if (result.error) {
+    logger.error({ err: result.error }, 'failed to send invite email');
+    const error = new Error(result.error.message);
+    (error as Error & { code?: string }).code = 'BAD_REQUEST';
+    throw error;
+  }
+}

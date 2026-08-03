@@ -29,6 +29,9 @@ const ChatPage = lazy(() => import('../pages/app/ChatPage').then((m) => ({ defau
 const LibraryPage = lazy(() =>
   import('../pages/app/LibraryPage').then((m) => ({ default: m.LibraryPage })),
 );
+const InviteAcceptPage = lazy(() =>
+  import('../pages/app/InviteAcceptPage').then((m) => ({ default: m.InviteAcceptPage })),
+);
 
 function Lazy({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<LoadingState />}>{children}</Suspense>;
@@ -38,6 +41,14 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: <LandingPage />,
+  },
+  {
+    path: '/invite/accept',
+    element: (
+      <Lazy>
+        <InviteAcceptPage />
+      </Lazy>
+    ),
   },
   {
     path: '/app/login',

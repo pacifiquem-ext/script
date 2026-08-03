@@ -5,6 +5,8 @@ import { embedQuery, vectorLiteral } from '../../jobs/embeddings';
 
 export type LibraryToolContext = {
   workspaceId: string;
+  /** Member clearance (Org-P9b). Documents above this level are invisible. */
+  maxClearanceLevel?: number;
 };
 
 export type LibraryDocRow = {
@@ -23,8 +25,10 @@ export async function listLibraryDocuments(
   input: { q?: string; limit?: number; folderId?: string | null },
 ): Promise<{ total: number; documents: LibraryDocRow[] }> {
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+  const maxClearance = ctx.maxClearanceLevel ?? 0;
   const where = {
     workspaceId: ctx.workspaceId,
+    clearanceLevel: { lte: maxClearance },
     ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
     ...(input.q?.trim()
       ? { name: { contains: input.q.trim(), mode: 'insensitive' as const } }
@@ -77,9 +81,11 @@ export async function getLibraryDocument(
   ctx: LibraryToolContext,
   input: { documentId?: string; name?: string },
 ): Promise<LibraryDocRow & { extractedPreview: string | null } | null> {
+  const maxClearance = ctx.maxClearanceLevel ?? 0;
+  const clearanceFilter = { clearanceLevel: { lte: maxClearance } };
   const row = input.documentId
     ? await prisma.document.findFirst({
-        where: { id: input.documentId, workspaceId: ctx.workspaceId },
+        where: { id: input.documentId, workspaceId: ctx.workspaceId, ...clearanceFilter },
         select: {
           id: true,
           name: true,
@@ -97,6 +103,7 @@ export async function getLibraryDocument(
           where: {
             workspaceId: ctx.workspaceId,
             name: { equals: input.name.trim(), mode: 'insensitive' },
+            ...clearanceFilter,
           },
           select: {
             id: true,
@@ -152,6 +159,7 @@ export async function searchLibrary(
   const embedding = await embedQuery(query);
   const vector = vectorLiteral(embedding);
   const documentIds = input.documentIds?.filter(Boolean) ?? [];
+  const maxClearance = ctx.maxClearanceLevel ?? 0;
 
   type Row = {
     id: string;
@@ -181,6 +189,7 @@ export async function searchLibrary(
             AND d."currentVersionId" IS NOT NULL
             AND c."documentVersionId" = d."currentVersionId"
             AND c.embedding IS NOT NULL
+            AND d."clearanceLevel" <= ${maxClearance}
             AND d.id IN (${Prisma.join(documentIds)})
           ORDER BY c.embedding <=> ${vector}::vector
           LIMIT ${limit}
@@ -198,6 +207,7 @@ export async function searchLibrary(
             AND d."currentVersionId" IS NOT NULL
             AND c."documentVersionId" = d."currentVersionId"
             AND c.embedding IS NOT NULL
+            AND d."clearanceLevel" <= ${maxClearance}
           ORDER BY c.embedding <=> ${vector}::vector
           LIMIT ${limit}
         `;
