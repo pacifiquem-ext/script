@@ -8,6 +8,7 @@ import type {
 } from '@script/shared';
 import { BadRequestError, NotFoundError } from '../../common/errors';
 import { prisma } from '../../db/prisma';
+import { copyDocumentChunkEmbeddingsByPosition } from '../../db/vector';
 import { storage } from '../../storage';
 
 export function hashDocumentBytes(buffer: Buffer): string {
@@ -379,15 +380,7 @@ export async function cloneChunksToVersion(input: {
     })),
   });
 
-  // Single join update — avoid N raw queries (interactive txn timeout on large docs).
-  await db.$executeRaw`
-    UPDATE "DocumentChunk" AS target
-    SET embedding = source.embedding
-    FROM "DocumentChunk" AS source
-    WHERE target."documentVersionId" = ${input.targetVersionId}
-      AND source."documentVersionId" = ${input.sourceVersionId}
-      AND target.position = source.position
-  `;
+  await copyDocumentChunkEmbeddingsByPosition(db, input.sourceVersionId, input.targetVersionId);
 
   return sourceChunks.length;
 }

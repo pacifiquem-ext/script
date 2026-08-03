@@ -81,6 +81,8 @@ const envSchema = z
     OIDC_CLIENT_ID: optionalString,
     OIDC_CLIENT_SECRET: optionalString,
     OIDC_REDIRECT_URL: optionalUrl,
+    /** HMAC secret for Fireflies webhooks (`X-Hub-Signature`). Per-workspace API keys are stored encrypted. */
+    FIREFLIES_WEBHOOK_SECRET: optionalString,
     RESEND_API_KEY: optionalString,
     EMAIL_FROM: optionalEmail,
     UNSTRUCTURED_API_KEY: optionalString,

@@ -19,7 +19,9 @@ import {
   shouldChargeIngestion,
 } from '../library/document-versions';
 import { chunkText, extractText, type TextChunk } from './extract';
-import { embedTexts, vectorLiteral } from './embeddings';
+import { setDocumentChunkEmbedding } from '../../db/vector';
+import { dualWriteDocumentMemoryChunks } from '../memory/memory-chunks';
+import { embedTexts } from './embeddings';
 import {
   BACKFILL_QUEUE,
   INGESTION_QUEUE,
@@ -83,6 +85,7 @@ async function persistChunksForVersion(
   workspaceId: string,
   chunks: TextChunk[],
   embeddings: number[][],
+  documentTitle: string,
 ) {
   await prisma.$transaction(async (tx) => {
     // Never delete other versions' chunks — only replace this version's rows (retries).
@@ -108,13 +111,24 @@ async function persistChunksForVersion(
     for (const row of rows) {
       const embedding = embeddings[row.position];
       if (!embedding) throw new Error(`Missing embedding for chunk position ${row.position}`);
-      await tx.$executeRawUnsafe(
-        `UPDATE "DocumentChunk" SET embedding = $1::vector WHERE id = $2`,
-        vectorLiteral(embedding),
-        row.id,
-      );
+      await setDocumentChunkEmbedding(tx, row.id, embedding);
     }
   });
+
+  // Dual-write unified memory path (ADR 0012). Fail closed outside tests so MemoryChunk stays consistent.
+  try {
+    await dualWriteDocumentMemoryChunks({
+      workspaceId,
+      documentId,
+      documentVersionId,
+      title: documentTitle,
+      chunks,
+      embeddings,
+    });
+  } catch (err) {
+    logger.error({ err, documentId }, 'memory dual-write failed');
+    if (process.env.NODE_ENV !== 'test') throw err;
+  }
 }
 
 async function resolveVersion(data: IngestionJobData) {
@@ -238,6 +252,7 @@ export async function processIngestion(data: IngestionJobData): Promise<void> {
       document.workspaceId,
       chunks,
       embeddings,
+      document.name,
     );
 
     const summary = buildDocumentSummary(text);

@@ -79,6 +79,18 @@ enum DocumentVersionChangeReason {
   import
 }
 
+enum MemorySourceType {
+  document
+  meeting
+}
+
+enum MeetingStatus {
+  pending
+  processing
+  ready
+  failed
+}
+
 model User {
   id              String    @id @default(cuid())
   email           String    @unique
@@ -155,6 +167,11 @@ model Workspace {
   documents          Document[]
   documentVersions   DocumentVersion[]
   documentChunks     DocumentChunk[]
+  memorySources      MemorySource[]
+  memoryChunks       MemoryChunk[]
+  meetings           Meeting[]
+  meetingCommitments MeetingCommitment[]
+  meetingConnectors  MeetingConnector[]
   conversations      Conversation[]
   integrations       Integration[]
   apiKeys            ApiKey[]
@@ -163,6 +180,7 @@ model Workspace {
   lastWorkspaceUsers User[] @relation("UserLastWorkspace")
   invites            WorkspaceInvite[]
   auditEvents        AuditEvent[]
+  agentToolCalls     AgentToolCall[]
 
   /// Org retention hint (days). Null = use install default / unlimited. Documented in runbooks.
   retentionDays      Int?
@@ -297,6 +315,7 @@ model Document {
   processingVersion   DocumentVersion?   @relation("DocumentProcessingVersion", fields: [processingVersionId], references: [id], onDelete: SetNull)
   chunks              DocumentChunk[]
   mentions            MessageMention[]
+  memorySource        MemorySource?
 
   @@index([workspaceId, status])
   @@index([workspaceId, folderId])
@@ -369,6 +388,140 @@ model DocumentChunk {
   @@index([workspaceId, documentId])
   @@index([documentId])
   @@index([documentVersionId])
+}
+
+/// Polymorphic memory identity (ADR 0012). Document and meeting rows plug in here.
+model MemorySource {
+  id          String           @id @default(cuid())
+  workspaceId String
+  type        MemorySourceType
+  title       String
+  documentId  String?          @unique
+  meetingId   String?          @unique
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document  Document?     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  meeting   Meeting?      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  chunks    MemoryChunk[]
+
+  @@index([workspaceId, type])
+}
+
+/// Unified embedded segment for retrieval across source types (ADR 0012).
+model MemoryChunk {
+  id                String                       @id @default(cuid())
+  memorySourceId    String
+  workspaceId       String
+  sourceType        MemorySourceType
+  position          Int
+  content           String                       @db.Text
+  embedding         Unsupported("vector(1024)")?
+  documentId        String?
+  documentVersionId String?
+  meetingId         String?
+  startOffset       Int?
+  endOffset         Int?
+  pageNumber        Int?
+  speaker           String?
+  startMs           Int?
+  endMs             Int?
+  createdAt         DateTime                     @default(now())
+
+  memorySource MemorySource @relation(fields: [memorySourceId], references: [id], onDelete: Cascade)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  meeting      Meeting?     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([memorySourceId, position])
+  @@index([workspaceId, sourceType])
+  @@index([documentId])
+  @@index([documentVersionId])
+  @@index([meetingId])
+}
+
+model Meeting {
+  id               String        @id @default(cuid())
+  workspaceId      String
+  title            String
+  summary          String?       @db.Text
+  transcriptText   String?       @db.Text
+  startedAt        DateTime?
+  endedAt          DateTime?
+  sourceProvider   String        @default("fireflies")
+  sourceExternalId String?
+  sourceUrl        String?
+  participants     Json          @default("[]")
+  status           MeetingStatus @default(pending)
+  failureReason    String?
+  createdById      String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  processedAt      DateTime?
+
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memorySource MemorySource?
+  chunks       MemoryChunk[]
+  commitments  MeetingCommitment[]
+
+  @@index([workspaceId, startedAt])
+  @@index([workspaceId, status])
+  @@index([workspaceId, sourceProvider, sourceExternalId])
+}
+
+/// Per-workspace meetings connector credentials (Fireflies API key, etc.).
+model MeetingConnector {
+  id                   String   @id @default(cuid())
+  workspaceId          String
+  provider             String
+  encryptedCredentials String   @db.Text
+  webhookSecretHash    String?
+  status               String   @default("connected")
+  lastSyncAt           DateTime?
+  lastError            String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId])
+}
+
+model MeetingCommitment {
+  id            String    @id @default(cuid())
+  meetingId     String
+  workspaceId   String
+  text          String    @db.Text
+  ownerLabel    String?
+  dueAt         DateTime?
+  sourceStartMs Int?
+  createdAt     DateTime  @default(now())
+
+  meeting   Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, meetingId])
+  @@index([meetingId])
+}
+
+/// Persisted agent tool audit (Phase 1 / T0.3). Complements Pino agent_tool_audit.
+model AgentToolCall {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  userId         String?
+  tool           String
+  ok             Boolean
+  durationMs     Int
+  error          String?
+  conversationId String?
+  createdAt      DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([tool, createdAt])
+  @@index([userId, createdAt])
 }
 
 model Conversation {

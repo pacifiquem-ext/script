@@ -5,7 +5,8 @@ import { sha256 } from '../src/lib/crypto';
 import { hashDocumentBytes } from '../src/modules/library/document-versions';
 import { originHeaders } from './helpers';
 import { createReadyDocumentWithVersion } from './helpers-documents';
-import { embedTexts, vectorLiteral } from '../src/modules/jobs/embeddings';
+import { setDocumentChunkEmbedding } from '../src/db/vector';
+import { embedTexts } from '../src/modules/jobs/embeddings';
 
 const app = buildApp();
 const email = `versions-${Date.now()}@example.com`;
@@ -218,11 +219,7 @@ describe('document version history', () => {
       },
     });
     const [emb] = await embedTexts([v2Text]);
-    await prisma.$executeRawUnsafe(
-      `UPDATE "DocumentChunk" SET embedding = $1::vector WHERE id = $2`,
-      vectorLiteral(emb),
-      v2Chunk.id,
-    );
+    await setDocumentChunkEmbedding(prisma, v2Chunk.id, emb);
     await prisma.documentVersion.update({
       where: { id: v1.id },
       data: { supersededAt: new Date() },

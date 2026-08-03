@@ -22,6 +22,7 @@ import { integrationRoutes } from './modules/integrations/routes';
 import { licenseRoutes } from './modules/license/routes';
 import { auditRoutes } from './modules/audit/routes';
 import { ssoRoutes } from './modules/sso/routes';
+import { meetingRoutes } from './modules/meetings/routes';
 
 export function buildApp() {
   registerIngestionProcessors();
@@ -66,6 +67,7 @@ export function buildApp() {
     await instance.register(licenseRoutes);
     await instance.register(auditRoutes);
     await instance.register(ssoRoutes);
+    await instance.register(meetingRoutes);
   });
   return app;
 }

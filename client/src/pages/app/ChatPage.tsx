@@ -308,18 +308,8 @@ export function ChatPage() {
             appendMessageToCache(queryClient, id, message);
             setPendingUser(null);
           },
-          onToolCall: (name) => {
-            setToolStatus(
-              name === 'list_library_documents'
-                ? 'Listing Library…'
-                : name === 'search_library'
-                  ? 'Searching Library…'
-                  : name === 'web_search'
-                    ? 'Searching the web…'
-                    : name === 'get_document_summary'
-                      ? 'Loading document…'
-                      : `Running ${name}…`,
-            );
+          onToolCall: (name, _input, statusLabel) => {
+            setToolStatus(statusLabel?.trim() || `Running ${name}…`);
           },
           onToolResult: () => setToolStatus(null),
           onDelta: (delta) => {

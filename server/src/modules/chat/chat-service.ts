@@ -23,7 +23,9 @@ import { env, requireAnthropicApiKey } from '../../config/env';
 import { prisma } from '../../db/prisma';
 import { logger } from '../../lib/logger';
 import { assertHasCredits, decrementCredits } from '../credits/credits-service';
-import { embedQuery, vectorLiteral } from '../jobs/embeddings';
+import { searchDocumentChunkVectors } from '../../db/vector';
+import { embedQuery } from '../jobs/embeddings';
+
 import { assertLicenseAllowsWrite } from '../license/license-service';
 import { formatDocumentVersionChangelog } from '../library/document-versions';
 import {
@@ -36,7 +38,7 @@ import {
 export type ChatStreamEvent =
   | { type: 'user_message'; message: ReturnType<typeof mapMessage> }
   | { type: 'citations'; citations: MessageCitation[] }
-  | { type: 'tool_call'; name: string; input?: unknown }
+  | { type: 'tool_call'; name: string; input?: unknown; statusLabel?: string }
   | { type: 'tool_result'; name: string; ok: boolean }
   | { type: 'delta'; text: string }
   | { type: 'done'; message: ReturnType<typeof mapMessage> }
@@ -271,46 +273,13 @@ async function retrieveContext(
   maxClearanceLevel = 0,
 ): Promise<RetrievedChunk[]> {
   const embedding = await embedQuery(query);
-  const vector = vectorLiteral(embedding);
-  // Only chunks belonging to each document's currentVersionId — never mix versions or stale content.
-  // Clearance: only documents the member is allowed to read (Org-P9b).
-  const rows =
-    documentIds.length > 0
-      ? await prisma.$queryRaw<Array<Omit<RetrievedChunk, 'score'> & { distance: number }>>`
-          SELECT c.id, c.content, c."documentId" as document_id,
-                 c."documentVersionId" as document_version_id, d.name, c.position,
-                 c."startOffset" as start_offset, c."endOffset" as end_offset,
-                 c."pageNumber" as page_number,
-                 (c.embedding <=> ${vector}::vector) as distance
-          FROM "DocumentChunk" c
-          JOIN "Document" d ON d.id = c."documentId"
-          WHERE c."workspaceId" = ${workspaceId}
-            AND d.status = 'ready'
-            AND d."currentVersionId" IS NOT NULL
-            AND c."documentVersionId" = d."currentVersionId"
-            AND c.embedding IS NOT NULL
-            AND d."clearanceLevel" <= ${maxClearanceLevel}
-            AND d.id IN (${Prisma.join(documentIds)})
-          ORDER BY c.embedding <=> ${vector}::vector
-          LIMIT ${RAG_TOP_K}
-        `
-      : await prisma.$queryRaw<Array<Omit<RetrievedChunk, 'score'> & { distance: number }>>`
-          SELECT c.id, c.content, c."documentId" as document_id,
-                 c."documentVersionId" as document_version_id, d.name, c.position,
-                 c."startOffset" as start_offset, c."endOffset" as end_offset,
-                 c."pageNumber" as page_number,
-                 (c.embedding <=> ${vector}::vector) as distance
-          FROM "DocumentChunk" c
-          JOIN "Document" d ON d.id = c."documentId"
-          WHERE c."workspaceId" = ${workspaceId}
-            AND d.status = 'ready'
-            AND d."currentVersionId" IS NOT NULL
-            AND c."documentVersionId" = d."currentVersionId"
-            AND c.embedding IS NOT NULL
-            AND d."clearanceLevel" <= ${maxClearanceLevel}
-          ORDER BY c.embedding <=> ${vector}::vector
-          LIMIT ${RAG_TOP_K}
-        `;
+  const rows = await searchDocumentChunkVectors({
+    workspaceId,
+    queryEmbedding: embedding,
+    limit: RAG_TOP_K,
+    maxClearanceLevel,
+    documentIds: documentIds.length ? documentIds : undefined,
+  });
 
   return rows
     .map((row) => ({
@@ -617,7 +586,12 @@ export async function* streamAssistantReply(input: {
           citations = event.citations;
           yield { type: 'citations', citations };
         } else if (event.type === 'tool_call') {
-          yield { type: 'tool_call', name: event.name, input: event.input };
+          yield {
+            type: 'tool_call',
+            name: event.name,
+            input: event.input,
+            statusLabel: event.statusLabel,
+          };
         } else if (event.type === 'tool_result') {
           yield { type: 'tool_result', name: event.name, ok: event.ok };
         }

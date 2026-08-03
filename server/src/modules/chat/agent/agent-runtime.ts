@@ -7,16 +7,21 @@ import {
 } from '@script/shared';
 import { env, requireAnthropicApiKey } from '../../../config/env';
 import { logger } from '../../../lib/logger';
-import { isLibraryInventoryIntent } from './library-intent';
+import { classifyInventoryIntent } from './inventory-intent';
 import {
-  AGENT_TOOL_DEFINITIONS,
-  executeAgentTool,
+  executeTool,
+  getToolDefinitions,
+  getToolStatusLabel,
+  recordToolCallAudit,
+  type AgentToolContext,
   type ToolExecutionResult,
-} from './tool-definitions';
-import type { LibraryToolContext } from './library-tools';
+} from './registry';
+import { registerBuiltinTools } from './register-builtin-tools';
+
+registerBuiltinTools();
 
 export type AgentStreamEvent =
-  | { type: 'tool_call'; name: string; input: unknown }
+  | { type: 'tool_call'; name: string; input: unknown; statusLabel?: string }
   | { type: 'tool_result'; name: string; ok: boolean }
   | { type: 'delta'; text: string }
   | { type: 'citations'; citations: MessageCitation[] };
@@ -24,7 +29,7 @@ export type AgentStreamEvent =
 export type AgentRunInput = {
   system: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-  toolContext: LibraryToolContext & { userId?: string };
+  toolContext: AgentToolContext;
   signal?: AbortSignal;
   maxRounds?: number;
 };
@@ -78,39 +83,35 @@ export function setAnthropicMessagesCreateForTests(fn: AnthropicMessagesCreate |
   anthropicCreateImpl = fn ?? defaultAnthropicCreate;
 }
 
-function logToolAudit(input: {
-  workspaceId: string;
-  userId?: string;
-  name: string;
-  ok: boolean;
-  ms: number;
-}) {
-  logger.info(
-    {
-      event: 'agent_tool_audit',
-      workspaceId: input.workspaceId,
-      userId: input.userId ?? null,
-      tool: input.name,
-      ok: input.ok,
-      durationMs: input.ms,
-    },
-    'agent tool call',
-  );
+async function auditTool(
+  toolContext: AgentToolContext,
+  name: string,
+  result: ToolExecutionResult,
+  started: number,
+) {
+  await recordToolCallAudit({
+    workspaceId: toolContext.workspaceId,
+    userId: toolContext.userId,
+    conversationId: toolContext.conversationId,
+    tool: name,
+    ok: result.ok,
+    durationMs: Date.now() - started,
+    error: result.error,
+  });
 }
 
 async function* runForcedLibraryInventory(
-  toolContext: LibraryToolContext & { userId?: string },
+  toolContext: AgentToolContext,
 ): AsyncGenerator<AgentStreamEvent> {
   const started = Date.now();
-  yield { type: 'tool_call', name: 'list_library_documents', input: { limit: 50 } };
-  const result = await executeAgentTool('list_library_documents', { limit: 50 }, toolContext);
-  logToolAudit({
-    workspaceId: toolContext.workspaceId,
-    userId: toolContext.userId,
+  yield {
+    type: 'tool_call',
     name: 'list_library_documents',
-    ok: result.ok,
-    ms: Date.now() - started,
-  });
+    input: { limit: 50 },
+    statusLabel: getToolStatusLabel('list_library_documents'),
+  };
+  const result = await executeTool('list_library_documents', { limit: 50 }, toolContext);
+  await auditTool(toolContext, 'list_library_documents', result, started);
   yield { type: 'tool_result', name: 'list_library_documents', ok: result.ok };
   const docs =
     result.ok && result.data && typeof result.data === 'object' && 'documents' in result.data
@@ -137,19 +138,63 @@ async function* runForcedLibraryInventory(
   yield { type: 'delta', text };
 }
 
+async function* runForcedMeetingInventory(
+  toolContext: AgentToolContext,
+): AsyncGenerator<AgentStreamEvent> {
+  const started = Date.now();
+  yield {
+    type: 'tool_call',
+    name: 'list_meetings',
+    input: { limit: 20 },
+    statusLabel: getToolStatusLabel('list_meetings'),
+  };
+  const result = await executeTool('list_meetings', { limit: 20 }, toolContext);
+  await auditTool(toolContext, 'list_meetings', result, started);
+  yield { type: 'tool_result', name: 'list_meetings', ok: result.ok };
+  const meetings =
+    result.ok && result.data && typeof result.data === 'object' && 'meetings' in result.data
+      ? (
+          result.data as {
+            total: number;
+            meetings: Array<{ title: string; summary: string | null; status: string; startedAt: string | null }>;
+          }
+        ).meetings
+      : [];
+  const total =
+    result.ok && result.data && typeof result.data === 'object' && 'total' in result.data
+      ? Number((result.data as { total: number }).total)
+      : meetings.length;
+  const lines = meetings.map(
+    (m, i) =>
+      `${i + 1}. **${m.title}** (${m.status}${m.startedAt ? `, ${m.startedAt.slice(0, 10)}` : ''}) — ${m.summary || '(no summary yet)'}`,
+  );
+  const more =
+    total > meetings.length ? `\n\n…and ${total - meetings.length} more not shown.` : '';
+  const text =
+    lines.length > 0
+      ? `Here are your meetings (${meetings.length} of ${total}):\n\n${lines.join('\n')}${more}`
+      : 'No meetings in this workspace yet. Import a transcript from the Meetings page.';
+  yield { type: 'delta', text };
+}
+
 /**
- * Tool-use agent loop: Library tools + web_search.
- * Inventory intents are hard-routed to list_library_documents (P0 reliability).
+ * Tool-use agent loop via registry (ADR 0011).
+ * Inventory intents hard-routed for Library and Meetings.
  */
 export async function* runAgentWithTools(input: AgentRunInput): AsyncGenerator<AgentStreamEvent> {
   const lastUser = [...input.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
-  if (isLibraryInventoryIntent(lastUser)) {
+  const inventory = await classifyInventoryIntent(lastUser);
+  if (inventory === 'library_inventory') {
     yield* runForcedLibraryInventory(input.toolContext);
+    return;
+  }
+  if (inventory === 'meeting_inventory') {
+    yield* runForcedMeetingInventory(input.toolContext);
     return;
   }
 
   const maxRounds = input.maxRounds ?? DEFAULT_MAX_ROUNDS;
-  const tools = AGENT_TOOL_DEFINITIONS;
+  const tools = getToolDefinitions();
   const messages: MessageParam[] = input.messages.map((m) => ({
     role: m.role,
     content: m.content,
@@ -172,20 +217,19 @@ export async function* runAgentWithTools(input: AgentRunInput): AsyncGenerator<A
       messages.push({ role: 'assistant', content: response.content });
       const toolResults: Anthropic.Messages.ToolResultBlockParam[] = [];
       for (const use of uses) {
-        yield { type: 'tool_call', name: use.name, input: use.input };
+        yield {
+          type: 'tool_call',
+          name: use.name,
+          input: use.input,
+          statusLabel: getToolStatusLabel(use.name),
+        };
         const started = Date.now();
-        const result: ToolExecutionResult = await executeAgentTool(
+        const result: ToolExecutionResult = await executeTool(
           use.name,
           use.input,
           input.toolContext,
         );
-        logToolAudit({
-          workspaceId: input.toolContext.workspaceId,
-          userId: input.toolContext.userId,
-          name: use.name,
-          ok: result.ok,
-          ms: Date.now() - started,
-        });
+        await auditTool(input.toolContext, use.name, result, started);
         yield { type: 'tool_result', name: use.name, ok: result.ok };
         if (result.citations) {
           for (const c of result.citations) {
@@ -233,26 +277,30 @@ export async function* defaultTestAgentRunner(
   const lastUser = [...input.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const lower = lastUser.toLowerCase();
 
-  if (isLibraryInventoryIntent(lastUser)) {
+  const inventory = await classifyInventoryIntent(lastUser);
+  if (inventory === 'library_inventory') {
     yield* runForcedLibraryInventory(input.toolContext);
+    return;
+  }
+  if (inventory === 'meeting_inventory') {
+    yield* runForcedMeetingInventory(input.toolContext);
     return;
   }
 
   if (/web search|search the web|look up online|latest news/.test(lower)) {
-    yield { type: 'tool_call', name: 'web_search', input: { query: lastUser } };
+    yield {
+      type: 'tool_call',
+      name: 'web_search',
+      input: { query: lastUser },
+      statusLabel: getToolStatusLabel('web_search'),
+    };
     const started = Date.now();
-    const result = await executeAgentTool(
+    const result = await executeTool(
       'web_search',
       { query: lastUser, maxResults: 3 },
       input.toolContext,
     );
-    logToolAudit({
-      workspaceId: input.toolContext.workspaceId,
-      userId: input.toolContext.userId,
-      name: 'web_search',
-      ok: result.ok,
-      ms: Date.now() - started,
-    });
+    await auditTool(input.toolContext, 'web_search', result, started);
     yield { type: 'tool_result', name: 'web_search', ok: result.ok };
     yield {
       type: 'delta',
@@ -263,7 +311,32 @@ export async function* defaultTestAgentRunner(
     return;
   }
 
-  // Extract scoped document ids if chat-service appended them
+  if (/\bmeeting\b|\bcall\b|\btranscript\b|\bwho said\b/.test(lower)) {
+    yield {
+      type: 'tool_call',
+      name: 'search_meetings',
+      input: { query: lastUser },
+      statusLabel: getToolStatusLabel('search_meetings'),
+    };
+    const started = Date.now();
+    const search = await executeTool('search_meetings', { query: lastUser }, input.toolContext);
+    await auditTool(input.toolContext, 'search_meetings', search, started);
+    yield { type: 'tool_result', name: 'search_meetings', ok: search.ok };
+    if (search.citations?.length) yield { type: 'citations', citations: search.citations };
+    const hits =
+      search.ok && search.data && typeof search.data === 'object' && 'hits' in search.data
+        ? (search.data as { hits: Array<{ meetingTitle: string; excerpt: string }> }).hits
+        : [];
+    yield {
+      type: 'delta',
+      text:
+        hits.length > 0
+          ? `Based on your meetings:\n\n${hits.map((h, i) => `[${i + 1}] ${h.meetingTitle}\n${h.excerpt}`).join('\n\n')}`
+          : 'I could not find relevant content in meeting transcripts for that question.',
+    };
+    return;
+  }
+
   const scopeMatch = lastUser.match(
     /explicitly scoped these document ids[^:]*:\s*([a-z0-9,\s]+)/i,
   );
@@ -279,20 +352,15 @@ export async function* defaultTestAgentRunner(
     type: 'tool_call',
     name: 'search_library',
     input: { query: question, documentIds: scopedIds },
+    statusLabel: getToolStatusLabel('search_library'),
   };
   const started = Date.now();
-  const search = await executeAgentTool(
+  const search = await executeTool(
     'search_library',
     { query: question, documentIds: scopedIds },
     input.toolContext,
   );
-  logToolAudit({
-    workspaceId: input.toolContext.workspaceId,
-    userId: input.toolContext.userId,
-    name: 'search_library',
-    ok: search.ok,
-    ms: Date.now() - started,
-  });
+  await auditTool(input.toolContext, 'search_library', search, started);
   yield { type: 'tool_result', name: 'search_library', ok: search.ok };
   if (search.citations?.length) {
     yield { type: 'citations', citations: search.citations };
@@ -337,11 +405,15 @@ You have tools:
 - list_library_documents — inventory of Library files with one-line summaries (use for "what's in my library", overviews, listing files).
 - get_document_summary — one document by id or name.
 - search_library — semantic search of document content (use for questions about what documents say).
-- web_search — public web search for external facts (not a substitute for Library content).
+- list_meetings — inventory of meetings/calls with summaries.
+- get_meeting_summary — one meeting by id or title (summary, participants, commitments).
+- search_meetings — semantic search over meeting transcripts (decisions, who said what).
+- web_search — public web search for external facts (not a substitute for Library or meetings).
 
 Rules:
 1. For library inventory / "all documents" / "one-line summary each file" questions, call list_library_documents. Do NOT claim you lack access to the Library when this tool works.
-2. For content questions, call search_library (optionally after listing). Cite library hits with bracket numbers matching the order of search hits you used.
-3. Prefer Library tools over web_search for company documents. Use web_search only for external/public information.
-4. Never invent documents that tools did not return. Never expose secrets or credentials.
-5. Be concise and helpful. If tools return empty, say so clearly.`;
+2. For meeting inventory / "what meetings do we have?", call list_meetings. Do NOT claim you lack meeting access when this tool works.
+3. For document content questions, call search_library. For call/meeting content, call search_meetings.
+4. Prefer company memory tools over web_search. Use web_search only for external/public information.
+5. Never invent documents or meetings that tools did not return. Never expose secrets or credentials.
+6. Be concise and helpful. If tools return empty, say so clearly.`;

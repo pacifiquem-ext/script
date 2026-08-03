@@ -38,7 +38,12 @@ export type ListConversationsQuery = z.infer<typeof listConversationsQuerySchema
 export const listMessagesQuerySchema = paginationQuerySchema;
 export type ListMessagesQuery = z.infer<typeof listMessagesQuerySchema>;
 
+export const memorySourceTypeSchema = z.enum(['document', 'meeting']);
+export type MemorySourceType = z.infer<typeof memorySourceTypeSchema>;
+
 export const messageCitationSchema = z.object({
+  /** document (default when omitted) | meeting — ADR 0012 */
+  sourceType: memorySourceTypeSchema.optional(),
   documentId: z.string(),
   documentName: z.string(),
   /** Version that produced this chunk — citations stay valid after later versions. */
@@ -49,6 +54,10 @@ export const messageCitationSchema = z.object({
   startOffset: z.number().int().nonnegative().nullable().optional(),
   endOffset: z.number().int().nonnegative().nullable().optional(),
   pageNumber: z.number().int().positive().nullable().optional(),
+  meetingId: z.string().optional(),
+  startMs: z.number().int().nonnegative().nullable().optional(),
+  endMs: z.number().int().nonnegative().nullable().optional(),
+  speaker: z.string().nullable().optional(),
 });
 export type MessageCitation = z.infer<typeof messageCitationSchema>;
 

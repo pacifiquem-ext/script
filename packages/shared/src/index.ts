@@ -14,3 +14,4 @@ export * from './integrations';
 export * from './license';
 export * from './audit';
 export * from './invites';
+export * from './meetings';
