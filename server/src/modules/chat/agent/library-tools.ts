@@ -1,7 +1,8 @@
-import { Prisma } from '@prisma/client';
 import { RAG_MIN_SIMILARITY, RAG_TOP_K } from '@script/shared';
 import { prisma } from '../../../db/prisma';
-import { embedQuery, vectorLiteral } from '../../jobs/embeddings';
+import { searchDocumentChunkVectors } from '../../../db/vector';
+import { embedQuery } from '../../jobs/embeddings';
+import { searchMemoryChunks } from '../../memory/memory-chunks';
 
 export type LibraryToolContext = {
   workspaceId: string;
@@ -157,60 +158,62 @@ export async function searchLibrary(
   if (!query) return { hits: [] };
   const limit = Math.min(Math.max(input.limit ?? RAG_TOP_K, 1), 20);
   const embedding = await embedQuery(query);
-  const vector = vectorLiteral(embedding);
   const documentIds = input.documentIds?.filter(Boolean) ?? [];
   const maxClearance = ctx.maxClearanceLevel ?? 0;
 
-  type Row = {
-    id: string;
-    content: string;
-    document_id: string;
-    document_version_id: string;
-    name: string;
-    position: number;
-    distance: number;
-    start_offset: number | null;
-    end_offset: number | null;
-    page_number: number | null;
-  };
+  // Prefer unified MemoryChunk (ADR 0012); fall back to DocumentChunk for legacy rows.
+  try {
+    const memoryHits = await searchMemoryChunks({
+      workspaceId: ctx.workspaceId,
+      queryEmbedding: embedding,
+      sourceType: 'document',
+      documentIds: documentIds.length ? documentIds : undefined,
+      limit,
+      minSimilarity: RAG_MIN_SIMILARITY,
+    });
+    if (memoryHits.length > 0) {
+      const ids = [
+        ...new Set(
+          memoryHits.map((h) => h.documentId).filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      const allowed = await prisma.document.findMany({
+        where: {
+          workspaceId: ctx.workspaceId,
+          id: { in: ids },
+          clearanceLevel: { lte: maxClearance },
+          status: 'ready',
+        },
+        select: { id: true },
+      });
+      const allowedSet = new Set(allowed.map((d) => d.id));
+      const hits: SearchLibraryHit[] = memoryHits
+        .filter((h) => h.documentId && allowedSet.has(h.documentId))
+        .map((h) => ({
+          documentId: h.documentId!,
+          documentName: h.documentName ?? 'Document',
+          documentVersionId: h.documentVersionId ?? '',
+          chunkId: h.chunkId,
+          position: h.position,
+          score: h.score,
+          excerpt: h.content.slice(0, 500),
+          startOffset: h.startOffset,
+          endOffset: h.endOffset,
+          pageNumber: h.pageNumber,
+        }));
+      if (hits.length > 0) return { hits };
+    }
+  } catch {
+    // table may not exist yet mid-migration
+  }
 
-  const rows =
-    documentIds.length > 0
-      ? await prisma.$queryRaw<Row[]>`
-          SELECT c.id, c.content, c."documentId" as document_id,
-                 c."documentVersionId" as document_version_id, d.name, c.position,
-                 c."startOffset" as start_offset, c."endOffset" as end_offset,
-                 c."pageNumber" as page_number,
-                 (c.embedding <=> ${vector}::vector) as distance
-          FROM "DocumentChunk" c
-          JOIN "Document" d ON d.id = c."documentId"
-          WHERE c."workspaceId" = ${ctx.workspaceId}
-            AND d.status = 'ready'
-            AND d."currentVersionId" IS NOT NULL
-            AND c."documentVersionId" = d."currentVersionId"
-            AND c.embedding IS NOT NULL
-            AND d."clearanceLevel" <= ${maxClearance}
-            AND d.id IN (${Prisma.join(documentIds)})
-          ORDER BY c.embedding <=> ${vector}::vector
-          LIMIT ${limit}
-        `
-      : await prisma.$queryRaw<Row[]>`
-          SELECT c.id, c.content, c."documentId" as document_id,
-                 c."documentVersionId" as document_version_id, d.name, c.position,
-                 c."startOffset" as start_offset, c."endOffset" as end_offset,
-                 c."pageNumber" as page_number,
-                 (c.embedding <=> ${vector}::vector) as distance
-          FROM "DocumentChunk" c
-          JOIN "Document" d ON d.id = c."documentId"
-          WHERE c."workspaceId" = ${ctx.workspaceId}
-            AND d.status = 'ready'
-            AND d."currentVersionId" IS NOT NULL
-            AND c."documentVersionId" = d."currentVersionId"
-            AND c.embedding IS NOT NULL
-            AND d."clearanceLevel" <= ${maxClearance}
-          ORDER BY c.embedding <=> ${vector}::vector
-          LIMIT ${limit}
-        `;
+  const rows = await searchDocumentChunkVectors({
+    workspaceId: ctx.workspaceId,
+    queryEmbedding: embedding,
+    limit,
+    maxClearanceLevel: maxClearance,
+    documentIds: documentIds.length ? documentIds : undefined,
+  });
 
   const hits = rows
     .map((row) => ({

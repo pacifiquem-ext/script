@@ -323,6 +323,15 @@ export function AppLayout() {
             {expanded && <span className="text-para-sm">Library</span>}
           </Link>
 
+          <Link
+            to="/app/meetings"
+            className={`flex items-center gap-2.5 p-[7px_8px] border-none cursor-pointer rounded-8 no-underline transition-colors whitespace-nowrap overflow-hidden ${isActive('/app/meetings') ? 'text-neutral-950 bg-neutral-200' : 'bg-transparent text-neutral-400 hover:text-neutral-950 hover:bg-neutral-50'}`}
+            title="Meetings"
+          >
+            <IconChat size={18} />
+            {expanded && <span className="text-para-sm">Meetings</span>}
+          </Link>
+
           {!expanded && (
             <button
               className="flex items-center gap-2.5 p-[7px_8px] border-none cursor-pointer rounded-8 no-underline transition-colors whitespace-nowrap overflow-hidden bg-transparent text-neutral-400 hover:text-neutral-950 hover:bg-neutral-50"

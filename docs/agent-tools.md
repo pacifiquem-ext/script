@@ -52,25 +52,17 @@ chat-service.ts
   `setWebSearchForTests`. In `NODE_ENV=test` the runner defaults to `defaultTestAgentRunner`, a
   deterministic runner that mirrors the production routing without calling Anthropic.
 
-## 3. Adding a tool (the current checklist)
+## 3. Adding a tool (current checklist — ADR 0011)
 
-Adding one tool touches **four** places. Miss any of them and the tool either never runs or never
-gets tested.
+1. **Implementation** — domain module with workspace-scoped queries (never trust model args for
+   tenancy).
+2. **`registerTool({ definition, execute, statusLabel })`** — one call (see
+   `register-builtin-tools.ts`). No hand-sync of definition arrays or switch cases.
+3. **Tests** — unit coverage for the execute path; hard routes for catalog intents if applicable.
+4. **System prompt** — mention the tool in `AGENT_SYSTEM_PROMPT` when the model must choose it.
 
-1. **Implementation** — a module under `server/src/modules/<domain>/` (or
-   `chat/agent/<domain>-tools.ts`) exporting plain async functions. It must take the tool context
-   and **enforce workspace scoping in the query itself**, never trust the model's arguments for
-   tenancy.
-2. **Definition** — append an `Anthropic.Messages.Tool` to `AGENT_TOOL_DEFINITIONS` in
-   `tool-definitions.ts`. The `description` is prompt engineering: say what it answers, what it does
-   _not_ return, and when to prefer a sibling tool.
-3. **Dispatch** — add a `case` to `executeAgentTool`. Coerce every input defensively (the model can
-   send anything), return `{ ok, data }`, and attach `citations` if the result is groundable.
-4. **Test runner + tests** — extend `defaultTestAgentRunner` so the path is reachable without a live
-   model, and add coverage in `server/test/agent-tools.test.ts` / `agent-runtime.test.ts`.
-
-Then: mention it in `AGENT_SYSTEM_PROMPT` rules, and add a client-side status label in `ChatPage.tsx`
-so the user sees what the brain is doing.
+The client uses `tool_call.statusLabel` from SSE — **no ChatPage edit** for new tools.
+Audit rows land in `AgentToolCall` via `recordToolCallAudit`.
 
 ## 4. Known gaps (fix before the tool count grows)
 

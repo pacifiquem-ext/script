@@ -32,6 +32,9 @@ const LibraryPage = lazy(() =>
 const InviteAcceptPage = lazy(() =>
   import('../pages/app/InviteAcceptPage').then((m) => ({ default: m.InviteAcceptPage })),
 );
+const MeetingsPage = lazy(() =>
+  import('../pages/app/MeetingsPage').then((m) => ({ default: m.MeetingsPage })),
+);
 
 function Lazy({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<LoadingState />}>{children}</Suspense>;
@@ -137,6 +140,14 @@ export const router = createBrowserRouter([
             element: (
               <Lazy>
                 <LibraryPage />
+              </Lazy>
+            ),
+          },
+          {
+            path: 'meetings',
+            element: (
+              <Lazy>
+                <MeetingsPage />
               </Lazy>
             ),
           },

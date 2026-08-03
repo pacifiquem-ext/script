@@ -1,6 +1,7 @@
 import type { DocumentSource, DocumentStatus } from '@prisma/client';
 import { prisma } from '../src/db/prisma';
-import { embedTexts, vectorLiteral } from '../src/modules/jobs/embeddings';
+import { setDocumentChunkEmbedding } from '../src/db/vector';
+import { embedTexts } from '../src/modules/jobs/embeddings';
 
 /** Create a document + v1 ready version + optional embedded chunk for tests. */
 export async function createReadyDocumentWithVersion(input: {
@@ -85,11 +86,7 @@ export async function createReadyDocumentWithVersion(input: {
     });
     chunkId = chunk.id;
     const [embedding] = await embedTexts([input.content]);
-    await prisma.$executeRawUnsafe(
-      `UPDATE "DocumentChunk" SET embedding = $1::vector WHERE id = $2`,
-      vectorLiteral(embedding),
-      chunk.id,
-    );
+    await setDocumentChunkEmbedding(prisma, chunk.id, embedding);
   }
 
   return { document: doc, version, chunkId };
