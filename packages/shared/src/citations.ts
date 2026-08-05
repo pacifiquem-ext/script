@@ -29,7 +29,8 @@ export function humanizeIngestionFailure(reason: string | null | undefined): str
     lower.includes('rate limit') ||
     lower.includes('tpm') ||
     lower.includes('rpm') ||
-    (lower.includes('429') && (lower.includes('token') || lower.includes('billing') || lower.includes('voyage')))
+    (lower.includes('429') &&
+      (lower.includes('token') || lower.includes('billing') || lower.includes('voyage')))
   ) {
     return 'Processing failed due to low embedding tokens. Buy more credits or contact support.';
   }
@@ -95,7 +96,10 @@ function scoreSpan(text: string, hintNorm: string | null): number {
   if (hintNorm) {
     const spanNorm = trimmed.toLowerCase().replace(/\s+/g, ' ');
     if (spanNorm.includes(hintNorm.slice(0, Math.min(48, hintNorm.length)))) score *= 2.2;
-    const tokens = hintNorm.split(' ').filter((t) => t.length > 4).slice(0, 12);
+    const tokens = hintNorm
+      .split(' ')
+      .filter((t) => t.length > 4)
+      .slice(0, 12);
     let hits = 0;
     for (const t of tokens) {
       if (spanNorm.includes(t)) hits += 1;

@@ -1,8 +1,5 @@
 import { prisma } from '../../db/prisma';
-import {
-  searchMemoryChunkVectors,
-  setMemoryChunkEmbedding,
-} from '../../db/vector';
+import { searchMemoryChunkVectors, setMemoryChunkEmbedding } from '../../db/vector';
 
 export type TextChunk = {
   content: string;

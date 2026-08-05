@@ -115,9 +115,7 @@ export function buildTranscriptText(sentences: FirefliesSentence[]): string {
     .map((s) => {
       const speaker = s.speaker_name?.trim() || 'Speaker';
       const start =
-        s.start_time != null && Number.isFinite(s.start_time)
-          ? formatTs(s.start_time)
-          : null;
+        s.start_time != null && Number.isFinite(s.start_time) ? formatTs(s.start_time) : null;
       const prefix = start ? `[${start}] ${speaker}: ` : `${speaker}: `;
       return `${prefix}${s.text.trim()}`;
     })

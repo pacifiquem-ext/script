@@ -12,10 +12,7 @@ describe('splitMentionSegments', () => {
   });
 
   it('prefers the longest matching document name', () => {
-    const parts = splitMentionSegments('@report final.pdf done', [
-      'report',
-      'report final.pdf',
-    ]);
+    const parts = splitMentionSegments('@report final.pdf done', ['report', 'report final.pdf']);
     expect(parts[0]).toEqual({ text: '@report final.pdf', mention: true });
   });
 });

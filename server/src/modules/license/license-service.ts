@@ -194,7 +194,11 @@ export async function activateLicense(
     action: 'license.activate',
     targetType: 'license',
     targetId: claims.licenseId,
-    metadata: { customerId: claims.customerId, seats: claims.seats, expiresAt: expiresAt.toISOString() },
+    metadata: {
+      customerId: claims.customerId,
+      seats: claims.seats,
+      expiresAt: expiresAt.toISOString(),
+    },
     ip,
   });
 

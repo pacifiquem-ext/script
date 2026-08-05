@@ -31,7 +31,11 @@ describe('MarkdownContent', () => {
       },
     ];
     const html = renderToStaticMarkup(
-      <MarkdownContent content="Answer with proof [1]." citations={citations} onCitationClick={() => undefined} />,
+      <MarkdownContent
+        content="Answer with proof [1]."
+        citations={citations}
+        onCitationClick={() => undefined}
+      />,
     );
     expect(html).toContain('aria-label="Open source 1: api.md"');
     expect(html).toContain('>1<');

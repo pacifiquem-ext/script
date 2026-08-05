@@ -92,7 +92,10 @@ async function openAiCompatibleEmbed(texts: string[]): Promise<number[][]> {
   });
   if (!response.ok) {
     const body = await response.text();
-    logger.error({ status: response.status, body: body.slice(0, 200) }, 'openai-compatible embed failed');
+    logger.error(
+      { status: response.status, body: body.slice(0, 200) },
+      'openai-compatible embed failed',
+    );
     throw new Error(`Embeddings failed: ${response.status} ${body.slice(0, 200)}`);
   }
   const payload = (await response.json()) as {

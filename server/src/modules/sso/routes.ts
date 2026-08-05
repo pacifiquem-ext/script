@@ -12,7 +12,9 @@ import { recordAudit } from '../audit/audit-service';
 const stateCookie = 'script_oidc_state';
 
 function ssoEnabled(): boolean {
-  return Boolean(env.OIDC_ISSUER && env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET && env.OIDC_REDIRECT_URL);
+  return Boolean(
+    env.OIDC_ISSUER && env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET && env.OIDC_REDIRECT_URL,
+  );
 }
 
 async function discover() {
@@ -95,7 +97,11 @@ export async function ssoRoutes(app: FastifyInstance) {
         headers: { Authorization: `Bearer ${tokens.access_token}` },
       });
       if (ui.ok) {
-        const profile = (await ui.json()) as { email?: string; name?: string; preferred_username?: string };
+        const profile = (await ui.json()) as {
+          email?: string;
+          name?: string;
+          preferred_username?: string;
+        };
         email = profile.email;
         name = profile.name ?? profile.preferred_username;
       }

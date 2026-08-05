@@ -1,15 +1,7 @@
-import {
-  getLibraryDocument,
-  listLibraryDocuments,
-  searchLibrary,
-} from './library-tools';
+import { getLibraryDocument, listLibraryDocuments, searchLibrary } from './library-tools';
 import { registerTool } from './registry';
 import { webSearch } from './web-search';
-import {
-  getMeetingSummary,
-  listMeetings,
-  searchMeetings,
-} from '../../meetings/meeting-tools';
+import { getMeetingSummary, listMeetings, searchMeetings } from '../../meetings/meeting-tools';
 import { getWorkItemTool, listWorkItemsTool } from '../../connectors/work-tools';
 
 let registered = false;

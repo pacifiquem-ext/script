@@ -97,7 +97,10 @@ class OpenAICompatibleCompletionProvider implements CompletionProvider {
     });
     if (!response.ok) {
       const body = await response.text();
-      logger.error({ status: response.status, body: body.slice(0, 200) }, 'openai-compatible completion failed');
+      logger.error(
+        { status: response.status, body: body.slice(0, 200) },
+        'openai-compatible completion failed',
+      );
       throw new ConfigurationError(
         `Completion provider failed: ${response.status} ${body.slice(0, 120)}`,
       );

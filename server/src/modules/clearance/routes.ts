@@ -2,10 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireWorkspace, requireWorkspaceRole } from '../../plugins/auth';
 import { prisma } from '../../db/prisma';
-import {
-  replaceResourcePrincipals,
-  upsertPersonIdentity,
-} from './clearance-service';
+import { replaceResourcePrincipals, upsertPersonIdentity } from './clearance-service';
 import { recordAudit } from '../audit/audit-service';
 import { NotFoundError } from '../../common/errors';
 

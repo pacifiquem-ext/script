@@ -73,7 +73,11 @@ describe('document version history', () => {
   });
 
   it('rollback creates a new current version without rewriting history', async () => {
-    const { document, version: v1, chunkId } = await createReadyDocumentWithVersion({
+    const {
+      document,
+      version: v1,
+      chunkId,
+    } = await createReadyDocumentWithVersion({
       workspaceId,
       name: 'rollback-me.txt',
       content: 'Original version one body.',
@@ -162,7 +166,11 @@ describe('document version history', () => {
   it('retrieval only uses the current version; prior version chunks remain but are not retrieved', async () => {
     const v1Text = 'UniqueAlphabetVersionOneCitationAnchor';
     const v2Text = 'UniqueZebraVersionTwoRetrievalTarget';
-    const { document, version: v1, chunkId: v1ChunkId } = await createReadyDocumentWithVersion({
+    const {
+      document,
+      version: v1,
+      chunkId: v1ChunkId,
+    } = await createReadyDocumentWithVersion({
       workspaceId,
       name: 'retrieve-versions.txt',
       content: v1Text,
@@ -240,7 +248,10 @@ describe('document version history', () => {
       url: `/conversations/${conversationId}/messages/sync`,
       headers: originHeaders(),
       cookies,
-      payload: { content: 'UniqueZebraVersionTwoRetrievalTarget please', documentIds: [document.id] },
+      payload: {
+        content: 'UniqueZebraVersionTwoRetrievalTarget please',
+        documentIds: [document.id],
+      },
     });
     expect(chat.statusCode).toBe(200);
     const citations = chat.json().message.citations as Array<{
@@ -293,9 +304,7 @@ describe('document version history', () => {
 
     // Direct service-level dedup path via upload endpoint would need multipart;
     // assert the hash lookup seam used by createDocumentFromBuffer.
-    const { findDocumentByContentHash } = await import(
-      '../src/modules/library/document-versions'
-    );
+    const { findDocumentByContentHash } = await import('../src/modules/library/document-versions');
     const found = await findDocumentByContentHash(workspaceId, contentHash);
     expect(found?.id).toBe(first.document.id);
 
@@ -336,10 +345,8 @@ describe('document version history', () => {
     });
 
     const { uploadDocumentVersion } = await import('../src/modules/library/library-service');
-    const {
-      createDocumentVersion,
-      wouldChargeIngestion,
-    } = await import('../src/modules/library/document-versions');
+    const { createDocumentVersion, wouldChargeIngestion } =
+      await import('../src/modules/library/document-versions');
 
     const same = await uploadDocumentVersion({
       workspaceId,
@@ -351,9 +358,7 @@ describe('document version history', () => {
     });
     expect(same.deduplicated).toBe(true);
     expect(same.version?.id).toBe(v1.id);
-    expect(
-      await prisma.documentVersion.count({ where: { documentId: document.id } }),
-    ).toBe(1);
+    expect(await prisma.documentVersion.count({ where: { documentId: document.id } })).toBe(1);
 
     // Same-hash reprocess/upload must not require credits
     expect(
@@ -498,9 +503,8 @@ describe('document version history', () => {
       where: { id: version.id },
       data: { createdById: user.id },
     });
-    const { formatDocumentVersionChangelog } = await import(
-      '../src/modules/library/document-versions'
-    );
+    const { formatDocumentVersionChangelog } =
+      await import('../src/modules/library/document-versions');
     const text = await formatDocumentVersionChangelog(workspaceId, [document.id]);
     expect(text).toContain('changelog-doc.txt');
     expect(text).toContain('Versions User');

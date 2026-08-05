@@ -4,13 +4,7 @@ import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { ErrorState } from '../ui/ErrorState';
 import { LoadingState } from '../ui/LoadingState';
-import {
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-} from '../ui/Modal';
+import { Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from '../ui/Modal';
 import { getErrorMessage } from '../../lib/form-errors';
 import { apiRequest } from '../../lib/api-client';
 import { cn } from '../../lib/cn';
@@ -80,7 +74,15 @@ function DiffPane({
                     ? 'bg-success-lighter/80'
                     : 'bg-neutral-50';
             const marker =
-              line.op === 'equal' ? ' ' : line.op === 'remove' ? (side === 'left' ? '−' : ' ') : side === 'right' ? '+' : ' ';
+              line.op === 'equal'
+                ? ' '
+                : line.op === 'remove'
+                  ? side === 'left'
+                    ? '−'
+                    : ' '
+                  : side === 'right'
+                    ? '+'
+                    : ' ';
             return (
               <div
                 key={`${side}-${idx}`}
@@ -91,7 +93,7 @@ function DiffPane({
                 )}
               >
                 <span className="w-8 shrink-0 select-none text-right text-neutral-400 tabular-nums">
-                  {hide ? '' : lineNo ?? ''}
+                  {hide ? '' : (lineNo ?? '')}
                 </span>
                 <span
                   className={cn(
@@ -125,13 +127,19 @@ export function VersionDiffModal({
   initialRightId,
 }: Props) {
   const readyVersions = useMemo(
-    () => versions.filter((v) => v.status === 'ready').sort((a, b) => a.versionNumber - b.versionNumber),
+    () =>
+      versions
+        .filter((v) => v.status === 'ready')
+        .sort((a, b) => a.versionNumber - b.versionNumber),
     [versions],
   );
 
-  const defaultRight = readyVersions.find((v) => v.isCurrent)?.id ?? readyVersions[readyVersions.length - 1]?.id ?? '';
+  const defaultRight =
+    readyVersions.find((v) => v.isCurrent)?.id ?? readyVersions[readyVersions.length - 1]?.id ?? '';
   const defaultLeft =
-    readyVersions.filter((v) => v.id !== defaultRight).slice(-1)[0]?.id ?? readyVersions[0]?.id ?? '';
+    readyVersions.filter((v) => v.id !== defaultRight).slice(-1)[0]?.id ??
+    readyVersions[0]?.id ??
+    '';
 
   const [leftId, setLeftId] = useState(initialLeftId || defaultLeft);
   const [rightId, setRightId] = useState(initialRightId || defaultRight);
@@ -281,7 +289,12 @@ export function VersionDiffModal({
           )}
         </ModalBody>
         <ModalFooter>
-          <Button variant="neutral" mode="stroke" className="w-fit" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="neutral"
+            mode="stroke"
+            className="w-fit"
+            onClick={() => onOpenChange(false)}
+          >
             Close
           </Button>
         </ModalFooter>

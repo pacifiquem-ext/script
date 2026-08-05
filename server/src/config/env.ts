@@ -153,7 +153,12 @@ const envSchema = z
       }
     }
     if (value.OIDC_ISSUER || value.OIDC_CLIENT_ID || value.OIDC_CLIENT_SECRET) {
-      if (!value.OIDC_ISSUER || !value.OIDC_CLIENT_ID || !value.OIDC_CLIENT_SECRET || !value.OIDC_REDIRECT_URL) {
+      if (
+        !value.OIDC_ISSUER ||
+        !value.OIDC_CLIENT_ID ||
+        !value.OIDC_CLIENT_SECRET ||
+        !value.OIDC_REDIRECT_URL
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['OIDC_ISSUER'],

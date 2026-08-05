@@ -48,9 +48,9 @@ LICENSE_ENFORCEMENT=true
 
 ## GPU notes
 
-| Tier | Serving | Notes |
-| ---- | ------- | ----- |
-| Pilot | Ollama | Single-node, low concurrency |
+| Tier       | Serving       | Notes                              |
+| ---------- | ------------- | ---------------------------------- |
+| Pilot      | Ollama        | Single-node, low concurrency       |
 | Production | vLLM / SGLang | Size model to concurrent chat load |
 
 Document your org’s model choice in the deploy runbook; do not hardcode new paid vendors into the

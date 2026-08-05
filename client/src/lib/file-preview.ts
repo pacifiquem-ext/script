@@ -1,11 +1,5 @@
 export type PreviewKind =
-  | 'markdown'
-  | 'pdf'
-  | 'image'
-  | 'docx'
-  | 'text'
-  | 'spreadsheet'
-  | 'unknown';
+  'markdown' | 'pdf' | 'image' | 'docx' | 'text' | 'spreadsheet' | 'unknown';
 
 const IMAGE_MIME = new Set([
   'image/png',
@@ -37,10 +31,7 @@ export function extensionOf(name: string): string {
   return base.slice(dot + 1).toLowerCase();
 }
 
-export function detectPreviewKind(input: {
-  name: string;
-  mimeType?: string | null;
-}): PreviewKind {
+export function detectPreviewKind(input: { name: string; mimeType?: string | null }): PreviewKind {
   const mime = (input.mimeType ?? '').toLowerCase();
   const ext = extensionOf(input.name);
 
@@ -56,7 +47,10 @@ export function detectPreviewKind(input: {
 
   if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
 
-  if (IMAGE_MIME.has(mime) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp'].includes(ext)) {
+  if (
+    IMAGE_MIME.has(mime) ||
+    ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp'].includes(ext)
+  ) {
     return 'image';
   }
 
@@ -78,7 +72,10 @@ export function detectPreviewKind(input: {
     return ext === 'csv' || ext === 'tsv' || mime === 'text/csv' ? 'text' : 'spreadsheet';
   }
 
-  if (TEXT_MIME.has(mime) || ['txt', 'log', 'json', 'xml', 'yml', 'yaml', 'html', 'htm'].includes(ext)) {
+  if (
+    TEXT_MIME.has(mime) ||
+    ['txt', 'log', 'json', 'xml', 'yml', 'yaml', 'html', 'htm'].includes(ext)
+  ) {
     return 'text';
   }
 

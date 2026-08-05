@@ -24,7 +24,8 @@ export function ProofSection() {
             Built for teams who can&apos;t afford wrong answers.
           </h2>
           <p className="m-0 mb-8 max-w-md text-[15px] leading-relaxed text-[#555]">
-            Join the teams turning documents into a living company brain — before everyone else does.
+            Join the teams turning documents into a living company brain — before everyone else
+            does.
           </p>
           <Link to="/app/signup">
             <Button type="button">Get early access</Button>

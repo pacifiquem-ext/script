@@ -73,11 +73,7 @@ export function HowItWorksSection() {
   const current = BEATS[active];
 
   return (
-    <section
-      ref={trackRef}
-      className="relative bg-[#FBFBFF]"
-      style={{ height: `${TRACK_VH}vh` }}
-    >
+    <section ref={trackRef} className="relative bg-[#FBFBFF]" style={{ height: `${TRACK_VH}vh` }}>
       <div className="sticky top-0 flex h-dvh flex-col overflow-hidden px-6 py-10 md:px-12 lg:px-20">
         <div className="mx-auto flex h-full w-full max-w-[1120px] flex-col">
           <div className="mb-8 shrink-0 text-center md:mb-10">

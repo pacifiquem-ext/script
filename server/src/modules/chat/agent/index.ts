@@ -27,7 +27,11 @@ export {
   searchLibrary,
   type LibraryToolContext,
 } from './library-tools';
-export { executeAgentTool, AGENT_TOOL_DEFINITIONS, getAgentToolDefinitions } from './tool-definitions';
+export {
+  executeAgentTool,
+  AGENT_TOOL_DEFINITIONS,
+  getAgentToolDefinitions,
+} from './tool-definitions';
 export {
   registerTool,
   executeTool,

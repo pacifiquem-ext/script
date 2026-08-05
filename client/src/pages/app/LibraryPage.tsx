@@ -92,8 +92,7 @@ type FileKind = 'pdf' | 'doc' | 'xls' | 'txt' | 'img' | 'other';
 type PathCrumb = { id: string; name: string };
 
 type ContextTarget =
-  | { kind: 'folder'; item: PublicFolder }
-  | { kind: 'file'; item: PublicDocument };
+  { kind: 'folder'; item: PublicFolder } | { kind: 'file'; item: PublicDocument };
 
 const TYPE_COLOR: Record<FileKind, string> = {
   pdf: '#6060FF',
@@ -166,9 +165,7 @@ function cardStatusLabel(doc: PublicDocument): string | null {
     return 'Processing…';
   }
   if (doc.status === 'failed') {
-    return doc.failureReason
-      ? humanizeIngestionFailure(doc.failureReason)
-      : 'Processing failed';
+    return doc.failureReason ? humanizeIngestionFailure(doc.failureReason) : 'Processing failed';
   }
   return null;
 }
@@ -181,9 +178,7 @@ function queueStatusLabel(item: QueueItem): string {
     return typeof item.percent === 'number' ? `Processing ${item.percent}%` : 'Processing…';
   }
   if (item.status === 'failed') {
-    return item.error
-      ? humanizeIngestionFailure(item.error)
-      : 'Processing failed';
+    return item.error ? humanizeIngestionFailure(item.error) : 'Processing failed';
   }
   return 'Ready';
 }
@@ -556,9 +551,7 @@ export function LibraryPage() {
 
   const connectedProviders = useMemo(() => {
     const set = new Set(
-      (integrationsQuery.data?.providers ?? [])
-        .filter((p) => p.connected)
-        .map((p) => p.provider),
+      (integrationsQuery.data?.providers ?? []).filter((p) => p.connected).map((p) => p.provider),
     );
     return set;
   }, [integrationsQuery.data]);
@@ -609,9 +602,7 @@ export function LibraryPage() {
         const existing = byDoc.get(doc.id);
         if (doc.status === 'failed' || isDocProcessing(doc)) {
           const status: QueueItemStatus = doc.status === 'failed' ? 'failed' : 'processing';
-          const error = doc.failureReason
-            ? humanizeIngestionFailure(doc.failureReason)
-            : undefined;
+          const error = doc.failureReason ? humanizeIngestionFailure(doc.failureReason) : undefined;
           if (!existing) {
             next.unshift({
               id: `doc-${doc.id}`,
@@ -983,9 +974,7 @@ export function LibraryPage() {
           folderId: renameState.item.id,
           name,
         });
-        setPath((prev) =>
-          prev.map((c) => (c.id === renameState.item.id ? { ...c, name } : c)),
-        );
+        setPath((prev) => prev.map((c) => (c.id === renameState.item.id ? { ...c, name } : c)));
         notify.success('Folder renamed');
       } else {
         await mutations.updateDocument.mutateAsync({
@@ -1145,8 +1134,7 @@ export function LibraryPage() {
       const result = await mutations.uploadDocumentVersion.mutateAsync({
         documentId: doc.id,
         file,
-        onProgress: (percent) =>
-          setActiveProgress((prev) => (prev ? { ...prev, percent } : prev)),
+        onProgress: (percent) => setActiveProgress((prev) => (prev ? { ...prev, percent } : prev)),
       });
       if (result.deduplicated) {
         notify.success('File matches the current version — nothing to update');
@@ -1295,12 +1283,7 @@ export function LibraryPage() {
                   <IconGrid size={16} />
                 </button>
               </div>
-              <Button
-                size="xs"
-                variant="neutral"
-                mode="stroke"
-                onClick={() => setQueueOpen(true)}
-              >
+              <Button size="xs" variant="neutral" mode="stroke" onClick={() => setQueueOpen(true)}>
                 Upload queue
                 {queueBadgeCount > 0 ? (
                   <span className="ml-1.5 inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-primary-base text-white text-[10px] font-semibold px-1">
@@ -1355,86 +1338,88 @@ export function LibraryPage() {
         ) : (
           <>
             {(currentFolderId === null || displayFolders.length > 0 || (q && !currentFolderId)) && (
-            <section className="flex flex-col gap-4 relative z-20">
-              <h2 className="text-label-lg text-neutral-950 m-0">Folders</h2>
-              {displayFolders.length === 0 ? (
-                <p className="text-para-sm text-neutral-400 m-0">
-                  {q ? 'No folders match your search.' : 'No folders yet. Create one to organize files.'}
-                </p>
-              ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-3 max-md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
-                  {displayFolders.map((folder) => (
-                    <FolderCard
-                      key={folder.id}
-                      name={folder.name}
-                      itemCount={folder.documentCount}
-                      onOpen={() => openFolder(folder)}
-                      onMove={(e) => {
-                        e.stopPropagation();
-                        setMoveState({ kind: 'folder', item: folder });
-                        setMoveTargetId(folder.parentId);
-                      }}
-                      onMenu={(e) => {
-                        e.stopPropagation();
-                        openContext(e, { kind: 'folder', item: folder });
-                      }}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col border border-neutral-200 rounded-12 overflow-hidden bg-white">
-                  {displayFolders.map((folder) => (
-                    <div
-                      key={folder.id}
-                      className="group flex items-center gap-4 p-[12px_16px] border-b border-neutral-200 last:border-0 hover:bg-neutral-50 cursor-pointer transition-colors relative"
-                      onClick={() => openFolder(folder)}
-                      onContextMenu={(e) => openContext(e, { kind: 'folder', item: folder })}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          openFolder(folder);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                    >
-                      <SmallFolderIcon hasFiles={folder.documentCount > 0} />
-                      <span className="text-label-sm text-neutral-950 flex-1 truncate font-mono">
-                        {folder.name}
-                      </span>
-                      <span className="text-para-xs text-neutral-400 w-24 font-mono">
-                        {folder.documentCount} item{folder.documentCount === 1 ? '' : 's'}
-                      </span>
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                        <button
-                          type="button"
-                          className="inline-flex p-1.5 rounded-6 bg-white shadow-sm border border-neutral-200 text-neutral-600 hover:text-neutral-950 border-solid cursor-pointer"
-                          aria-label={`Move ${folder.name}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMoveState({ kind: 'folder', item: folder });
-                            setMoveTargetId(folder.parentId);
-                          }}
-                        >
-                          <IconArchive size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex p-1.5 rounded-6 bg-white shadow-sm border border-neutral-200 text-neutral-600 hover:text-neutral-950 border-solid cursor-pointer"
-                          aria-label={`Folder actions for ${folder.name}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openContext(e, { kind: 'folder', item: folder });
-                          }}
-                        >
-                          <IconSettings size={14} />
-                        </button>
+              <section className="flex flex-col gap-4 relative z-20">
+                <h2 className="text-label-lg text-neutral-950 m-0">Folders</h2>
+                {displayFolders.length === 0 ? (
+                  <p className="text-para-sm text-neutral-400 m-0">
+                    {q
+                      ? 'No folders match your search.'
+                      : 'No folders yet. Create one to organize files.'}
+                  </p>
+                ) : viewMode === 'grid' ? (
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-3 max-md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
+                    {displayFolders.map((folder) => (
+                      <FolderCard
+                        key={folder.id}
+                        name={folder.name}
+                        itemCount={folder.documentCount}
+                        onOpen={() => openFolder(folder)}
+                        onMove={(e) => {
+                          e.stopPropagation();
+                          setMoveState({ kind: 'folder', item: folder });
+                          setMoveTargetId(folder.parentId);
+                        }}
+                        onMenu={(e) => {
+                          e.stopPropagation();
+                          openContext(e, { kind: 'folder', item: folder });
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col border border-neutral-200 rounded-12 overflow-hidden bg-white">
+                    {displayFolders.map((folder) => (
+                      <div
+                        key={folder.id}
+                        className="group flex items-center gap-4 p-[12px_16px] border-b border-neutral-200 last:border-0 hover:bg-neutral-50 cursor-pointer transition-colors relative"
+                        onClick={() => openFolder(folder)}
+                        onContextMenu={(e) => openContext(e, { kind: 'folder', item: folder })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openFolder(folder);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <SmallFolderIcon hasFiles={folder.documentCount > 0} />
+                        <span className="text-label-sm text-neutral-950 flex-1 truncate font-mono">
+                          {folder.name}
+                        </span>
+                        <span className="text-para-xs text-neutral-400 w-24 font-mono">
+                          {folder.documentCount} item{folder.documentCount === 1 ? '' : 's'}
+                        </span>
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                          <button
+                            type="button"
+                            className="inline-flex p-1.5 rounded-6 bg-white shadow-sm border border-neutral-200 text-neutral-600 hover:text-neutral-950 border-solid cursor-pointer"
+                            aria-label={`Move ${folder.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMoveState({ kind: 'folder', item: folder });
+                              setMoveTargetId(folder.parentId);
+                            }}
+                          >
+                            <IconArchive size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex p-1.5 rounded-6 bg-white shadow-sm border border-neutral-200 text-neutral-600 hover:text-neutral-950 border-solid cursor-pointer"
+                            aria-label={`Folder actions for ${folder.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openContext(e, { kind: 'folder', item: folder });
+                            }}
+                          >
+                            <IconSettings size={14} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+                    ))}
+                  </div>
+                )}
+              </section>
             )}
 
             <section className="flex flex-col gap-4 relative z-20 pb-4">
@@ -1469,7 +1454,10 @@ export function LibraryPage() {
                     <FileCard
                       key={doc.id}
                       doc={doc}
-                      onOpen={() => { setPreviewVersionId(null); setPreviewId(doc.id); }}
+                      onOpen={() => {
+                        setPreviewVersionId(null);
+                        setPreviewId(doc.id);
+                      }}
                       onMenu={(e) => {
                         e.stopPropagation();
                         openContext(e, { kind: 'file', item: doc });
@@ -1489,7 +1477,10 @@ export function LibraryPage() {
                         draggable={doc.status === 'ready'}
                         onDragStart={(e) => onFileDragStart(e, doc)}
                         className="group flex items-center gap-4 p-[12px_16px] border-b border-neutral-200 last:border-0 hover:bg-neutral-50 cursor-pointer transition-colors relative"
-                        onClick={() => { setPreviewVersionId(null); setPreviewId(doc.id); }}
+                        onClick={() => {
+                          setPreviewVersionId(null);
+                          setPreviewId(doc.id);
+                        }}
                         onContextMenu={(e) => openContext(e, { kind: 'file', item: doc })}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -1580,9 +1571,7 @@ export function LibraryPage() {
                       type="button"
                       className="ml-0.5 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-[6px] border-none bg-transparent p-0 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
                       aria-label={`Remove ${doc.name}`}
-                      onClick={() =>
-                        setQuotedDocs((prev) => prev.filter((d) => d.id !== doc.id))
-                      }
+                      onClick={() => setQuotedDocs((prev) => prev.filter((d) => d.id !== doc.id))}
                     >
                       <IconClose size={12} />
                     </button>
@@ -1704,9 +1693,7 @@ export function LibraryPage() {
               className="flex items-center w-full p-[8px_10px] text-left text-para-sm text-neutral-950 bg-transparent border-none rounded-8 cursor-pointer hover:bg-neutral-50"
               onClick={() => {
                 const t = contextMenu.target;
-                setMoveTargetId(
-                  t.kind === 'folder' ? t.item.parentId : t.item.folderId,
-                );
+                setMoveTargetId(t.kind === 'folder' ? t.item.parentId : t.item.folderId);
                 setMoveState(t);
                 setContextMenu(null);
               }}
@@ -1785,7 +1772,12 @@ export function LibraryPage() {
           }
         }}
       >
-        <SideDrawerContent showClose={false} width="md" className="p-0" accessibleTitle="Document preview">
+        <SideDrawerContent
+          showClose={false}
+          width="md"
+          className="p-0"
+          accessibleTitle="Document preview"
+        >
           <DocumentCanvas
             file={{
               id: previewId ?? '',
@@ -1833,13 +1825,17 @@ export function LibraryPage() {
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-label-sm text-neutral-950">v{version.versionNumber}</span>
+                      <span className="text-label-sm text-neutral-950">
+                        v{version.versionNumber}
+                      </span>
                       {version.isCurrent ? (
                         <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-primary-alpha-10 text-primary-base">
                           Current
                         </span>
                       ) : null}
-                      <span className="text-[11px] text-neutral-500 capitalize">{version.status}</span>
+                      <span className="text-[11px] text-neutral-500 capitalize">
+                        {version.status}
+                      </span>
                       <span className="text-[11px] text-neutral-400 capitalize">
                         {version.changeReason}
                       </span>
@@ -1927,7 +1923,12 @@ export function LibraryPage() {
             >
               Upload new version
             </Button>
-            <Button variant="neutral" mode="stroke" className="w-fit" onClick={() => setVersionsDoc(null)}>
+            <Button
+              variant="neutral"
+              mode="stroke"
+              className="w-fit"
+              onClick={() => setVersionsDoc(null)}
+            >
               Close
             </Button>
           </ModalFooter>
@@ -2029,9 +2030,7 @@ export function LibraryPage() {
         }}
       >
         <ModalContent showClose={!moveBusy}>
-          <ModalHeader
-            title={moveState?.kind === 'folder' ? 'Move folder' : 'Move file'}
-          />
+          <ModalHeader title={moveState?.kind === 'folder' ? 'Move folder' : 'Move file'} />
           <ModalBody>
             {`Pick where “${moveState?.item.name ?? 'this item'}” should live. You can always move it again later.`}
           </ModalBody>
@@ -2386,10 +2385,7 @@ export function LibraryPage() {
             ) : (
               <ul className="flex flex-col gap-2 m-0 p-0 list-none">
                 {queueItems.map((item) => (
-                  <li
-                    key={item.id}
-                    className="rounded-12 border border-neutral-200 bg-white p-3"
-                  >
+                  <li key={item.id} className="rounded-12 border border-neutral-200 bg-white p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="text-label-sm text-neutral-950 m-0 truncate">{item.name}</p>

@@ -72,7 +72,9 @@ export function LandingFooter() {
         </div>
 
         <div className="mb-10 flex flex-col gap-3 border-t border-neutral-200 pt-6 text-[12px] text-neutral-500 md:flex-row md:items-center md:justify-between">
-          <p className="m-0">Answers match clearance. Workspace-scoped. Built for truth, not leaks.</p>
+          <p className="m-0">
+            Answers match clearance. Workspace-scoped. Built for truth, not leaks.
+          </p>
           <p className="m-0">© {new Date().getFullYear()} script</p>
         </div>
       </div>

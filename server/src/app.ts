@@ -42,13 +42,7 @@ export function buildApp() {
     origin: env.corsOrigins,
     credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Workspace-Id',
-      'X-Request-Id',
-      'Accept',
-    ],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Workspace-Id', 'X-Request-Id', 'Accept'],
     exposedHeaders: ['Content-Type'],
   });
   app.register(cookie);

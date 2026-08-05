@@ -25,18 +25,10 @@ import {
   useCredits,
   useMessages,
 } from '../../lib/chat-api';
-import {
-  matchDocumentsInText,
-  useDocument,
-  useDocuments,
-  useFolders,
-} from '../../lib/library-api';
+import { matchDocumentsInText, useDocument, useDocuments, useFolders } from '../../lib/library-api';
 import { getErrorMessage } from '../../lib/form-errors';
 import { queryKeys } from '../../lib/query-client';
-import {
-  getTextareaCaretCoordinates,
-  splitMentionSegments,
-} from '../../lib/textarea-caret';
+import { getTextareaCaretCoordinates, splitMentionSegments } from '../../lib/textarea-caret';
 import {
   IconArrowUp,
   IconAttach,
@@ -248,15 +240,10 @@ export function ChatPage() {
       if (!trimmed || loading) return;
 
       const named = matchDocumentsInText(trimmed, allDocs);
-      const explicit =
-        documentIds ??
-        selectedDocs.map((d) => d.id);
+      const explicit = documentIds ?? selectedDocs.map((d) => d.id);
       // Merge chip selections with names typed in the message (incl. files in folders).
       const mergedIds = [
-        ...new Set([
-          ...explicit,
-          ...named.filter((d) => d.status === 'ready').map((d) => d.id),
-        ]),
+        ...new Set([...explicit, ...named.filter((d) => d.status === 'ready').map((d) => d.id)]),
       ];
 
       const notReadyNamed = named.filter((d) => d.status !== 'ready');
@@ -675,9 +662,7 @@ export function ChatPage() {
                       type="button"
                       className="ml-0.5 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-[6px] border-none bg-transparent p-0 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
                       aria-label={`Remove ${doc.name}`}
-                      onClick={() =>
-                        setSelectedDocs((prev) => prev.filter((d) => d.id !== doc.id))
-                      }
+                      onClick={() => setSelectedDocs((prev) => prev.filter((d) => d.id !== doc.id))}
                     >
                       <IconClose size={12} />
                     </button>
@@ -820,7 +805,6 @@ export function ChatPage() {
     );
   }
 
-
   const showInitialLoading = messagesQuery.isLoading && !messagesQuery.data && !pendingUser;
   const isEmpty = messages.length === 0 && !streaming && !showPendingUser && !showInitialLoading;
   const previewListDocument = preview
@@ -888,7 +872,11 @@ export function ChatPage() {
                 ) : (
                   <div key={message.id} className="flex max-w-[85%] gap-3">
                     {renderAssistantAvatar()}
-                    {renderAssistantContent(message.content, message.citations ?? [], message.partial)}
+                    {renderAssistantContent(
+                      message.content,
+                      message.citations ?? [],
+                      message.partial,
+                    )}
                   </div>
                 ),
               )}

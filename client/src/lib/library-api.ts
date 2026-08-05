@@ -11,9 +11,7 @@ import { queryKeys } from './query-client';
 
 function hasActiveProcessing(docs: PublicDocument[] | undefined): boolean {
   return Boolean(
-    docs?.some(
-      (d) => d.status === 'pending' || d.status === 'processing' || d.isUpdating,
-    ),
+    docs?.some((d) => d.status === 'pending' || d.status === 'processing' || d.isUpdating),
   );
 }
 
@@ -158,10 +156,7 @@ export function useDocuments(
   });
 }
 
-export function useDocument(
-  documentId: string | null,
-  options?: { versionId?: string | null },
-) {
+export function useDocument(documentId: string | null, options?: { versionId?: string | null }) {
   const versionId = options?.versionId ?? null;
   return useQuery({
     queryKey: documentId

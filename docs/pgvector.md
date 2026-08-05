@@ -24,12 +24,12 @@ writes and similarity searches** go through the deep module:
 
 **`server/src/db/vector.ts`**
 
-| Function | Role |
-| -------- | ---- |
-| `setDocumentChunkEmbedding` / `setMemoryChunkEmbedding` | Write vector after create |
-| `copyDocumentChunkEmbeddingsByPosition` | Rollback copy by position |
-| `searchDocumentChunkVectors` | Current-version document RAG |
-| `searchMemoryChunkVectors` | MemoryChunk search by source type |
+| Function                                                | Role                              |
+| ------------------------------------------------------- | --------------------------------- |
+| `setDocumentChunkEmbedding` / `setMemoryChunkEmbedding` | Write vector after create         |
+| `copyDocumentChunkEmbeddingsByPosition`                 | Rollback copy by position         |
+| `searchDocumentChunkVectors`                            | Current-version document RAG      |
+| `searchMemoryChunkVectors`                              | MemoryChunk search by source type |
 
 Product code under `server/src/modules/**` must **not** call `prisma.$queryRaw` /
 `$executeRaw` / `$executeRawUnsafe`. Allowed exceptions:

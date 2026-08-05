@@ -25,11 +25,7 @@ export function ConfirmModal({
 }) {
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
-      <ModalContent
-        showClose={!loading}
-        size="sm"
-        tone={destructive ? 'destructive' : 'primary'}
-      >
+      <ModalContent showClose={!loading} size="sm" tone={destructive ? 'destructive' : 'primary'}>
         <ModalHeader title={title} align="start" divider />
         {description ? <ModalBody align="start">{description}</ModalBody> : null}
         <ModalFooter align="end">

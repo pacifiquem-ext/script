@@ -23,7 +23,9 @@ export function UploadProgressCard({ title, detail, percent, className }: Upload
       aria-busy="true"
     >
       <p className="text-label-sm text-neutral-950 m-0 truncate">{title}</p>
-      {detail ? <p className="text-para-xs text-neutral-400 m-0 mt-0.5 truncate">{detail}</p> : null}
+      {detail ? (
+        <p className="text-para-xs text-neutral-400 m-0 mt-0.5 truncate">{detail}</p>
+      ) : null}
       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
         <div
           className={cn(

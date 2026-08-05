@@ -104,7 +104,10 @@ export function ProblemSection() {
                   <h3 className="m-0 mb-5 text-[18px] font-medium text-[#111]">{SOLUTION.title}</h3>
                   <ul className="m-0 flex list-none flex-col gap-3 p-0">
                     {SOLUTION.items.map((item) => (
-                      <li key={item} className="flex gap-2.5 text-[14px] leading-relaxed text-[#555]">
+                      <li
+                        key={item}
+                        className="flex gap-2.5 text-[14px] leading-relaxed text-[#555]"
+                      >
                         <span className="mt-0.5 shrink-0 text-primary" aria-hidden="true">
                           <IconSparkles size={14} />
                         </span>

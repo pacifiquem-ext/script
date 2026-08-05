@@ -97,9 +97,7 @@ describe('ingestion processor', () => {
       data: { processingVersionId: version.id },
     });
 
-    global.fetch = vi.fn(
-      async () => new Response(content, { status: 200 }),
-    ) as typeof fetch;
+    global.fetch = vi.fn(async () => new Response(content, { status: 200 })) as typeof fetch;
 
     await processIngestion({
       documentId: doc.id,
@@ -298,9 +296,7 @@ describe('ingestion processor', () => {
     });
 
     vi.mocked(extractText).mockRejectedValueOnce(new Error('OCR exploded'));
-    global.fetch = vi.fn(
-      async () => new Response(content, { status: 200 }),
-    ) as typeof fetch;
+    global.fetch = vi.fn(async () => new Response(content, { status: 200 })) as typeof fetch;
 
     await expect(
       processIngestion({
@@ -401,9 +397,7 @@ describe('ingestion processor', () => {
       data: { processingVersionId: v2.id },
     });
 
-    global.fetch = vi.fn(
-      async () => new Response(content, { status: 200 }),
-    ) as typeof fetch;
+    global.fetch = vi.fn(async () => new Response(content, { status: 200 })) as typeof fetch;
 
     await processIngestion({
       documentId: doc.id,

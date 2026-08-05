@@ -72,9 +72,7 @@ export async function listLibraryDocuments(
           visibility: c.visibility,
         })),
       })
-    : new Set(
-        candidates.filter((c) => c.visibility === 'workspace').map((c) => c.id),
-      );
+    : new Set(candidates.filter((c) => c.visibility === 'workspace').map((c) => c.id));
   const rows = candidates.filter((c) => allowed.has(c.id)).slice(0, limit);
   const total = rows.length;
 
@@ -105,7 +103,7 @@ function fallbackSummary(text: string | null | undefined): string | null {
 export async function getLibraryDocument(
   ctx: LibraryToolContext,
   input: { documentId?: string; name?: string },
-): Promise<LibraryDocRow & { extractedPreview: string | null } | null> {
+): Promise<(LibraryDocRow & { extractedPreview: string | null }) | null> {
   const maxClearance = ctx.maxClearanceLevel ?? 0;
   const clearanceFilter = { clearanceLevel: { lte: maxClearance } };
   const row = input.documentId
@@ -146,8 +144,7 @@ export async function getLibraryDocument(
 
   if (!row) return null;
   const full = row.extractedText || row.currentVersion?.extractedText || null;
-  const summary =
-    row.summary || row.currentVersion?.summary || fallbackSummary(full);
+  const summary = row.summary || row.currentVersion?.summary || fallbackSummary(full);
   return {
     id: row.id,
     name: row.name,
@@ -197,9 +194,7 @@ export async function searchLibrary(
     });
     if (memoryHits.length > 0) {
       const ids = [
-        ...new Set(
-          memoryHits.map((h) => h.documentId).filter((id): id is string => Boolean(id)),
-        ),
+        ...new Set(memoryHits.map((h) => h.documentId).filter((id): id is string => Boolean(id))),
       ];
       const allowed = await prisma.document.findMany({
         where: {

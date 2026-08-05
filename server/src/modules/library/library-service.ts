@@ -184,7 +184,9 @@ export async function deleteDocument(workspaceId: string, documentId: string) {
     include: { versions: { select: { storageKey: true } } },
   });
   if (!existing) throw new NotFoundError('Document');
-  const storageKeys = [...new Set(existing.versions.map((v) => v.storageKey).concat(existing.storageKey))];
+  const storageKeys = [
+    ...new Set(existing.versions.map((v) => v.storageKey).concat(existing.storageKey)),
+  ];
   await prisma.document.delete({ where: { id: documentId } });
   for (const key of storageKeys) {
     try {

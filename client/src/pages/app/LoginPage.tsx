@@ -124,7 +124,12 @@ export function LoginPage() {
               onDismiss={() => setError(null)}
             />
           )}
-          <Button type="submit" size="md" loading={loading} className="self-center min-w-[200px] w-fit">
+          <Button
+            type="submit"
+            size="md"
+            loading={loading}
+            className="self-center min-w-[200px] w-fit"
+          >
             Sign in
           </Button>
         </form>

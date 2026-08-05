@@ -16,7 +16,10 @@ const SOURCES = [
 
 export function IntegrationsSection() {
   return (
-    <section id="integrations" className="overflow-hidden bg-[#FBFBFF] px-6 py-24 md:px-12 lg:px-20">
+    <section
+      id="integrations"
+      className="overflow-hidden bg-[#FBFBFF] px-6 py-24 md:px-12 lg:px-20"
+    >
       <div className="mx-auto flex w-full max-w-[1120px] flex-col items-center text-center">
         <Reveal>
           <h2 className="m-0 mb-3 text-[36px] font-medium leading-[110%] text-[#111] md:text-[48px]">

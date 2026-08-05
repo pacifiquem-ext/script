@@ -16,7 +16,10 @@ export async function connectorRoutes(app: FastifyInstance) {
     const body = z
       .object({
         token: z.string().min(20).max(512),
-        repos: z.array(z.string().regex(/^[^/]+\/[^/]+$/)).min(1).max(20),
+        repos: z
+          .array(z.string().regex(/^[^/]+\/[^/]+$/))
+          .min(1)
+          .max(20),
       })
       .parse(request.body);
     return github.connectGitHub(workspace.id, user.id, body.token, body.repos);

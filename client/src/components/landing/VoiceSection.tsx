@@ -20,8 +20,8 @@ export function VoiceSection() {
             Meetings become memory.
           </h2>
           <p className="m-0 mb-8 max-w-md text-[15px] leading-relaxed text-[#555]">
-            Vocal decisions land in the same brain — not a second product. Ask what was said the same
-            way you ask what was signed.
+            Vocal decisions land in the same brain — not a second product. Ask what was said the
+            same way you ask what was signed.
           </p>
           <Link to="/app/signup">
             <Button type="button" variant="secondary">

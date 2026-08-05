@@ -427,7 +427,11 @@ export async function* streamAssistantReply(input: {
 }): AsyncGenerator<ChatStreamEvent> {
   await assertLicenseAllowsWrite();
 
-  if (env.NODE_ENV !== 'test' && env.COMPLETION_PROVIDER === 'anthropic' && !env.ANTHROPIC_API_KEY) {
+  if (
+    env.NODE_ENV !== 'test' &&
+    env.COMPLETION_PROVIDER === 'anthropic' &&
+    !env.ANTHROPIC_API_KEY
+  ) {
     throw new ConfigurationError(
       'ANTHROPIC_API_KEY is required for chat. Add it to server/.env (see ENV.md).',
     );
@@ -499,10 +503,7 @@ export async function* streamAssistantReply(input: {
   });
   history.reverse();
 
-  const versionChangelog = await formatDocumentVersionChangelog(
-    input.workspaceId,
-    documentIds,
-  );
+  const versionChangelog = await formatDocumentVersionChangelog(input.workspaceId, documentIds);
 
   const modelMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   for (const msg of history) {
@@ -529,8 +530,7 @@ export async function* streamAssistantReply(input: {
 
   try {
     // Prefer agent tool loop (P0/P4). Legacy completionStreamer remains for tests that inject it.
-    const useLegacyStreamer =
-      env.NODE_ENV === 'test' && completionStreamer !== testStreamer;
+    const useLegacyStreamer = env.NODE_ENV === 'test' && completionStreamer !== testStreamer;
 
     if (useLegacyStreamer) {
       let contexts: RetrievedChunk[] = [];

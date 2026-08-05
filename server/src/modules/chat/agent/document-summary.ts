@@ -12,7 +12,6 @@ export function buildDocumentSummary(text: string, maxLen = 240): string {
     slice.lastIndexOf('; '),
   );
   const wordBreak = slice.lastIndexOf(' ');
-  const cut =
-    breakAt >= 48 ? breakAt + 1 : wordBreak >= 48 ? wordBreak : maxLen;
+  const cut = breakAt >= 48 ? breakAt + 1 : wordBreak >= 48 ? wordBreak : maxLen;
   return `${slice.slice(0, cut).trim()}…`;
 }

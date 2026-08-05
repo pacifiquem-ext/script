@@ -123,8 +123,7 @@ export const IconDelete = ({ size = 18, className = '' }) => icon(Delete02Icon, 
 export const IconEdit = ({ size = 18, className = '' }) => icon(Edit02Icon, size, className);
 export const IconMore = ({ size = 18, className = '' }) =>
   icon(MoreHorizontalIcon, size, className);
-export const IconArchive = ({ size = 18, className = '' }) =>
-  icon(Archive02Icon, size, className);
+export const IconArchive = ({ size = 18, className = '' }) => icon(Archive02Icon, size, className);
 export const IconImage = ({ size = 18, className = '' }) => icon(Image01Icon, size, className);
 export const IconHelp = ({ size = 18, className = '' }) => icon(HelpCircleIcon, size, className);
 export const IconMic = ({ size = 18, className = '' }) => icon(Mic01Icon, size, className);

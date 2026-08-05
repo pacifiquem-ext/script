@@ -156,7 +156,12 @@ async function* runForcedMeetingInventory(
       ? (
           result.data as {
             total: number;
-            meetings: Array<{ title: string; summary: string | null; status: string; startedAt: string | null }>;
+            meetings: Array<{
+              title: string;
+              summary: string | null;
+              status: string;
+              startedAt: string | null;
+            }>;
           }
         ).meetings
       : [];
@@ -168,8 +173,7 @@ async function* runForcedMeetingInventory(
     (m, i) =>
       `${i + 1}. **${m.title}** (${m.status}${m.startedAt ? `, ${m.startedAt.slice(0, 10)}` : ''}) — ${m.summary || '(no summary yet)'}`,
   );
-  const more =
-    total > meetings.length ? `\n\n…and ${total - meetings.length} more not shown.` : '';
+  const more = total > meetings.length ? `\n\n…and ${total - meetings.length} more not shown.` : '';
   const text =
     lines.length > 0
       ? `Here are your meetings (${meetings.length} of ${total}):\n\n${lines.join('\n')}${more}`
@@ -337,9 +341,7 @@ export async function* defaultTestAgentRunner(
     return;
   }
 
-  const scopeMatch = lastUser.match(
-    /explicitly scoped these document ids[^:]*:\s*([a-z0-9,\s]+)/i,
-  );
+  const scopeMatch = lastUser.match(/explicitly scoped these document ids[^:]*:\s*([a-z0-9,\s]+)/i);
   const scopedIds = scopeMatch?.[1]
     ? scopeMatch[1]
         .split(',')
@@ -376,17 +378,14 @@ export async function* defaultTestAgentRunner(
     };
     return;
   }
-  const body = hits
-    .map((h, i) => `[${i + 1}] ${h.documentName}\n${h.excerpt}`)
-    .join('\n\n');
+  const body = hits.map((h, i) => `[${i + 1}] ${h.documentName}\n${h.excerpt}`).join('\n\n');
   yield {
     type: 'delta',
     text: `Based on your Library:\n\n${body}`,
   };
 }
 
-let agentRunner: AgentRunner =
-  env.NODE_ENV === 'test' ? defaultTestAgentRunner : runAgentWithTools;
+let agentRunner: AgentRunner = env.NODE_ENV === 'test' ? defaultTestAgentRunner : runAgentWithTools;
 
 export function setAgentRunnerForTests(runner: AgentRunner | null) {
   if (env.NODE_ENV !== 'test') {

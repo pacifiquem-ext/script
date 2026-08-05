@@ -5,10 +5,7 @@ import { encryptSecret, decryptSecret, hasTokenEncryptionKey } from '../../lib/t
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../common/errors';
 import { assertLicenseAllowsWrite } from '../license/license-service';
 import { recordAudit } from '../audit/audit-service';
-import {
-  resolvePrincipalFromIdentity,
-  upsertPersonIdentity,
-} from '../clearance/clearance-service';
+import { resolvePrincipalFromIdentity, upsertPersonIdentity } from '../clearance/clearance-service';
 import { logger } from '../../lib/logger';
 import { handleAgentAskWithoutConversation } from '../chat/agent-entry';
 import { setMemoryChunkEmbedding } from '../../db/vector';

@@ -10,7 +10,9 @@ import { queryKeys } from '../lib/query-client';
 import { initials } from '../lib/workspaces';
 import { COOKIE_WORKSPACE_ID, type PublicDocument } from '@script/shared';
 
-function stubDoc(partial: Partial<PublicDocument> & Pick<PublicDocument, 'id' | 'name'>): PublicDocument {
+function stubDoc(
+  partial: Partial<PublicDocument> & Pick<PublicDocument, 'id' | 'name'>,
+): PublicDocument {
   return {
     folderId: null,
     mimeType: 'text/plain',

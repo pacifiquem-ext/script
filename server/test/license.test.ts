@@ -39,7 +39,15 @@ describe('license crypto', () => {
       expiresAt: now + 1000,
     });
     const parts = key.split('.');
-    parts[1] = Buffer.from(JSON.stringify({ licenseId: 'x', customerId: 'y', seats: 99, issuedAt: now, expiresAt: now + 1000 })).toString('base64url');
+    parts[1] = Buffer.from(
+      JSON.stringify({
+        licenseId: 'x',
+        customerId: 'y',
+        seats: 99,
+        issuedAt: now,
+        expiresAt: now + 1000,
+      }),
+    ).toString('base64url');
     expect(() => verifyLicenseKey(publicKeyPem, parts.join('.'))).toThrow(/signature/i);
   });
 });

@@ -158,15 +158,11 @@ describe('runAgentWithTools production loop', () => {
       storageKey: 'rt-other',
     });
 
-    const { listLibraryDocuments, getLibraryDocument } = await import(
-      '../src/modules/chat/agent/library-tools'
-    );
+    const { listLibraryDocuments, getLibraryDocument } =
+      await import('../src/modules/chat/agent/library-tools');
     const listed = await listLibraryDocuments({ workspaceId }, {});
     expect(listed.documents.some((d) => d.name === 'secret-other.txt')).toBe(false);
-    const foreign = await getLibraryDocument(
-      { workspaceId },
-      { name: 'secret-other.txt' },
-    );
+    const foreign = await getLibraryDocument({ workspaceId }, { name: 'secret-other.txt' });
     expect(foreign).toBeNull();
 
     await prisma.user.delete({ where: { id: other.id } });

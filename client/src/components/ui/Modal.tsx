@@ -55,7 +55,10 @@ export function ModalContent({
         )}
         data-tone={tone}
       >
-        <div className="pointer-events-none relative h-[108px] overflow-hidden bg-neutral-100" aria-hidden>
+        <div
+          className="pointer-events-none relative h-[108px] overflow-hidden bg-neutral-100"
+          aria-hidden
+        >
           <img src={resolvedHero} alt="" className="absolute inset-0 h-full w-full object-cover" />
         </div>
 

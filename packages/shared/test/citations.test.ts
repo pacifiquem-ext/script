@@ -46,7 +46,12 @@ describe('refineCitationRange', () => {
   ].join('\n');
 
   it('narrows a large window to the env block when the hint mentions those vars', () => {
-    const refined = refineCitationRange(doc, 0, doc.length, 'set STORAGE_DRIVER and UPLOADTHING_TOKEN [4]');
+    const refined = refineCitationRange(
+      doc,
+      0,
+      doc.length,
+      'set STORAGE_DRIVER and UPLOADTHING_TOKEN [4]',
+    );
     const mid = doc.slice(refined.startOffset, refined.endOffset);
     expect(mid).toContain('STORAGE_DRIVER');
     expect(mid.length).toBeLessThan(doc.length / 2);

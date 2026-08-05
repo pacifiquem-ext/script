@@ -1,4 +1,11 @@
-import { createPrivateKey, createPublicKey, sign, verify, createHash, generateKeyPairSync } from 'node:crypto';
+import {
+  createPrivateKey,
+  createPublicKey,
+  sign,
+  verify,
+  createHash,
+  generateKeyPairSync,
+} from 'node:crypto';
 import { z } from 'zod';
 
 const claimsSchema = z.object({

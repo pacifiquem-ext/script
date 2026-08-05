@@ -849,10 +849,9 @@ export function SettingsModal({ open, onClose }: Props) {
                             size="sm"
                             className="w-fit"
                             onClick={() => {
-                              void apiRequest(
-                                `/workspaces/current/invites/${invite.id}/resend`,
-                                { method: 'POST' },
-                              ).catch((err) =>
+                              void apiRequest(`/workspaces/current/invites/${invite.id}/resend`, {
+                                method: 'POST',
+                              }).catch((err) =>
                                 setInviteError(getErrorMessage(err, 'Resend failed')),
                               );
                             }}
@@ -911,7 +910,9 @@ export function SettingsModal({ open, onClose }: Props) {
                 <div className="border border-neutral-200 rounded-10 p-4 flex flex-col gap-2">
                   <p className="text-[13px]">
                     Phase:{' '}
-                    <span className="font-medium capitalize">{license.phase.replace('_', ' ')}</span>
+                    <span className="font-medium capitalize">
+                      {license.phase.replace('_', ' ')}
+                    </span>
                     {!license.enforced && (
                       <span className="text-neutral-500"> (open-dev, not enforced)</span>
                     )}
@@ -929,7 +930,12 @@ export function SettingsModal({ open, onClose }: Props) {
                     <p className="text-[12px] text-neutral-500">Customer {license.customerId}</p>
                   )}
                   {license.message && (
-                    <Alert status="warning" variant="stroke" compact description={license.message} />
+                    <Alert
+                      status="warning"
+                      variant="stroke"
+                      compact
+                      description={license.message}
+                    />
                   )}
                 </div>
               )}
@@ -961,9 +967,7 @@ export function SettingsModal({ open, onClose }: Props) {
                         setLicenseMessage('License activated.');
                         await licenseQuery.refetch();
                       })
-                      .catch((err) =>
-                        setLicenseError(getErrorMessage(err, 'Activation failed')),
-                      );
+                      .catch((err) => setLicenseError(getErrorMessage(err, 'Activation failed')));
                   }}
                 >
                   Activate key

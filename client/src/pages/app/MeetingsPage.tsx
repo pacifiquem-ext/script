@@ -69,8 +69,7 @@ export function MeetingsPage() {
   });
 
   const disconnectMutation = useMutation({
-    mutationFn: async () =>
-      apiRequest('/meetings/connector/fireflies', { method: 'DELETE' }),
+    mutationFn: async () => apiRequest('/meetings/connector/fireflies', { method: 'DELETE' }),
     onSuccess: async () => {
       setMessage('Fireflies disconnected.');
       await invalidate();
@@ -275,9 +274,7 @@ export function MeetingsPage() {
                       >
                         {c.text}
                         {c.ownerLabel ? ` — ${c.ownerLabel}` : ''}
-                        {c.sourceStartMs != null
-                          ? ` (${Math.floor(c.sourceStartMs / 1000)}s)`
-                          : ''}
+                        {c.sourceStartMs != null ? ` (${Math.floor(c.sourceStartMs / 1000)}s)` : ''}
                       </button>
                     </li>
                   ))}

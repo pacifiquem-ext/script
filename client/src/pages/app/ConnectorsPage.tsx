@@ -95,8 +95,7 @@ export function ConnectorsPage() {
   });
 
   const gh = connectorsQ.data?.connectors?.[0] as
-    | { connected?: boolean; repos?: string[]; lastSyncAt?: string | null }
-    | undefined;
+    { connected?: boolean; repos?: string[]; lastSyncAt?: string | null } | undefined;
 
   return (
     <div className="h-full overflow-y-auto p-8 max-w-3xl">
@@ -106,10 +105,22 @@ export function ConnectorsPage() {
       </p>
 
       {error && (
-        <Alert status="error" variant="stroke" compact description={error} onDismiss={() => setError(null)} />
+        <Alert
+          status="error"
+          variant="stroke"
+          compact
+          description={error}
+          onDismiss={() => setError(null)}
+        />
       )}
       {msg && (
-        <Alert status="success" variant="stroke" compact description={msg} onDismiss={() => setMsg(null)} />
+        <Alert
+          status="success"
+          variant="stroke"
+          compact
+          description={msg}
+          onDismiss={() => setMsg(null)}
+        />
       )}
 
       <section className="border border-neutral-200 rounded-20 p-5 mb-6 flex flex-col gap-3">
@@ -184,9 +195,7 @@ export function ConnectorsPage() {
             </p>
             <ul className="text-[12px] text-neutral-600 list-disc pl-5">
               {(slackQ.data.bindings ?? []).map((b) => (
-                <li key={b.id}>
-                  {b.channelName ? `#${b.channelName}` : b.channelId}
-                </li>
+                <li key={b.id}>{b.channelName ? `#${b.channelName}` : b.channelId}</li>
               ))}
             </ul>
             <div className="flex flex-wrap gap-2 items-end">

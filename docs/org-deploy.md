@@ -5,13 +5,13 @@ storage, with license activation and backups.
 
 ## Topology
 
-| Process | Role |
-| ------- | ---- |
-| API (`server`) | HTTP + auth + chat SSE |
-| Worker | BullMQ ingestion / embeddings |
-| Redis | Job queue |
-| Postgres + pgvector | Relational + vectors |
-| Garage or S3 / UploadThing | File bytes |
+| Process                    | Role                          |
+| -------------------------- | ----------------------------- |
+| API (`server`)             | HTTP + auth + chat SSE        |
+| Worker                     | BullMQ ingestion / embeddings |
+| Redis                      | Job queue                     |
+| Postgres + pgvector        | Relational + vectors          |
+| Garage or S3 / UploadThing | File bytes                    |
 
 Local compose: `pnpm deps:up` then `pnpm dev:app` (see `docs/local-infra.md`).
 

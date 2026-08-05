@@ -36,10 +36,7 @@ const variantStyles: Record<ButtonVariant, string> = {
 const disabledStyles =
   'disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-neutral-200 disabled:text-neutral-400 disabled:shadow-none';
 
-function resolveVariant(
-  variant: ButtonVariant | LegacyVariant,
-  mode: LegacyMode,
-): ButtonVariant {
+function resolveVariant(variant: ButtonVariant | LegacyVariant, mode: LegacyMode): ButtonVariant {
   if (
     variant === 'primary' ||
     variant === 'secondary' ||

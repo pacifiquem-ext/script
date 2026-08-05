@@ -71,7 +71,9 @@ export function classifyInventoryIntentHeuristicForTests(text: string): Inventor
   ) {
     return 'library_inventory';
   }
-  if (/\b(what meetings|list meetings|show meetings|what calls|list (our |recent )?calls)\b/.test(t)) {
+  if (
+    /\b(what meetings|list meetings|show meetings|what calls|list (our |recent )?calls)\b/.test(t)
+  ) {
     return 'meeting_inventory';
   }
   return 'none';

@@ -56,17 +56,29 @@ export function InviteAcceptPage() {
           </p>
         )}
         {error && (
-          <Alert status="error" variant="stroke" compact description={error} onDismiss={() => setError(null)} />
+          <Alert
+            status="error"
+            variant="stroke"
+            compact
+            description={error}
+            onDismiss={() => setError(null)}
+          />
         )}
         {!user ? (
           <div className="flex flex-col gap-2">
             <p className="text-[13px] text-neutral-500">
               Sign in with the invited email, then return to this link.
             </p>
-            <Link to="/app/login" className="text-primary-base text-[14px] font-medium no-underline">
+            <Link
+              to="/app/login"
+              className="text-primary-base text-[14px] font-medium no-underline"
+            >
               Sign in
             </Link>
-            <Link to="/app/signup" className="text-primary-base text-[14px] font-medium no-underline">
+            <Link
+              to="/app/signup"
+              className="text-primary-base text-[14px] font-medium no-underline"
+            >
               Create account
             </Link>
           </div>

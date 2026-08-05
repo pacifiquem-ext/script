@@ -293,7 +293,10 @@ export async function processMeetingEmbeddings(meetingId: string): Promise<void>
         const key = await getFirefliesApiKey(meeting.workspaceId);
         remote = await fetchFirefliesTranscript(key, meeting.sourceExternalId);
       } catch (err) {
-        logger.warn({ err, meetingId }, 're-fetch fireflies for segments failed; using stored text');
+        logger.warn(
+          { err, meetingId },
+          're-fetch fireflies for segments failed; using stored text',
+        );
       }
     }
 
@@ -450,10 +453,9 @@ export async function handleFirefliesWebhook(payload: {
   if (!transcriptId) throw new BadRequestError('meetingId (transcript id) required');
 
   // clientReferenceId may encode workspaceId when configured in Fireflies
-  const workspaceId =
-    payload.clientReferenceId?.startsWith('ws:')
-      ? payload.clientReferenceId.slice(3)
-      : null;
+  const workspaceId = payload.clientReferenceId?.startsWith('ws:')
+    ? payload.clientReferenceId.slice(3)
+    : null;
 
   if (!workspaceId) {
     // Fall back: find any workspace with Fireflies connected that can access this transcript

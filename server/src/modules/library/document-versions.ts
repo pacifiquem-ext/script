@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import type { Document, DocumentVersion, DocumentVersionChangeReason, Prisma } from '@prisma/client';
+import type {
+  Document,
+  DocumentVersion,
+  DocumentVersionChangeReason,
+  Prisma,
+} from '@prisma/client';
 import type {
   PublicDocument,
   PublicDocumentDetail,
@@ -261,7 +266,9 @@ export async function projectDocumentFromVersion(
     !options.makeCurrent &&
     doc.currentVersionId != null &&
     doc.status === 'ready' &&
-    (version.status === 'pending' || version.status === 'processing' || version.status === 'failed');
+    (version.status === 'pending' ||
+      version.status === 'processing' ||
+      version.status === 'failed');
 
   return db.document.update({
     where: { id: documentId },
@@ -283,7 +290,8 @@ export async function projectDocumentFromVersion(
           : version.status === 'failed' && doc.currentVersionId
             ? 'ready'
             : version.status,
-      processingPhase: options.makeCurrent || options.clearProcessing ? null : version.processingPhase,
+      processingPhase:
+        options.makeCurrent || options.clearProcessing ? null : version.processingPhase,
       failureReason:
         options.failureReason !== undefined
           ? options.failureReason
@@ -576,12 +584,14 @@ export async function formatDocumentVersionChangelog(
     if (!doc || !list?.length) continue;
     const currentN = currentNumbers.get(documentId);
     const lines = list.map((v) => {
-      const who = v.createdById ? names.get(v.createdById) ?? 'someone' : 'system';
+      const who = v.createdById ? (names.get(v.createdById) ?? 'someone') : 'system';
       const when = v.createdAt.toISOString().slice(0, 10);
       const current = currentN === v.versionNumber ? ' current' : '';
       return `v${v.versionNumber}${current} (${v.changeReason} by ${who}, ${when}, ${v.status})`;
     });
     blocks.push(`${doc.name}: ${lines.join('; ')}`);
   }
-  return blocks.length ? `Document version history (metadata only, not content):\n${blocks.join('\n')}` : '';
+  return blocks.length
+    ? `Document version history (metadata only, not content):\n${blocks.join('\n')}`
+    : '';
 }

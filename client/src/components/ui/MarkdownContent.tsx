@@ -33,7 +33,9 @@ export function MarkdownContent({
   );
 
   const components = useMemo(() => {
-    const body = compact ? CHAT_BODY_CLASS : 'font-sans text-[15px] leading-[1.75] text-neutral-800';
+    const body = compact
+      ? CHAT_BODY_CLASS
+      : 'font-sans text-[15px] leading-[1.75] text-neutral-800';
     const block = compact ? 'm-0' : 'my-3.5 first:mt-0 last:mb-0';
 
     return {
@@ -162,10 +164,7 @@ export function MarkdownContent({
       ),
       hr: () => (
         <hr
-          className={cn(
-            'w-full border-0 border-t border-neutral-200',
-            compact ? 'm-0' : 'my-5',
-          )}
+          className={cn('w-full border-0 border-t border-neutral-200', compact ? 'm-0' : 'my-5')}
         />
       ),
       code: ({
@@ -175,7 +174,9 @@ export function MarkdownContent({
         className?: string;
         children?: React.ReactNode;
       }) => {
-        const isBlock = Boolean(codeClass?.includes('language-') || String(children).includes('\n'));
+        const isBlock = Boolean(
+          codeClass?.includes('language-') || String(children).includes('\n'),
+        );
         if (isBlock) {
           return (
             <code
@@ -205,7 +206,9 @@ export function MarkdownContent({
           className={cn(
             'overflow-x-auto rounded-12 border border-neutral-800 bg-neutral-900 p-3 text-neutral-100',
             '[&_code]:bg-transparent [&_code]:text-neutral-100 [&_code]:p-0',
-            compact ? 'm-0 text-[12px] leading-[1.6]' : 'my-4 rounded-14 p-4 text-[13px] leading-relaxed shadow-sm',
+            compact
+              ? 'm-0 text-[12px] leading-[1.6]'
+              : 'my-4 rounded-14 p-4 text-[13px] leading-relaxed shadow-sm',
           )}
         >
           {children}

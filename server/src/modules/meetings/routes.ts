@@ -72,7 +72,9 @@ export async function meetingRoutes(app: FastifyInstance) {
     const raw =
       typeof request.body === 'string' ? request.body : JSON.stringify(request.body ?? {});
     if (!meetings.verifyFirefliesWebhookSignature(raw, signature)) {
-      return reply.code(401).send({ error: { code: 'UNAUTHORIZED', message: 'Invalid signature' } });
+      return reply
+        .code(401)
+        .send({ error: { code: 'UNAUTHORIZED', message: 'Invalid signature' } });
     }
     const body = z
       .object({

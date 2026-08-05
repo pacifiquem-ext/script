@@ -84,7 +84,12 @@ function parseActionItemsBlob(raw: string | null | undefined): ExtractedCommitme
     .trim();
   const lines = plain
     .split(/\n+/)
-    .map((l) => l.replace(/^[-*•]\s+/, '').replace(/^\d+[.)]\s+/, '').trim())
+    .map((l) =>
+      l
+        .replace(/^[-*•]\s+/, '')
+        .replace(/^\d+[.)]\s+/, '')
+        .trim(),
+    )
     .filter((l) => l.length >= 8);
   return lines.map((text) => ({
     text: text.slice(0, 2000),

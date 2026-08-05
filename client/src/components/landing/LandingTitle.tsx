@@ -14,9 +14,7 @@ export function LandingTitle({
   align = 'center',
 }: LandingTitleProps) {
   return (
-    <h2
-      className={`m-0 ${align === 'center' ? 'text-center' : 'text-left'} ${className}`}
-    >
+    <h2 className={`m-0 ${align === 'center' ? 'text-center' : 'text-left'} ${className}`}>
       <span className="block text-[32px] font-medium leading-[110%] text-[#111] md:text-[44px]">
         {line1}
       </span>

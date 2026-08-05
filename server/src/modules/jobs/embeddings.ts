@@ -70,10 +70,7 @@ async function voyageEmbed(texts: string[], inputType: EmbedInputType): Promise<
       const body = await response.text();
       const retryable = response.status === 429 || response.status >= 500;
       if (!retryable || attempt >= 4) {
-        if (
-          response.status === 429 ||
-          /payment method|rate limit|tpm|rpm|billing/i.test(body)
-        ) {
+        if (response.status === 429 || /payment method|rate limit|tpm|rpm|billing/i.test(body)) {
           throw new Error(
             'Processing failed due to low embedding tokens. Buy more credits or contact support.',
           );

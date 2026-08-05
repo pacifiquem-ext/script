@@ -28,10 +28,7 @@ export async function createReadyDocumentWithVersion(input: {
       source: input.source ?? 'local',
       status,
       extractedText: status === 'ready' ? input.content : null,
-      summary:
-        status === 'ready'
-          ? input.content.replace(/\s+/g, ' ').trim().slice(0, 240)
-          : null,
+      summary: status === 'ready' ? input.content.replace(/\s+/g, ' ').trim().slice(0, 240) : null,
       embeddingModel: status === 'ready' ? 'voyage-3.5' : null,
       embeddingDimensions: status === 'ready' ? 1024 : null,
       contentHash: status === 'ready' ? contentHash : null,
@@ -51,10 +48,7 @@ export async function createReadyDocumentWithVersion(input: {
       storageKey,
       contentHash: status === 'ready' ? contentHash : null,
       extractedText: status === 'ready' ? input.content : null,
-      summary:
-        status === 'ready'
-          ? input.content.replace(/\s+/g, ' ').trim().slice(0, 240)
-          : null,
+      summary: status === 'ready' ? input.content.replace(/\s+/g, ' ').trim().slice(0, 240) : null,
       embeddingModel: status === 'ready' ? 'voyage-3.5' : null,
       embeddingDimensions: status === 'ready' ? 1024 : null,
       changeReason: 'upload',

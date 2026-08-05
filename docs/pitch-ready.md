@@ -73,7 +73,7 @@ Buyers renew what they can prove is used.
 
 **What**  
 Documents security will request: DPA template, subprocessors (e.g. Anthropic, Voyage, Resend),
-data-flow diagram, honest SOC2 *roadmap* (not a fake certificate).
+data-flow diagram, honest SOC2 _roadmap_ (not a fake certificate).
 
 **Why**  
 Security review is a hard gate for many orgs.
