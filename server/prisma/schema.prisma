@@ -693,15 +693,18 @@ model Workflow {
 
 /// Append-only snapshot of workflow markdown + parsed step tree (ADR 0018).
 model WorkflowVersion {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   workspaceId   String
   workflowId    String
   versionNumber Int
-  markdown      String   @db.Text
+  markdown      String    @db.Text
   title         String
   stepsJson     Json
+  /// Set after a successful agent verification run of this markdown (required before publish).
+  verifiedAt    DateTime?
+  verifiedRunId String?
   createdById   String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   workspace  Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workflow   Workflow      @relation("WorkflowVersions", fields: [workflowId], references: [id], onDelete: Cascade)
@@ -722,6 +725,12 @@ model WorkflowRun {
   workflowVersionId String
   assigneeUserId    String
   status            WorkflowRunStatus @default(pending)
+  /// idle | running | completed | failed — agent execution lifecycle (distinct from checklist status).
+  agentStatus       String            @default("idle")
+  /// Short human summary of last agent pass (e.g. "3 steps still pending — needs login").
+  agentSummary      String?
+  /// Append-only activity log for the runner Activity panel (status, reasoning, tools, steps).
+  executionLogJson  Json?
   startedAt         DateTime          @default(now())
   completedAt       DateTime?
   createdAt         DateTime          @default(now())
@@ -749,6 +758,8 @@ model WorkflowStepState {
   status        WorkflowStepStatus @default(pending)
   completedAt   DateTime?
   completedById String?
+  /// Evidence for completion: { method, summary, finalUrl?, actions? } — agent browser preferred over self-attest.
+  evidenceJson  Json?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 

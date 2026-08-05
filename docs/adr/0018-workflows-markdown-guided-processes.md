@@ -67,15 +67,34 @@ First agent **write** tool:
 
 1. Only the **run assignee** (or workspace owner/admin) may complete a step.
 2. Completing requires a **runId + stepKey** that exist on that run’s pinned version.
-3. **Chat path:** tool is available to the model, but the product client must show a **ConfirmModal**
-   before the tool result is accepted when the UI initiates completion; from the agent loop, the
-   tool only runs when the user’s latest message **explicitly** asks to mark a step complete
-   (enforced in tool description + server-side: optional `confirmToken` issued by `POST
-   .../steps/:stepKey/complete` for UI; agent path uses `source: 'agent'` and requires the step
-   not already done, logs audit).
-4. **Runner UI path:** checkbox → ConfirmModal → `POST /workflows/runs/:runId/steps/:stepKey/complete`.
-5. No completing on behalf of another user via the model without admin role.
-6. Self-attestation only in v1 (no connector evidence).
+3. **Primary path (agent browser):** `POST /workflows/runs/:runId/execute` streams SSE while the
+   **workflow-executor** Mastra agent uses Playwright tools (`browser_navigate`, `browser_click`,
+   `browser_type`, `browser_snapshot`, …) to perform plain-English steps, then calls
+   `complete_workflow_step` with **evidence** (`method: agent_browser`, summary, finalUrl, actions).
+   Simple navigate-style labels (e.g. “Go to Github.com”) are completed deterministically without
+   an LLM when possible.
+4. **Agent completion without evidence is rejected.** Sources `agent` / `agent_browser` require
+   `evidence.summary`. Step rows store `evidenceJson`.
+5. **Manual fallback (not self-attest-as-product):** runner UI “I did this myself” for offline steps
+   the browser cannot do; stores `method: manual`. No longer the primary “Run” UX.
+6. **Chat path:** `complete_workflow_step` still requires evidence; do not invent completion.
+7. No completing on behalf of another user via the model without admin role.
+8. **Connector-verified** evidence remains Phase 8 / P5.7 (PR exists, channel joined, etc.).
+
+### 5b. v1 self-attestation assumptions (superseded for browser-capable steps)
+
+The original v1 design assumed:
+
+| Assumption | Status |
+| --- | --- |
+| Completing a step = human/agent asserts done with no external proof | Superseded for web steps: evidence required |
+| Runner Complete button → ConfirmModal self-attest copy | Replaced by **Run with agent** + manual fallback |
+| Checklist labels are not executable | Superseded: labels are instructions for browser/agent tools |
+| No Playwright / browser tool surface | Added server Playwright tools + workflow-executor agent |
+| `complete_workflow_step` only needs explicit user “mark done” | Agent may complete after performing work with evidence |
+| No `evidence` on `WorkflowStepState` | `evidenceJson` added |
+| Mastra product runs ≠ AI execution | Product state stays Prisma; execution agent is separate |
+| P5.7 connector verify only future path for “real” done | Still true for source-system proof; browser evidence is interim |
 
 ### 6. Memory
 

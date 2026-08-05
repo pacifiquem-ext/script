@@ -13,6 +13,12 @@ export const TOOL_STATUS_LABELS: Record<string, string> = {
   get_workflow: 'Loading workflow…',
   get_my_workflow_progress: 'Checking your workflow progress…',
   complete_workflow_step: 'Marking step complete…',
+  browser_navigate: 'Opening page…',
+  browser_snapshot: 'Reading page…',
+  browser_click: 'Clicking…',
+  browser_type: 'Typing…',
+  browser_press: 'Pressing key…',
+  browser_wait: 'Waiting…',
 };
 
 export function getMastraToolStatusLabel(name: string): string {

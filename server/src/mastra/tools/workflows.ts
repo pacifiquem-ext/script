@@ -71,10 +71,18 @@ export const getMyWorkflowProgressTool = createTool({
 export const completeWorkflowStepTool = createTool({
   id: 'complete_workflow_step',
   description:
-    'WRITE tool: mark a checklist step done on the current user’s run. ONLY call when the user explicitly asks to mark a step complete (e.g. "mark laptop setup done"). Requires runId + stepKey from get_my_workflow_progress. Self-attestation only — do not invent completion.',
+    'WRITE tool: mark a checklist step done after you actually performed it (browser tools or other tools). Requires runId + stepKey and evidence.summary of what you did (final URL, visible proof). Do NOT call this for steps you have not executed. Prefer method agent_browser when browser tools were used.',
   inputSchema: z.object({
     runId: z.string(),
     stepKey: z.string(),
+    evidence: z.object({
+      method: z
+        .enum(['agent_browser', 'agent_tool', 'manual'])
+        .describe('How the step was completed'),
+      summary: z.string().min(1).describe('What was done and how you verified it'),
+      finalUrl: z.string().optional().describe('Page URL after the action, if browser was used'),
+      actions: z.array(z.string()).optional().describe('Short list of tool actions taken'),
+    }),
   }),
   execute: async (input, { requestContext }) => {
     const ctx = toolContextFromRequestContext(requestContext);
@@ -88,7 +96,11 @@ export const completeWorkflowStepTool = createTool({
         ctx.userId,
         input.runId,
         input.stepKey,
-        { role, source: 'agent' },
+        {
+          role,
+          source: input.evidence.method === 'agent_browser' ? 'agent_browser' : 'agent',
+          evidence: input.evidence,
+        },
       );
       return {
         ok: true,

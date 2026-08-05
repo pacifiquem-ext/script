@@ -12,18 +12,23 @@ import { MarkdownContent } from '../../components/ui/MarkdownContent';
 import { useAuth } from '../../contexts/useAuth';
 import { getErrorMessage } from '../../lib/form-errors';
 import { IconCheck, IconPlus } from '../../lib/icons';
+import { maskSecrets } from '../../lib/mask-secrets';
 import { parseWorkflowOutline } from '../../lib/parse-workflow-outline';
 import { useWorkspaces } from '../../lib/workspaces';
 import {
   completeWorkflowStep,
   createWorkflow,
+  executeWorkflowRunStream,
   getWorkflow,
   getWorkflowRun,
   listMyWorkflowRuns,
   listWorkflows,
+  markWorkflowVerified,
   publishWorkflow,
   startWorkflowRun,
   updateWorkflow,
+  verifyWorkflow,
+  type ExecutionLogEntry,
   type PublicWorkflowDetail,
   type PublicWorkflowListItem,
   type PublicWorkflowRun,
@@ -75,6 +80,9 @@ export function WorkflowsPage() {
     stepKey: string;
     label: string;
   } | null>(null);
+  const [agentExecuting, setAgentExecuting] = useState(false);
+  const [activityLog, setActivityLog] = useState<ExecutionLogEntry[]>([]);
+  const [liveReasoning, setLiveReasoning] = useState('');
 
   const listQuery = useQuery({
     queryKey: ['workflows'],
@@ -102,6 +110,7 @@ export function WorkflowsPage() {
     queryKey: ['workflows', 'runs', selectedRunId],
     enabled: Boolean(selectedRunId) && panel === 'run',
     queryFn: async () => getWorkflowRun(selectedRunId!),
+    refetchInterval: agentExecuting ? 2000 : false,
   });
 
   useEffect(() => {
@@ -110,10 +119,23 @@ export function WorkflowsPage() {
     setMarkdown(detailQuery.data.version?.markdown ?? DEFAULT_MARKDOWN);
   }, [detailQuery.data, panel, dirty]);
 
+  // Hydrate activity panel from persisted run log when opening a run.
+  useEffect(() => {
+    if (!runQuery.data || agentExecuting) return;
+    setActivityLog(runQuery.data.executionLog ?? []);
+  }, [runQuery.data?.id, runQuery.data?.executionLog?.length, agentExecuting]);
+
   const outline = useMemo(() => parseWorkflowOutline(markdown), [markdown]);
 
   const invalidateLists = async () => {
     await queryClient.invalidateQueries({ queryKey: ['workflows'] });
+  };
+
+  const pushActivity = (entry: ExecutionLogEntry) => {
+    setActivityLog((prev) => {
+      if (prev.some((e) => e.id === entry.id)) return prev;
+      return [...prev, entry].slice(-200);
+    });
   };
 
   const createMutation = useMutation({
@@ -154,7 +176,8 @@ export function WorkflowsPage() {
     mutationFn: async () => {
       if (!selectedWorkflowId) throw new Error('No workflow selected');
       if (dirty) {
-        await updateWorkflow(selectedWorkflowId, markdown);
+        // Saving invalidates verification — block before call
+        throw new Error('Save and Verify with agent again before publishing unsaved changes.');
       }
       return publishWorkflow(selectedWorkflowId);
     },
@@ -172,25 +195,120 @@ export function WorkflowsPage() {
     },
   });
 
+  const runWithAgent = async (
+    runId: string,
+    opts?: { markVerifiedWorkflowId?: string },
+  ) => {
+    setError(null);
+    setMessage(null);
+    setAgentExecuting(true);
+    setLiveReasoning('');
+    try {
+      for await (const event of executeWorkflowRunStream(runId)) {
+        if ('log' in event && event.log) pushActivity(event.log);
+
+        if (event.type === 'step_completed' || event.type === 'step_failed') {
+          await queryClient.invalidateQueries({ queryKey: ['workflows', 'runs', runId] });
+        } else if (event.type === 'delta') {
+          setLiveReasoning((prev) => (prev + event.text).slice(-4000));
+        } else if (event.type === 'reasoning') {
+          setLiveReasoning('');
+        } else if (event.type === 'done') {
+          setLiveReasoning('');
+          await queryClient.setQueryData(['workflows', 'runs', event.run.id], event.run);
+          await queryClient.invalidateQueries({ queryKey: ['workflows', 'runs', 'mine'] });
+          setActivityLog(event.run.executionLog ?? []);
+          const left = event.run.progress.pending;
+          if (opts?.markVerifiedWorkflowId) {
+            try {
+              const wf = await markWorkflowVerified(opts.markVerifiedWorkflowId, event.run.id);
+              await queryClient.setQueryData(['workflows', opts.markVerifiedWorkflowId], wf);
+              await invalidateLists();
+              setMessage(
+                left === 0
+                  ? 'Verification passed. You can publish this workflow.'
+                  : `Verification finished with ${left} step(s) still open (e.g. login-only). Draft is verified — you can publish.`,
+              );
+            } catch (err) {
+              setError(getErrorMessage(err, 'Could not mark workflow verified'));
+            }
+          } else {
+            setMessage(
+              left === 0
+                ? 'Agent finished all steps.'
+                : `Agent finished with ${left} step(s) still open — see Activity for why.`,
+            );
+          }
+        } else if (event.type === 'error') {
+          setError(event.message);
+        }
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Agent execution failed'));
+    } finally {
+      setAgentExecuting(false);
+      setLiveReasoning('');
+      await queryClient.invalidateQueries({ queryKey: ['workflows', 'runs', runId] });
+      await queryClient.invalidateQueries({ queryKey: ['workflows', 'runs', 'mine'] });
+    }
+  };
+
+  const verifyMutation = useMutation({
+    mutationFn: async (workflowId: string) => {
+      if (dirty) {
+        await updateWorkflow(workflowId, markdown);
+      }
+      return verifyWorkflow(workflowId);
+    },
+    onSuccess: async (result) => {
+      setDirty(false);
+      setError(null);
+      setMarkdown(result.workflow.version?.markdown ?? markdown);
+      setSelectedWorkflowId(result.workflow.id);
+      setSelectedRunId(result.run.id);
+      setPanel('run');
+      setActivityLog(result.run.executionLog ?? []);
+      await queryClient.setQueryData(['workflows', result.workflow.id], result.workflow);
+      await queryClient.setQueryData(['workflows', 'runs', result.run.id], result.run);
+      await invalidateLists();
+      setMessage(
+        result.polished
+          ? 'Instructions polished — running verification agent…'
+          : 'Running verification agent…',
+      );
+      void runWithAgent(result.run.id, { markVerifiedWorkflowId: result.workflow.id });
+    },
+    onError: (err) => setError(getErrorMessage(err, 'Verification failed to start')),
+  });
+
   const startRunMutation = useMutation({
     mutationFn: async (workflowId: string) => startWorkflowRun(workflowId),
     onSuccess: async (run) => {
-      setMessage('Run started.');
+      setMessage('Run started — agent is executing steps…');
       setSelectedWorkflowId(run.workflowId);
       setSelectedRunId(run.id);
       setPanel('run');
+      setActivityLog(run.executionLog ?? []);
       await queryClient.invalidateQueries({ queryKey: ['workflows', 'runs', 'mine'] });
       await queryClient.setQueryData(['workflows', 'runs', run.id], run);
+      // Critical: Start run used to only create a row (in_progress). Now kick the agent immediately.
+      void runWithAgent(run.id);
     },
     onError: (err) => setError(getErrorMessage(err, 'Could not start run')),
   });
 
   const completeMutation = useMutation({
-    mutationFn: async (target: { runId: string; stepKey: string }) =>
-      completeWorkflowStep(target.runId, target.stepKey, { source: 'ui' }),
+    mutationFn: async (target: { runId: string; stepKey: string; label: string }) =>
+      completeWorkflowStep(target.runId, target.stepKey, {
+        source: 'ui',
+        evidence: {
+          method: 'manual',
+          summary: `Assignee confirmed offline work for “${target.label}”`,
+        },
+      }),
     onSuccess: async (run) => {
       setCompleteTarget(null);
-      setMessage('Step marked complete.');
+      setMessage('Step marked complete (manual). Prefer agent execution for web steps.');
       await queryClient.setQueryData(['workflows', 'runs', run.id], run);
       await queryClient.invalidateQueries({ queryKey: ['workflows', 'runs', 'mine'] });
     },
@@ -247,8 +365,8 @@ export function WorkflowsPage() {
             )}
           </div>
           <p className="text-[12px] text-neutral-500">
-            Guided processes in markdown. Complete steps here, or ask the brain what&apos;s next in
-            Chat.
+            Guided processes in markdown. Start a run, then let the agent execute web steps with
+            browser tools — or ask what&apos;s next in Chat.
           </p>
         </div>
 
@@ -416,9 +534,27 @@ export function WorkflowsPage() {
             saveLoading={saveMutation.isPending}
             onPublish={() => {
               setError(null);
+              if (dirty) {
+                setError('Save your changes, then Verify with agent before publishing.');
+                return;
+              }
+              if (!detailQuery.data?.canPublish) {
+                setError(
+                  'Verify with agent first so we can confirm the workflow runs. Then publish.',
+                );
+                return;
+              }
               setPublishOpen(true);
             }}
             publishLoading={publishMutation.isPending}
+            canPublish={Boolean(detailQuery.data?.canPublish) && !dirty}
+            verifiedAt={detailQuery.data?.version?.verifiedAt ?? null}
+            onVerify={() => {
+              if (!selectedWorkflowId) return;
+              setError(null);
+              verifyMutation.mutate(selectedWorkflowId);
+            }}
+            verifyLoading={verifyMutation.isPending || agentExecuting}
             onStartRun={() => {
               if (!selectedWorkflowId) return;
               setError(null);
@@ -437,6 +573,13 @@ export function WorkflowsPage() {
             onRetry={() => void runQuery.refetch()}
             run={activeRun ?? null}
             nextStep={nextStep}
+            agentExecuting={agentExecuting}
+            activityLog={activityLog}
+            liveReasoning={liveReasoning}
+            onRunWithAgent={() => {
+              if (!activeRun) return;
+              void runWithAgent(activeRun.id);
+            }}
             onCompleteStep={(step) => {
               setError(null);
               setCompleteTarget({
@@ -456,7 +599,7 @@ export function WorkflowsPage() {
         description={
           outline.steps.length === 0
             ? 'Add at least one checklist step (- [ ] …) before publishing.'
-            : `Publish “${outline.title}” with ${outline.steps.length} tracked step${outline.steps.length === 1 ? '' : 's'}? Members can start runs against this version.`
+            : `Publish “${outline.title}” with ${outline.steps.length} tracked step${outline.steps.length === 1 ? '' : 's'}? This draft was verified with the agent. Members can start runs against this version.`
         }
         confirmLabel="Publish"
         loading={publishMutation.isPending}
@@ -475,13 +618,13 @@ export function WorkflowsPage() {
         onOpenChange={(open) => {
           if (!open) setCompleteTarget(null);
         }}
-        title="Mark step complete?"
+        title="Mark step done manually?"
         description={
           completeTarget
-            ? `Mark “${completeTarget.label}” as done? This is self-attestation for v1.`
+            ? `Confirm you completed “${maskSecrets(completeTarget.label)}” yourself (offline work the agent cannot do). Prefer “Run with agent” for web steps like visiting a URL.`
             : undefined
         }
-        confirmLabel="Complete step"
+        confirmLabel="I did this myself"
         loading={completeMutation.isPending}
         onConfirm={() => {
           if (!completeTarget) return;
@@ -546,7 +689,7 @@ function WorkflowListRow({
             onStart();
           }}
         >
-          Start run
+          Start & run agent
         </Button>
       )}
     </div>
@@ -592,7 +735,7 @@ function WelcomePanel({
           loading={startLoading}
           onClick={() => onStart(selected.id)}
         >
-          Start this workflow
+          Start & run agent
         </Button>
         <p className="text-[13px] text-neutral-500">
           After you start, complete steps here or ask in{' '}
@@ -660,6 +803,10 @@ function AuthorPanel({
   saveLoading,
   onPublish,
   publishLoading,
+  canPublish,
+  verifiedAt,
+  onVerify,
+  verifyLoading,
   onStartRun,
   startLoading,
 }: {
@@ -676,6 +823,10 @@ function AuthorPanel({
   saveLoading: boolean;
   onPublish: () => void;
   publishLoading: boolean;
+  canPublish: boolean;
+  verifiedAt: string | null;
+  onVerify: () => void;
+  verifyLoading: boolean;
   onStartRun: () => void;
   startLoading: boolean;
 }) {
@@ -704,7 +855,7 @@ function AuthorPanel({
               loading={startLoading}
               onClick={onStartRun}
             >
-              Start run
+              Start & run agent
             </Button>
           )}
         </div>
@@ -743,10 +894,22 @@ function AuthorPanel({
             Save
           </Button>
           <Button
+            variant="neutral"
+            mode="stroke"
+            size="sm"
+            className="w-fit"
+            loading={verifyLoading}
+            disabled={verifyLoading || outline.steps.length === 0}
+            onClick={onVerify}
+          >
+            Verify with agent
+          </Button>
+          <Button
             variant="primary"
             size="sm"
             className="w-fit"
             loading={publishLoading}
+            disabled={!canPublish || publishLoading}
             onClick={onPublish}
           >
             Publish
@@ -760,16 +923,32 @@ function AuthorPanel({
               loading={startLoading}
               onClick={onStartRun}
             >
-              Start run
+              Start & run agent
             </Button>
           )}
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        {verifiedAt && !dirty ? (
+          <Badge size="sm" variant="success">
+            Verified {new Date(verifiedAt).toLocaleString()}
+          </Badge>
+        ) : (
+          <Badge size="sm" variant="warning">
+            Not verified — run Verify with agent before publish
+          </Badge>
+        )}
+        {dirty ? (
+          <span className="text-[12px] text-neutral-500">Unsaved changes clear verification</span>
+        ) : null}
+      </div>
+
       <p className="text-[12px] text-neutral-500">
         Use <code className="text-[12px]"># Title</code>, <code className="text-[12px]">## Section</code>,
         and <code className="text-[12px]">- [ ] step</code> for tracked checklist items. Other prose is
-        guidance only.
+        guidance only. <strong>Verify with agent</strong> polishes wording and runs the agent so you
+        see Activity logs before publishing.
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-4 min-h-0">
@@ -836,12 +1015,186 @@ function AuthorPanel({
   );
 }
 
+function agentStatusBadge(status: string | undefined): {
+  label: string;
+  variant: 'neutral' | 'success' | 'error' | 'warning' | 'primary';
+} {
+  switch (status) {
+    case 'running':
+      return { label: 'Agent running', variant: 'primary' };
+    case 'completed':
+      return { label: 'Agent finished', variant: 'success' };
+    case 'failed':
+      return { label: 'Agent failed', variant: 'error' };
+    default:
+      return { label: 'Agent idle', variant: 'neutral' };
+  }
+}
+
+function kindStyles(kind: ExecutionLogEntry['kind']): string {
+  switch (kind) {
+    case 'phase':
+      return 'border-primary-base/30 bg-primary-alpha-10 text-neutral-900';
+    case 'reasoning':
+      return 'border-neutral-200 bg-white text-neutral-800';
+    case 'tool':
+      return 'border-blue-100 bg-blue-50/60 text-neutral-900';
+    case 'tool_result':
+      return 'border-neutral-200 bg-neutral-50 text-neutral-700';
+    case 'step':
+      return 'border-success-base/30 bg-success-lighter/40 text-neutral-900';
+    case 'step_failed':
+      return 'border-warning-base/40 bg-warning-lighter/50 text-neutral-900';
+    case 'error':
+      return 'border-error-base/40 bg-error-lighter/40 text-neutral-900';
+    case 'done':
+      return 'border-success-base/40 bg-success-lighter/50 text-neutral-900';
+    default:
+      return 'border-neutral-200 bg-white text-neutral-700';
+  }
+}
+
+function kindLabel(kind: ExecutionLogEntry['kind']): string {
+  switch (kind) {
+    case 'phase':
+      return 'Stage';
+    case 'reasoning':
+      return 'Thinking';
+    case 'tool':
+      return 'Action';
+    case 'tool_result':
+      return 'Result';
+    case 'step':
+      return 'Done';
+    case 'step_failed':
+      return 'Blocked';
+    case 'error':
+      return 'Error';
+    case 'done':
+      return 'Summary';
+    default:
+      return 'Update';
+  }
+}
+
+function ActivityPanel({
+  agentExecuting,
+  agentStatus,
+  agentSummary,
+  activityLog,
+  liveReasoning,
+}: {
+  agentExecuting: boolean;
+  agentStatus: string;
+  agentSummary: string | null;
+  activityLog: ExecutionLogEntry[];
+  liveReasoning: string;
+}) {
+  const badge = agentStatusBadge(agentExecuting ? 'running' : agentStatus);
+  const hasContent = activityLog.length > 0 || liveReasoning.trim() || agentExecuting;
+
+  return (
+    <section className="border border-neutral-200 rounded-20 p-4 flex flex-col gap-3 bg-neutral-50/40">
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div>
+          <h3 className="text-[13px] font-semibold text-neutral-800 m-0">Activity</h3>
+          <p className="text-[12px] text-neutral-500 m-0 mt-0.5">
+            Live agent log, tools, and reasoning for this run
+          </p>
+        </div>
+        <Badge size="sm" variant={badge.variant}>
+          {badge.label}
+        </Badge>
+      </div>
+
+      {agentSummary ? (
+        <Alert
+          status={
+            agentStatus === 'failed'
+              ? 'error'
+              : agentStatus === 'completed' && !agentExecuting
+                ? 'success'
+                : 'information'
+          }
+          variant="lighter"
+          className="rounded-12"
+          description={maskSecrets(agentSummary)}
+        />
+      ) : null}
+
+      {!hasContent ? (
+        <p className="text-[12px] text-neutral-500 m-0">
+          No agent activity yet. Click <strong>Start run</strong> or <strong>Run agent now</strong>{' '}
+          — the agent will open pages, click/type, and record evidence here.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
+          {activityLog.map((entry) => (
+            <div
+              key={entry.id}
+              className={`rounded-12 border px-3 py-2 ${kindStyles(entry.kind)}`}
+            >
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
+                  {kindLabel(entry.kind)}
+                </span>
+                <span className="text-[10px] text-neutral-400">
+                  {new Date(entry.at).toLocaleTimeString()}
+                </span>
+                {typeof entry.ok === 'boolean' ? (
+                  <span
+                    className={`text-[10px] font-medium ${
+                      entry.ok ? 'text-success-base' : 'text-error-base'
+                    }`}
+                  >
+                    {entry.ok ? 'worked' : 'didn’t work'}
+                  </span>
+                ) : null}
+              </div>
+              <p className="text-[12px] m-0 mt-1 leading-relaxed">{maskSecrets(entry.message)}</p>
+              {entry.detail &&
+              !entry.detail.trimStart().startsWith('{') &&
+              !entry.detail.trimStart().startsWith('[') ? (
+                <p className="mt-1.5 mb-0 text-[11px] text-neutral-600 leading-relaxed max-h-24 overflow-y-auto">
+                  {maskSecrets(entry.detail)}
+                </p>
+              ) : null}
+            </div>
+          ))}
+
+          {liveReasoning.trim() ? (
+            <div className={`rounded-12 border px-3 py-2 ${kindStyles('reasoning')}`}>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
+                  Reasoning
+                </span>
+                <span className="text-[10px] text-primary-base font-medium">live…</span>
+              </div>
+              <p className="text-[12px] m-0 mt-1 leading-relaxed whitespace-pre-wrap">
+                {maskSecrets(liveReasoning)}
+              </p>
+            </div>
+          ) : null}
+
+          {agentExecuting && activityLog.length === 0 && !liveReasoning.trim() ? (
+            <p className="text-[12px] text-neutral-500 m-0">Starting agent…</p>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function RunnerPanel({
   loading,
   error,
   onRetry,
   run,
   nextStep,
+  agentExecuting,
+  activityLog,
+  liveReasoning,
+  onRunWithAgent,
   onCompleteStep,
 }: {
   loading: boolean;
@@ -849,6 +1202,10 @@ function RunnerPanel({
   onRetry: () => void;
   run: PublicWorkflowRun | null;
   nextStep: PublicWorkflowRun['steps'][number] | null;
+  agentExecuting: boolean;
+  activityLog: ExecutionLogEntry[];
+  liveReasoning: string;
+  onRunWithAgent: () => void;
   onCompleteStep: (step: PublicWorkflowRun['steps'][number]) => void;
 }) {
   if (loading) return <LoadingState label="Loading run…" />;
@@ -861,14 +1218,29 @@ function RunnerPanel({
     run.progress.total === 0
       ? 0
       : Math.round((run.progress.done / run.progress.total) * 100);
+  const hasPending = run.progress.pending > 0;
 
   return (
     <div className="max-w-2xl flex flex-col gap-5">
-      <div>
-        <h2 className="text-[20px] font-semibold text-neutral-950">{run.workflowName}</h2>
-        <p className="text-[13px] text-neutral-500 capitalize">
-          {run.status.replace('_', ' ')} · started {new Date(run.startedAt).toLocaleString()}
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-[20px] font-semibold text-neutral-950">{run.workflowName}</h2>
+          <p className="text-[13px] text-neutral-500 capitalize">
+            {run.status.replace('_', ' ')} · started {new Date(run.startedAt).toLocaleString()}
+          </p>
+        </div>
+        {hasPending ? (
+          <Button
+            variant="primary"
+            size="sm"
+            className="w-fit"
+            loading={agentExecuting}
+            disabled={agentExecuting}
+            onClick={onRunWithAgent}
+          >
+            {agentExecuting ? 'Agent running…' : 'Run agent now'}
+          </Button>
+        ) : null}
       </div>
 
       <div className="border border-neutral-200 rounded-20 p-4 flex flex-col gap-2">
@@ -884,19 +1256,29 @@ function RunnerPanel({
         </div>
         {nextStep ? (
           <p className="text-[13px] text-neutral-700 mt-1">
-            <span className="font-medium text-neutral-900">What&apos;s next:</span> {nextStep.label}
+            <span className="font-medium text-neutral-900">What&apos;s next:</span>{' '}
+            {maskSecrets(nextStep.label)}
           </p>
         ) : (
           <p className="text-[13px] text-success-base mt-1 font-medium">All steps complete.</p>
         )}
         <p className="text-[12px] text-neutral-500">
-          Ask the brain in{' '}
+          <strong>Start run</strong> creates a run <em>and</em> starts the agent. Watch Activity
+          below for tools and reasoning. Use “I did this” only for offline steps. Ask in{' '}
           <Link to="/app/chat" className="text-primary-base no-underline hover:underline">
             Chat
-          </Link>
-          : “What&apos;s next in my {run.workflowName} workflow?”
+          </Link>{' '}
+          anytime.
         </p>
       </div>
+
+      <ActivityPanel
+        agentExecuting={agentExecuting}
+        agentStatus={run.agentStatus}
+        agentSummary={run.agentSummary}
+        activityLog={activityLog}
+        liveReasoning={liveReasoning}
+      />
 
       {run.markdown?.trim() ? (
         <section className="border border-neutral-200 rounded-20 p-4">
@@ -906,7 +1288,10 @@ function RunnerPanel({
               <p className="text-[11px] text-neutral-400 m-0">Version {run.versionNumber}</p>
             ) : null}
           </div>
-          <MarkdownContent content={run.markdown} className="text-[13px] text-neutral-800" />
+          <MarkdownContent
+            content={maskSecrets(run.markdown)}
+            className="text-[13px] text-neutral-800"
+          />
         </section>
       ) : null}
 
@@ -941,23 +1326,36 @@ function RunnerPanel({
                       done ? 'text-neutral-400 line-through' : 'text-neutral-900'
                     }`}
                   >
-                    {step.label}
+                    {maskSecrets(step.label)}
                   </p>
                   {step.completedAt && (
                     <p className="text-[11px] text-neutral-400 mt-0.5">
                       Done {new Date(step.completedAt).toLocaleString()}
+                      {step.evidence?.method === 'agent_browser'
+                        ? ' · agent browser'
+                        : step.evidence?.method === 'manual'
+                          ? ' · manual'
+                          : step.evidence
+                            ? ` · ${step.evidence.method}`
+                            : ''}
+                    </p>
+                  )}
+                  {step.evidence?.summary && (
+                    <p className="text-[11px] text-neutral-500 mt-0.5 line-clamp-2">
+                      {step.evidence.summary}
                     </p>
                   )}
                 </div>
                 {!done && step.status === 'pending' && (
                   <Button
-                    variant={isNext ? 'primary' : 'neutral'}
-                    mode={isNext ? 'filled' : 'stroke'}
+                    variant="neutral"
+                    mode="stroke"
                     size="sm"
                     className="w-fit shrink-0"
+                    disabled={agentExecuting}
                     onClick={() => onCompleteStep(step)}
                   >
-                    Complete
+                    I did this
                   </Button>
                 )}
               </li>

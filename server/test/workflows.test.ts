@@ -111,6 +111,11 @@ describe('workflows API (C7)', () => {
   });
 
   it('publishes and starts a run with step states', async () => {
+    // Publish requires agent verification of current version.
+    await prisma.workflowVersion.updateMany({
+      where: { workflowId },
+      data: { verifiedAt: new Date(), verifiedRunId: 'test-verify-run' },
+    });
     const published = await app.inject({
       method: 'POST',
       url: `/workflows/${workflowId}/publish`,
@@ -130,6 +135,8 @@ describe('workflows API (C7)', () => {
     const run = started.json();
     runId = run.id;
     expect(run.status).toBe('in_progress');
+    expect(run.agentStatus).toBe('idle');
+    expect(Array.isArray(run.executionLog)).toBe(true);
     expect(run.steps.length).toBe(3);
     const preDone = run.steps.find((s: { label: string }) => s.label.includes('Accept'));
     expect(preDone?.status).toBe('done');
@@ -215,6 +222,31 @@ describe('workflows API (C7)', () => {
       cookies,
     });
     expect(pub.statusCode).toBeGreaterThanOrEqual(400);
+  });
+
+  it('rejects publish without agent verification', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/workflows',
+      headers: originHeaders(),
+      cookies,
+      payload: {
+        markdown: `# Verify gate\n\n## Steps\n- [ ] Go to example.com\n`,
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const id = created.json().id as string;
+    expect(created.json().canPublish).toBe(false);
+    const pub = await app.inject({
+      method: 'POST',
+      url: `/workflows/${id}/publish`,
+      headers: originHeaders(),
+      cookies,
+    });
+    expect(pub.statusCode).toBeGreaterThanOrEqual(400);
+    expect(String(pub.json()?.message ?? pub.json()?.error?.message ?? '')).toMatch(
+      /verif/i,
+    );
   });
 });
 
@@ -312,6 +344,10 @@ describe('workflows API authz (C7)', () => {
     });
     expect(published.statusCode).toBe(200);
     publishedId = published.json().id;
+    await prisma.workflowVersion.updateMany({
+      where: { workflowId: publishedId },
+      data: { verifiedAt: new Date(), verifiedRunId: 'test-authz-verify' },
+    });
     const pub = await app.inject({
       method: 'POST',
       url: `/workflows/${publishedId}/publish`,

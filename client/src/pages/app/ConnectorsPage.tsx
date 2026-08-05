@@ -101,7 +101,7 @@ export function ConnectorsPage() {
     <div className="h-full overflow-y-auto p-8 max-w-3xl">
       <h1 className="text-[20px] font-semibold text-neutral-950 mb-1">Connectors</h1>
       <p className="text-[13px] text-neutral-500 mb-6">
-        System connectors (work + messaging) — distinct from file Integrations. ADRs 0015–0016.
+        System connectors (work + messaging) — distinct from file Integrations.
       </p>
 
       {error && (

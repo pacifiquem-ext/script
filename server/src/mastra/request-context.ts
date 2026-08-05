@@ -6,6 +6,8 @@ export const RC_USER_ID = 'userId';
 export const RC_MAX_CLEARANCE = 'maxClearanceLevel';
 export const RC_ELEVATED = 'elevated';
 export const RC_CONVERSATION_ID = 'conversationId';
+export const RC_BROWSER_SESSION = 'browserSessionId';
+export const RC_RUN_ID = 'runId';
 
 export type ScriptRequestContextValues = {
   workspaceId: string;
@@ -13,15 +15,26 @@ export type ScriptRequestContextValues = {
   maxClearanceLevel?: number;
   elevated?: boolean;
   conversationId?: string;
+  browserSessionId?: string;
+  runId?: string;
 };
 
-export function toRequestContext(ctx: AgentToolContext): RequestContext {
+export type AgentToolContextWithBrowser = AgentToolContext & {
+  browserSessionId?: string;
+  runId?: string;
+};
+
+export function toRequestContext(
+  ctx: AgentToolContext & { browserSessionId?: string; runId?: string },
+): RequestContext {
   const rc = new RequestContext();
   rc.set(RC_WORKSPACE_ID, ctx.workspaceId);
   if (ctx.userId) rc.set(RC_USER_ID, ctx.userId);
   if (ctx.maxClearanceLevel !== undefined) rc.set(RC_MAX_CLEARANCE, ctx.maxClearanceLevel);
   if (ctx.elevated !== undefined) rc.set(RC_ELEVATED, ctx.elevated);
   if (ctx.conversationId) rc.set(RC_CONVERSATION_ID, ctx.conversationId);
+  if (ctx.browserSessionId) rc.set(RC_BROWSER_SESSION, ctx.browserSessionId);
+  if (ctx.runId) rc.set(RC_RUN_ID, ctx.runId);
   return rc;
 }
 
@@ -41,4 +54,12 @@ export function toolContextFromRequestContext(rc: RequestContext): AgentToolCont
     elevated: typeof elevated === 'boolean' ? elevated : undefined,
     conversationId: typeof conversationId === 'string' ? conversationId : undefined,
   };
+}
+
+export function browserSessionFromRequestContext(rc: RequestContext): string | undefined {
+  const explicit = rc.get(RC_BROWSER_SESSION);
+  if (typeof explicit === 'string' && explicit) return explicit;
+  const runId = rc.get(RC_RUN_ID);
+  if (typeof runId === 'string' && runId) return `run:${runId}`;
+  return undefined;
 }

@@ -12,6 +12,7 @@ import {
   type ParsedWorkflow,
   type ParsedWorkflowStep,
 } from './parse-workflow-markdown';
+import { polishWorkflowMarkdown } from './polish-workflow';
 
 export type WorkflowStepsJson = {
   title: string;
@@ -37,6 +38,8 @@ export type PublicWorkflowDetail = {
   createdById: string | null;
   createdAt: string;
   updatedAt: string;
+  /** True when current version has completed an agent verification run. Required to publish. */
+  canPublish: boolean;
   version: {
     id: string;
     versionNumber: number;
@@ -45,7 +48,36 @@ export type PublicWorkflowDetail = {
     steps: ParsedWorkflowStep[];
     sections: ParsedWorkflow['sections'];
     createdAt: string;
+    verifiedAt: string | null;
+    verifiedRunId: string | null;
   } | null;
+};
+
+export type StepEvidence = {
+  method: 'agent_browser' | 'agent_tool' | 'manual' | 'self_attest' | 'connector';
+  summary: string;
+  finalUrl?: string;
+  actions?: string[];
+};
+
+export type ExecutionLogEntry = {
+  id: string;
+  at: string;
+  kind:
+    | 'status'
+    | 'phase'
+    | 'reasoning'
+    | 'tool'
+    | 'tool_result'
+    | 'step'
+    | 'step_failed'
+    | 'error'
+    | 'done';
+  message: string;
+  detail?: string;
+  toolName?: string;
+  ok?: boolean;
+  stepKey?: string;
 };
 
 export type PublicWorkflowRun = {
@@ -55,6 +87,10 @@ export type PublicWorkflowRun = {
   workflowName: string;
   assigneeUserId: string;
   status: WorkflowRunStatus;
+  /** idle | running | completed | failed */
+  agentStatus: string;
+  agentSummary: string | null;
+  executionLog: ExecutionLogEntry[];
   startedAt: string;
   completedAt: string | null;
   createdAt: string;
@@ -66,6 +102,7 @@ export type PublicWorkflowRun = {
     status: 'pending' | 'done' | 'skipped';
     completedAt: string | null;
     completedById: string | null;
+    evidence: StepEvidence | null;
   }>;
   progress: { total: number; done: number; pending: number; skipped: number };
   /** Pinned WorkflowVersion markdown (guidance for the runner). */
@@ -118,6 +155,9 @@ function mapRun(
     workflowVersionId: string;
     assigneeUserId: string;
     status: WorkflowRunStatus;
+    agentStatus?: string | null;
+    agentSummary?: string | null;
+    executionLogJson?: unknown;
     startedAt: Date;
     completedAt: Date | null;
     createdAt: Date;
@@ -131,11 +171,13 @@ function mapRun(
       status: 'pending' | 'done' | 'skipped';
       completedAt: Date | null;
       completedById: string | null;
+      evidenceJson?: unknown;
     }>;
   },
   workflowName?: string,
 ): PublicWorkflowRun {
   const name = workflowName ?? row.workflow?.name ?? '';
+  const executionLog = parseExecutionLogPublic(row.executionLogJson);
   return {
     id: row.id,
     workflowId: row.workflowId,
@@ -143,6 +185,9 @@ function mapRun(
     workflowName: name,
     assigneeUserId: row.assigneeUserId,
     status: row.status,
+    agentStatus: row.agentStatus ?? 'idle',
+    agentSummary: row.agentSummary ?? null,
+    executionLog,
     startedAt: row.startedAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -154,10 +199,56 @@ function mapRun(
       status: s.status,
       completedAt: s.completedAt?.toISOString() ?? null,
       completedById: s.completedById,
+      evidence: parseEvidence(s.evidenceJson),
     })),
     progress: progressFromSteps(row.steps),
     markdown: row.workflowVersion?.markdown ?? '',
     versionNumber: row.workflowVersion?.versionNumber ?? 0,
+  };
+}
+
+function parseExecutionLogPublic(raw: unknown): ExecutionLogEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ExecutionLogEntry[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Partial<ExecutionLogEntry>;
+    if (typeof o.message !== 'string' || typeof o.kind !== 'string') continue;
+    out.push({
+      id: typeof o.id === 'string' ? o.id : `elog_${out.length}`,
+      at: typeof o.at === 'string' ? o.at : new Date().toISOString(),
+      kind: o.kind as ExecutionLogEntry['kind'],
+      message: o.message,
+      detail: typeof o.detail === 'string' ? o.detail : undefined,
+      toolName: typeof o.toolName === 'string' ? o.toolName : undefined,
+      ok: typeof o.ok === 'boolean' ? o.ok : undefined,
+      stepKey: typeof o.stepKey === 'string' ? o.stepKey : undefined,
+    });
+  }
+  return out;
+}
+
+function parseEvidence(raw: unknown): StepEvidence | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Partial<StepEvidence>;
+  if (typeof o.summary !== 'string' || !o.summary) return null;
+  const method = o.method;
+  if (
+    method !== 'agent_browser' &&
+    method !== 'agent_tool' &&
+    method !== 'manual' &&
+    method !== 'self_attest' &&
+    method !== 'connector'
+  ) {
+    return { method: 'manual', summary: o.summary };
+  }
+  return {
+    method,
+    summary: o.summary,
+    finalUrl: typeof o.finalUrl === 'string' ? o.finalUrl : undefined,
+    actions: Array.isArray(o.actions)
+      ? o.actions.filter((a): a is string => typeof a === 'string')
+      : undefined,
   };
 }
 
@@ -224,6 +315,13 @@ export async function getWorkflow(
   assertCanReadWorkflow(wf.status, role);
   const version = wf.currentVersion;
   const parsed = version ? parseStepsJson(version.stepsJson) : null;
+  const versionRow = version as typeof version & {
+    verifiedAt?: Date | null;
+    verifiedRunId?: string | null;
+  };
+  const verifiedAt = versionRow?.verifiedAt ?? null;
+  const verifiedRunId = versionRow?.verifiedRunId ?? null;
+
   return {
     id: wf.id,
     name: wf.name,
@@ -232,6 +330,7 @@ export async function getWorkflow(
     createdById: wf.createdById,
     createdAt: wf.createdAt.toISOString(),
     updatedAt: wf.updatedAt.toISOString(),
+    canPublish: Boolean(verifiedAt) && (parsed?.steps.length ?? 0) > 0,
     version: version
       ? {
           id: version.id,
@@ -241,6 +340,8 @@ export async function getWorkflow(
           steps: parsed?.steps ?? [],
           sections: parsed?.sections ?? [],
           createdAt: version.createdAt.toISOString(),
+          verifiedAt: verifiedAt ? verifiedAt.toISOString() : null,
+          verifiedRunId: verifiedRunId ?? null,
         }
       : null,
   };
@@ -316,6 +417,9 @@ export async function updateDraftMarkdown(
           markdown,
           title: parsed.title,
           stepsJson,
+          // Content changed — must re-verify with agent before publish.
+          verifiedAt: null,
+          verifiedRunId: null,
         },
       });
       await tx.workflow.update({
@@ -383,6 +487,12 @@ export async function publishWorkflow(
   if (parsed.steps.length === 0) {
     throw new BadRequestError('Publish requires at least one checklist step (- [ ] …)');
   }
+  const verifiedAt = (wf.currentVersion as { verifiedAt?: Date | null }).verifiedAt;
+  if (!verifiedAt) {
+    throw new BadRequestError(
+      'Publish requires a successful Verify with agent run on the current markdown. Open the draft, click Verify with agent, wait for Activity to finish, then publish.',
+    );
+  }
 
   await prisma.workflow.update({
     where: { id: wf.id },
@@ -404,6 +514,176 @@ export async function publishWorkflow(
   void embedPublishedWorkflow(workspaceId, workflowId).catch((err) =>
     logger.warn({ err, workflowId }, 'workflow embed on publish failed'),
   );
+
+  return getWorkflow(workspaceId, workflowId, 'admin');
+}
+
+/**
+ * Polish draft markdown and start a verification run.
+ * Client should stream execute on the returned run, then call markVersionVerified.
+ */
+export async function prepareVerificationRun(
+  workspaceId: string,
+  userId: string,
+  workflowId: string,
+): Promise<{
+  workflow: PublicWorkflowDetail;
+  run: PublicWorkflowRun;
+  polished: boolean;
+  polishMethod: 'deterministic' | 'llm';
+}> {
+  await assertLicenseAllowsWrite();
+  const wf = await loadWorkflowOrThrow(workspaceId, workflowId);
+  if (!wf.currentVersion) throw new BadRequestError('Workflow has no version');
+
+  const result = await polishWorkflowMarkdown(wf.currentVersion.markdown);
+  let detail = await getWorkflow(workspaceId, workflowId, 'admin');
+  if (result.changed) {
+    detail = await updateDraftMarkdown(workspaceId, userId, workflowId, result.markdown);
+  }
+
+  // Drafts can start runs for verification even before publish.
+  const run = await startRunAllowDraft(workspaceId, userId, workflowId);
+
+  await recordAudit({
+    workspaceId,
+    actorUserId: userId,
+    action: 'workflow.verify.start',
+    targetType: 'workflow',
+    targetId: workflowId,
+    metadata: {
+      runId: run.id,
+      polished: result.changed,
+      polishMethod: result.method,
+    },
+  });
+
+  return {
+    workflow: detail,
+    run,
+    polished: result.changed,
+    polishMethod: result.method,
+  };
+}
+
+/** Like startRun but allows draft workflows (admin verification only). */
+export async function startRunAllowDraft(
+  workspaceId: string,
+  userId: string,
+  workflowId: string,
+): Promise<PublicWorkflowRun> {
+  await assertLicenseAllowsWrite();
+  const wf = await loadWorkflowOrThrow(workspaceId, workflowId);
+  if (!wf.currentVersion) {
+    throw new BadRequestError('Workflow has no version');
+  }
+  if (wf.status !== 'published' && wf.status !== 'draft') {
+    throw new BadRequestError('Workflow cannot be run');
+  }
+  const parsed = parseStepsJson(wf.currentVersion.stepsJson);
+  if (parsed.steps.length === 0) {
+    throw new BadRequestError('Workflow has no steps');
+  }
+
+  const now = new Date();
+  const run = await prisma.$transaction(async (tx) => {
+    const created = await tx.workflowRun.create({
+      data: {
+        workspaceId,
+        workflowId: wf.id,
+        workflowVersionId: wf.currentVersion!.id,
+        assigneeUserId: userId,
+        status: 'in_progress',
+        startedAt: now,
+      },
+    });
+    await tx.workflowStepState.createMany({
+      data: parsed.steps.map((step) => ({
+        workspaceId,
+        runId: created.id,
+        stepKey: step.stepKey,
+        label: step.label,
+        status: step.defaultDone ? ('done' as const) : ('pending' as const),
+        completedAt: step.defaultDone ? now : null,
+        completedById: step.defaultDone ? userId : null,
+      })),
+    });
+    return tx.workflowRun.findUniqueOrThrow({
+      where: { id: created.id },
+      include: {
+        steps: { orderBy: { createdAt: 'asc' } },
+        workflow: { select: { name: true } },
+        workflowVersion: { select: { markdown: true, versionNumber: true, stepsJson: true } },
+      },
+    });
+  });
+
+  await recordAudit({
+    workspaceId,
+    actorUserId: userId,
+    action: 'workflow.run.start',
+    targetType: 'workflow_run',
+    targetId: run.id,
+    metadata: { workflowId, draftVerify: wf.status === 'draft' },
+  });
+
+  return mapRun(run);
+}
+
+export async function markVersionVerified(
+  workspaceId: string,
+  userId: string,
+  workflowId: string,
+  runId: string,
+): Promise<PublicWorkflowDetail> {
+  await assertLicenseAllowsWrite();
+  const wf = await loadWorkflowOrThrow(workspaceId, workflowId);
+  if (!wf.currentVersionId) throw new BadRequestError('No version');
+
+  const run = await prisma.workflowRun.findFirst({
+    where: { id: runId, workspaceId, workflowId },
+  });
+  if (!run) throw new NotFoundError('Workflow run');
+  if (run.workflowVersionId !== wf.currentVersionId) {
+    throw new BadRequestError('Verification run does not match the current draft version');
+  }
+  if (run.agentStatus === 'failed') {
+    throw new BadRequestError(
+      'Verification agent failed. Fix the workflow or environment, then Verify with agent again.',
+    );
+  }
+  if (run.agentStatus === 'running') {
+    throw new BadRequestError('Verification is still running — wait for Activity to finish');
+  }
+  // Accept completed agent pass (even if some steps remain pending offline work).
+  if (run.agentStatus !== 'completed') {
+    throw new BadRequestError(
+      'Verification did not finish. Wait for Activity to show a completion summary, then try again.',
+    );
+  }
+  const log = run.executionLogJson;
+  if (!Array.isArray(log) || log.length === 0) {
+    throw new BadRequestError(
+      'No agent activity recorded. Run Verify with agent until Activity shows progress.',
+    );
+  }
+
+  await prisma.workflowVersion.update({
+    where: { id: wf.currentVersionId },
+    data: {
+      verifiedAt: new Date(),
+      verifiedRunId: runId,
+    },
+  });
+
+  await recordAudit({
+    workspaceId,
+    actorUserId: userId,
+    action: 'workflow.verify.complete',
+    targetType: 'workflow',
+    targetId: workflowId,
+    metadata: { runId, versionId: wf.currentVersionId },
+  });
 
   return getWorkflow(workspaceId, workflowId, 'admin');
 }
@@ -529,7 +809,12 @@ export async function completeStep(
   userId: string,
   runId: string,
   stepKey: string,
-  opts: { asAdmin?: boolean; role: WorkspaceRole; source?: 'ui' | 'agent' } = {
+  opts: {
+    asAdmin?: boolean;
+    role: WorkspaceRole;
+    source?: 'ui' | 'agent' | 'agent_browser';
+    evidence?: StepEvidence;
+  } = {
     role: 'member',
   },
 ): Promise<PublicWorkflowRun> {
@@ -552,6 +837,25 @@ export async function completeStep(
     return getRun(workspaceId, userId, runId, opts.role);
   }
 
+  const source = opts.source ?? 'ui';
+  let evidence: StepEvidence | undefined = opts.evidence;
+  if (source === 'agent_browser' || source === 'agent') {
+    if (!evidence?.summary?.trim()) {
+      throw new BadRequestError(
+        'Agent completion requires evidence (summary of actions taken). Do not self-attest without performing the step.',
+      );
+    }
+    if (source === 'agent_browser' && evidence.method !== 'agent_browser') {
+      evidence = { ...evidence, method: 'agent_browser' };
+    }
+  } else if (!evidence) {
+    // Explicit manual fallback (human did the offline work); not the primary path.
+    evidence = {
+      method: 'manual',
+      summary: 'Marked complete by assignee in the runner UI',
+    };
+  }
+
   const now = new Date();
   await prisma.workflowStepState.update({
     where: { id: step.id },
@@ -559,6 +863,7 @@ export async function completeStep(
       status: 'done',
       completedAt: now,
       completedById: userId,
+      evidenceJson: evidence as Prisma.InputJsonValue,
     },
   });
 
@@ -585,7 +890,8 @@ export async function completeStep(
     targetId: runId,
     metadata: {
       stepKey,
-      source: opts.source ?? 'ui',
+      source,
+      method: evidence.method,
       asAdmin: Boolean(opts.asAdmin),
     },
   });
