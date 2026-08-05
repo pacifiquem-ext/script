@@ -12,6 +12,7 @@ import {
   IconChevronDown,
   IconEdit,
   IconDelete,
+  IconCheckList,
 } from '../../lib/icons';
 import { SettingsModal } from '../../pages/app/SettingsModal';
 import { useAuth } from '../../contexts/useAuth';
@@ -339,6 +340,15 @@ export function AppLayout() {
           >
             <IconSettings size={18} />
             {expanded && <span className="text-para-sm">Connectors</span>}
+          </Link>
+
+          <Link
+            to="/app/workflows"
+            className={`flex items-center gap-2.5 p-[7px_8px] border-none cursor-pointer rounded-8 no-underline transition-colors whitespace-nowrap overflow-hidden ${isActive('/app/workflows') ? 'text-neutral-950 bg-neutral-200' : 'bg-transparent text-neutral-400 hover:text-neutral-950 hover:bg-neutral-50'}`}
+            title="Workflows"
+          >
+            <IconCheckList size={18} />
+            {expanded && <span className="text-para-sm">Workflows</span>}
           </Link>
 
           {!expanded && (

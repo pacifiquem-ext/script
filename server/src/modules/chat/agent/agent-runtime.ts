@@ -1,16 +1,15 @@
-import Anthropic from '@anthropic-ai/sdk';
-import {
-  CHAT_MAX_TOKENS,
-  CHAT_MODEL,
-  CHAT_TEMPERATURE,
-  type MessageCitation,
-} from '@script/shared';
-import { env, requireAnthropicApiKey } from '../../../config/env';
+import type { MessageCitation } from '@script/shared';
+import { env } from '../../../config/env';
 import { logger } from '../../../lib/logger';
+import {
+  AGENT_SYSTEM_PROMPT,
+  companyBrainAgent,
+  getMastraToolStatusLabel,
+  toRequestContext,
+} from '../../../mastra';
 import { classifyInventoryIntent } from './inventory-intent';
 import {
   executeTool,
-  getToolDefinitions,
   getToolStatusLabel,
   recordToolCallAudit,
   type AgentToolContext,
@@ -36,52 +35,7 @@ export type AgentRunInput = {
 
 export type AgentRunner = (input: AgentRunInput) => AsyncGenerator<AgentStreamEvent>;
 
-export type AnthropicMessagesCreate = (params: {
-  system: string;
-  messages: Anthropic.Messages.MessageParam[];
-  tools: Anthropic.Messages.Tool[];
-  signal?: AbortSignal;
-}) => Promise<Anthropic.Messages.Message>;
-
-const DEFAULT_MAX_ROUNDS = 6;
-
-type ContentBlock = Anthropic.Messages.ContentBlock;
-type MessageParam = Anthropic.Messages.MessageParam;
-
-function textFromContent(content: ContentBlock[]): string {
-  return content
-    .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
-}
-
-function toolUses(content: ContentBlock[]): Anthropic.Messages.ToolUseBlock[] {
-  return content.filter((b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use');
-}
-
-const defaultAnthropicCreate: AnthropicMessagesCreate = async (params) => {
-  const client = new Anthropic({ apiKey: requireAnthropicApiKey() });
-  return client.messages.create(
-    {
-      model: CHAT_MODEL,
-      max_tokens: CHAT_MAX_TOKENS,
-      temperature: CHAT_TEMPERATURE,
-      system: params.system,
-      tools: params.tools,
-      messages: params.messages,
-    },
-    { signal: params.signal },
-  );
-};
-
-let anthropicCreateImpl: AnthropicMessagesCreate = defaultAnthropicCreate;
-
-export function setAnthropicMessagesCreateForTests(fn: AnthropicMessagesCreate | null) {
-  if (env.NODE_ENV !== 'test') {
-    throw new Error('setAnthropicMessagesCreateForTests is only available in test');
-  }
-  anthropicCreateImpl = fn ?? defaultAnthropicCreate;
-}
+const DEFAULT_MAX_STEPS = 6;
 
 async function auditTool(
   toolContext: AgentToolContext,
@@ -181,9 +135,22 @@ async function* runForcedMeetingInventory(
   yield { type: 'delta', text };
 }
 
+function collectCitationsFromToolResult(
+  result: unknown,
+  citationMap: Map<string, MessageCitation>,
+) {
+  if (!result || typeof result !== 'object') return;
+  const citations = (result as { citations?: MessageCitation[] }).citations;
+  if (!Array.isArray(citations)) return;
+  for (const c of citations) {
+    if (c?.chunkId) citationMap.set(c.chunkId, c);
+  }
+}
+
 /**
- * Tool-use agent loop via registry (ADR 0011).
- * Inventory intents hard-routed for Library and Meetings.
+ * Production agent loop via Mastra (ADR 0017).
+ * Inventory intents hard-routed for Library and Meetings (no product regex NLU for inventory —
+ * classifier in inventory-intent.ts).
  */
 export async function* runAgentWithTools(input: AgentRunInput): AsyncGenerator<AgentStreamEvent> {
   const lastUser = [...input.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
@@ -197,80 +164,84 @@ export async function* runAgentWithTools(input: AgentRunInput): AsyncGenerator<A
     return;
   }
 
-  const maxRounds = input.maxRounds ?? DEFAULT_MAX_ROUNDS;
-  const tools = getToolDefinitions();
-  const messages: MessageParam[] = input.messages.map((m) => ({
+  const requestContext = toRequestContext(input.toolContext);
+  const maxSteps = input.maxRounds ?? DEFAULT_MAX_STEPS;
+  const citationMap = new Map<string, MessageCitation>();
+  const toolStarted = new Map<string, number>();
+
+  // Mastra accepts several message shapes; product history is role+content strings.
+  const mastraMessages = input.messages.map((m) => ({
     role: m.role,
     content: m.content,
-  }));
+  })) as Parameters<typeof companyBrainAgent.stream>[0];
 
-  const citationMap = new Map<string, MessageCitation>();
-
-  for (let round = 0; round < maxRounds; round++) {
-    if (input.signal?.aborted) return;
-
-    const response = await anthropicCreateImpl({
-      system: input.system,
-      messages,
-      tools,
-      signal: input.signal,
+  try {
+    const stream = await companyBrainAgent.stream(mastraMessages, {
+      requestContext,
+      instructions: input.system || AGENT_SYSTEM_PROMPT,
+      maxSteps,
+      abortSignal: input.signal,
+      hooks: {
+        afterToolCall: async ({ toolName, output, error }) => {
+          const started = toolStarted.get(toolName) ?? Date.now();
+          const ok =
+            !error && !(output && typeof output === 'object' && 'error' in (output as object));
+          await recordToolCallAudit({
+            workspaceId: input.toolContext.workspaceId,
+            userId: input.toolContext.userId,
+            conversationId: input.toolContext.conversationId,
+            tool: toolName,
+            ok,
+            durationMs: Date.now() - started,
+            error: error instanceof Error ? error.message : error ? String(error) : undefined,
+          });
+        },
+      },
     });
 
-    const uses = toolUses(response.content);
-    if (response.stop_reason === 'tool_use' && uses.length > 0) {
-      messages.push({ role: 'assistant', content: response.content });
-      const toolResults: Anthropic.Messages.ToolResultBlockParam[] = [];
-      for (const use of uses) {
+    for await (const chunk of stream.fullStream) {
+      if (input.signal?.aborted) return;
+      const type = (chunk as { type: string }).type;
+      const payload = ((chunk as { payload?: Record<string, unknown> }).payload ?? {}) as Record<
+        string,
+        unknown
+      >;
+
+      if (type === 'text-delta') {
+        const text = typeof payload.text === 'string' ? payload.text : '';
+        if (text) yield { type: 'delta', text };
+        continue;
+      }
+
+      if (type === 'tool-call') {
+        const name = String(payload.toolName ?? 'tool');
+        const args = payload.args ?? {};
+        toolStarted.set(name, Date.now());
         yield {
           type: 'tool_call',
-          name: use.name,
-          input: use.input,
-          statusLabel: getToolStatusLabel(use.name),
+          name,
+          input: args,
+          statusLabel: getMastraToolStatusLabel(name),
         };
-        const started = Date.now();
-        const result: ToolExecutionResult = await executeTool(
-          use.name,
-          use.input,
-          input.toolContext,
-        );
-        await auditTool(input.toolContext, use.name, result, started);
-        yield { type: 'tool_result', name: use.name, ok: result.ok };
-        if (result.citations) {
-          for (const c of result.citations) {
-            citationMap.set(c.chunkId, c);
-          }
-        }
-        const payload = JSON.stringify(result.data);
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: use.id,
-          content: payload.length > 80_000 ? `${payload.slice(0, 80_000)}…[truncated]` : payload,
-          is_error: !result.ok,
-        });
+        continue;
       }
-      messages.push({ role: 'user', content: toolResults });
-      continue;
+
+      if (type === 'tool-result') {
+        const name = String(payload.toolName ?? 'tool');
+        const isError = Boolean(payload.isError);
+        const result = payload.result;
+        collectCitationsFromToolResult(result, citationMap);
+        yield { type: 'tool_result', name, ok: !isError };
+        continue;
+      }
     }
 
-    const text = textFromContent(response.content);
-    if (text) yield { type: 'delta', text };
     if (citationMap.size) {
       yield { type: 'citations', citations: [...citationMap.values()] };
     }
-    return;
-  }
-
-  logger.warn({ maxRounds }, 'agent hit max tool rounds; requesting final answer');
-  const final = await anthropicCreateImpl({
-    system: `${input.system}\n\nYou have used the maximum number of tool rounds. Answer now with what you have.`,
-    messages,
-    tools: [],
-    signal: input.signal,
-  });
-  const text = textFromContent(final.content);
-  if (text) yield { type: 'delta', text };
-  if (citationMap.size) {
-    yield { type: 'citations', citations: [...citationMap.values()] };
+  } catch (err) {
+    logger.error({ err }, 'Mastra company-brain agent failed');
+    throw err;
   }
 }
 
@@ -394,27 +365,16 @@ export function setAgentRunnerForTests(runner: AgentRunner | null) {
   agentRunner = runner ?? defaultTestAgentRunner;
 }
 
+/** @deprecated Prefer Mastra stream; retained for tests that stub Anthropic message create. */
+export function setAnthropicMessagesCreateForTests(_fn: unknown) {
+  if (env.NODE_ENV !== 'test') {
+    throw new Error('setAnthropicMessagesCreateForTests is only available in test');
+  }
+  // No-op: production loop is Mastra; agent-runtime tests use setAgentRunnerForTests.
+}
+
 export function getAgentRunner(): AgentRunner {
   return agentRunner;
 }
 
-export const AGENT_SYSTEM_PROMPT = `You are script, the company brain assistant for this workspace.
-
-You have tools:
-- list_library_documents — inventory of Library files with one-line summaries (use for "what's in my library", overviews, listing files).
-- get_document_summary — one document by id or name.
-- search_library — semantic search of document content (use for questions about what documents say).
-- list_meetings — inventory of meetings/calls with summaries.
-- get_meeting_summary — one meeting by id or title (summary, participants, commitments).
-- search_meetings — semantic search over meeting transcripts (decisions, who said what).
-- list_work_items — inventory of work items (GitHub issues, etc.).
-- get_work_item — one work item with live assignee/state from the provider when possible.
-- web_search — public web search for external facts (not a substitute for company memory).
-
-Rules:
-1. For library inventory / "all documents" / "one-line summary each file" questions, call list_library_documents. Do NOT claim you lack access to the Library when this tool works.
-2. For meeting inventory / "what meetings do we have?", call list_meetings. Do NOT claim you lack meeting access when this tool works.
-3. For document content questions, call search_library. For call/meeting content, call search_meetings. For "who's working on X?", use list_work_items / get_work_item.
-4. Prefer company memory tools over web_search. Use web_search only for external/public information.
-5. Never invent documents, meetings, or work items that tools did not return. Never expose secrets or credentials.
-6. Be concise and helpful. If tools return empty, say so clearly. Clearance may hide sources you cannot see.`;
+export { AGENT_SYSTEM_PROMPT };

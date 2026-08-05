@@ -71,6 +71,7 @@ Read in this order if you're new to the repo:
 | [`projectdef.md`](./projectdef.md)                             | Product vision (company brain), C1–C7 scorecard, shipped slice, backend requirements. |
 | [`pipeline.md`](./pipeline.md)                                 | Idea ledger: product C1–C7 bets + org-ready commercial order before items hit TODO.   |
 | [`docs/agent-tools.md`](./docs/agent-tools.md)                 | The shipped tool runtime, how to add a tool, and the platform gaps to fix first.      |
+| [`docs/research/mastra-baseline.md`](./docs/research/mastra-baseline.md) | Research: Mastra as agent platform baseline; adoption mapped to Phase M.       |
 | [`docs/connectors.md`](./docs/connectors.md)                   | **Roadmap spec** — messaging bots, channel context, work systems, calls.              |
 | [`docs/workflows.md`](./docs/workflows.md)                     | **Roadmap spec** — markdown-authored, run-tracked guided processes.                   |
 | [`docs/pitch-ready.md`](./docs/pitch-ready.md)                 | Pitch checklist G1–G16 (packaging, security pack, pilot kit, legal, …).               |
@@ -85,7 +86,7 @@ Read in this order if you're new to the repo:
 | [`CONTEXT.md`](./CONTEXT.md)                                   | Domain glossary (ubiquitous language).                                                |
 | [`docs/pgvector.md`](./docs/pgvector.md)                       | pgvector extension + SQL-managed HNSW/partial indexes.                                |
 | [`docs/embeddings-backfill.md`](./docs/embeddings-backfill.md) | Backfill job interface when embedding model changes.                                  |
-| `docs/adr/`                                                    | Architecture decision records for hard-to-reverse calls (0001–0009).                  |
+| `docs/adr/`                                                    | Architecture decision records (through 0017 Mastra agent baseline).                   |
 
 ## Layout
 

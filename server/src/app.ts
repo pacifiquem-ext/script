@@ -26,6 +26,7 @@ import { meetingRoutes } from './modules/meetings/routes';
 import { connectorRoutes } from './modules/connectors/routes';
 import { slackRoutes } from './modules/slack/routes';
 import { clearanceRoutes } from './modules/clearance/routes';
+import { workflowRoutes } from './modules/workflows/routes';
 
 export function buildApp() {
   registerIngestionProcessors();
@@ -68,6 +69,7 @@ export function buildApp() {
     await instance.register(connectorRoutes);
     await instance.register(slackRoutes);
     await instance.register(clearanceRoutes);
+    await instance.register(workflowRoutes);
   });
   return app;
 }

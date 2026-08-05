@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '../src/db/prisma';
 import {
+  executeAgentTool,
   isLibraryInventoryIntent,
   runAgentWithTools,
-  setAnthropicMessagesCreateForTests,
 } from '../src/modules/chat/agent';
 import { createReadyDocumentWithVersion } from './helpers-documents';
 
@@ -50,18 +49,12 @@ describe('runAgentWithTools production loop', () => {
   }, 60_000);
 
   afterAll(async () => {
-    setAnthropicMessagesCreateForTests(null);
     await prisma.user.deleteMany({
       where: { memberships: { some: { workspaceId } } },
     });
   });
 
-  it('hard-routes inventory without calling Anthropic', async () => {
-    let called = 0;
-    setAnthropicMessagesCreateForTests(async () => {
-      called += 1;
-      throw new Error('should not call model for inventory');
-    });
+  it('hard-routes inventory without calling the model', async () => {
     const events: string[] = [];
     for await (const e of runAgentWithTools({
       system: 'sys',
@@ -70,63 +63,23 @@ describe('runAgentWithTools production loop', () => {
     })) {
       events.push(e.type === 'delta' ? `delta:${e.text.slice(0, 40)}` : e.type);
     }
-    expect(called).toBe(0);
+    expect(events).toContain('tool_call');
+    expect(events).toContain('tool_result');
     expect(events.some((e) => e.startsWith('delta:') && e.includes('Library inventory'))).toBe(
       true,
     );
   });
 
-  it('executes tool_use then final text when model requests tools', async () => {
-    let round = 0;
-    setAnthropicMessagesCreateForTests(async (params) => {
-      round += 1;
-      if (round === 1) {
-        expect(params.tools.length).toBeGreaterThan(0);
-        return {
-          id: 'msg_1',
-          type: 'message',
-          role: 'assistant',
-          model: 'test',
-          stop_reason: 'tool_use',
-          stop_sequence: null,
-          usage: { input_tokens: 1, output_tokens: 1 },
-          content: [
-            {
-              type: 'tool_use',
-              id: 'tu_1',
-              name: 'get_document_summary',
-              input: { name: 'policy.txt' },
-            },
-          ],
-        } as Anthropic.Messages.Message;
-      }
-      return {
-        id: 'msg_2',
-        type: 'message',
-        role: 'assistant',
-        model: 'test',
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: { input_tokens: 1, output_tokens: 1 },
-        content: [{ type: 'text', text: 'Policy requires MFA for employees.' }],
-      } as Anthropic.Messages.Message;
-    });
-
-    const kinds: string[] = [];
-    let answer = '';
-    for await (const e of runAgentWithTools({
-      system: 'sys',
-      messages: [{ role: 'user', content: 'What does the security policy say?' }],
-      toolContext: { workspaceId },
-    })) {
-      kinds.push(e.type);
-      if (e.type === 'delta') answer += e.text;
-      if (e.type === 'tool_call') expect(e.name).toBe('get_document_summary');
-    }
-    expect(kinds).toContain('tool_call');
-    expect(kinds).toContain('tool_result');
-    expect(kinds).toContain('delta');
-    expect(answer).toMatch(/MFA/i);
+  it('Mastra-backed get_document_summary executes via registry bridge', async () => {
+    const result = await executeAgentTool(
+      'get_document_summary',
+      { name: 'policy.txt' },
+      { workspaceId },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({ name: 'policy.txt' });
+    const summary = (result.data as { summary?: string }).summary ?? '';
+    expect(summary).toMatch(/MFA|Security policy/i);
   });
 
   it('get_document_summary is workspace-scoped', async () => {

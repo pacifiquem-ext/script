@@ -21,6 +21,10 @@ describe('tool registry (Phase 1)', () => {
         'list_meetings',
         'search_meetings',
         'get_meeting_summary',
+        'list_workflows',
+        'get_workflow',
+        'get_my_workflow_progress',
+        'complete_workflow_step',
       ]),
     );
     expect(getToolDefinitions().length).toBeGreaterThanOrEqual(7);

@@ -38,6 +38,9 @@ const MeetingsPage = lazy(() =>
 const ConnectorsPage = lazy(() =>
   import('../pages/app/ConnectorsPage').then((m) => ({ default: m.ConnectorsPage })),
 );
+const WorkflowsPage = lazy(() =>
+  import('../pages/app/WorkflowsPage').then((m) => ({ default: m.WorkflowsPage })),
+);
 
 function Lazy({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<LoadingState />}>{children}</Suspense>;
@@ -159,6 +162,14 @@ export const router = createBrowserRouter([
             element: (
               <Lazy>
                 <ConnectorsPage />
+              </Lazy>
+            ),
+          },
+          {
+            path: 'workflows',
+            element: (
+              <Lazy>
+                <WorkflowsPage />
               </Lazy>
             ),
           },

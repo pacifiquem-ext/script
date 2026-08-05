@@ -1,99 +1,62 @@
 # Agent tools — how script becomes aware of its environment
 
-**Status: shipped (Library + web).** This document describes the tool-use runtime that exists in
-`server/src/modules/chat/agent/` today, and the contract for adding the next tool.
+**Status: shipped (Library + meetings + work items + web).** Runtime is **Mastra** (ADR 0017).
+Domain services remain in `server/src/modules/*`; tools are Mastra `createTool` wrappers.
+
+**Platform:** [Mastra](https://mastra.ai/) — see [`docs/research/mastra-baseline.md`](./research/mastra-baseline.md),
+[`docs/adr/0017-mastra-agent-baseline.md`](./adr/0017-mastra-agent-baseline.md), `AGENTS.md` §2.7,
+skills: `.agents/skills/mastra` + `.agents/skills/script-mastra`.
 
 The company-brain thesis is that the assistant should never say "I can't see that" about something
-the workspace owns. The way it stops saying that is **tools**: every new area of company truth
-(Library, calls, channels, work items, workflows) enters the brain as one or more tools the model
-can call. `product_path.txt` states this as a standing rule — _"we must keep defining more tools so
-that the app is aware of its environment the same way we did for the library."_ This file is the
-mechanism for that rule.
+the workspace owns. The way it stops saying that is **tools**.
 
 ---
 
 ## 1. What ships today
 
-| Tool                     | Source                   | What it answers                                        |
-| ------------------------ | ------------------------ | ------------------------------------------------------ |
-| `list_library_documents` | `library-tools.ts`       | "What's in my library?", inventory, find by name       |
-| `get_document_summary`   | `library-tools.ts`       | One document by id or exact name + preview             |
-| `search_library`         | `library-tools.ts`       | Semantic content questions over current-version chunks |
-| `web_search`             | `web-search.ts` (Tavily) | External/public facts; requires `TAVILY_API_KEY`       |
+| Tool                     | Source                                        | What it answers                               |
+| ------------------------ | --------------------------------------------- | --------------------------------------------- |
+| `list_library_documents` | `mastra/tools/library.ts`                     | Library inventory                             |
+| `get_document_summary`   | `mastra/tools/library.ts`                     | One document by id or name                    |
+| `search_library`         | `mastra/tools/library.ts`                     | Semantic document search                      |
+| `list_meetings`          | `mastra/tools/meetings.ts`                    | Meeting inventory                             |
+| `get_meeting_summary`    | `mastra/tools/meetings.ts`                    | One meeting                                   |
+| `search_meetings`        | `mastra/tools/meetings.ts`                    | Transcript search                             |
+| `list_work_items`        | `mastra/tools/work-items.ts`                  | Work-item inventory                           |
+| `get_work_item`          | `mastra/tools/work-items.ts`                  | One work item (live GitHub when connected)    |
+| `web_search`             | `mastra/tools/web-search.ts` (@mastra/tavily) | External/public facts; needs `TAVILY_API_KEY` |
 
-Everything else in `product_path.txt` — calls, Slack/Teams/WhatsApp channels, Notion/Jira/GitHub
-work items, workflows — has **no tool yet**. See [`connectors.md`](./connectors.md) and
-[`workflows.md`](./workflows.md) for the specs those tools will implement.
+---
 
 ## 2. Runtime shape
 
 ```text
-chat-service.ts
-  └── getAgentRunner()                    agent-runtime.ts
-        ├── isLibraryInventoryIntent()    hard route → forced list_library_documents
-        └── runAgentWithTools()           Anthropic tool loop, max 6 rounds
-              └── executeAgentTool()      tool-definitions.ts (switch dispatch)
+chat-service / agent-entry
+  └── getAgentRunner() → runAgentWithTools (production) | defaultTestAgentRunner (test)
+        ├── inventory hard-route (library / meetings)
+        └── companyBrainAgent.stream (Mastra)
+              ├── createTool execute → domain services + RequestContext tenancy
+              └── SSE mapper → tool_call / tool_result / delta / citations
 ```
 
-- **Loop**: `runAgentWithTools` calls Anthropic with `AGENT_TOOL_DEFINITIONS`. While
-  `stop_reason === 'tool_use'`, it executes each requested tool, appends `tool_result` blocks, and
-  goes again. `DEFAULT_MAX_ROUNDS = 6`; on exhaustion it makes one final tool-free call.
-- **Hard route**: inventory phrasing is matched by `library-intent.ts` and answered directly from
-  `list_library_documents` without a model round trip. This exists because catalog questions used to
-  produce false "I have no access to your library" answers. **Any new capability with the same
-  failure mode should get the same treatment** — a deterministic path, not a hope that the model
-  picks the right tool.
-- **Streaming**: the loop yields `tool_call`, `tool_result`, `delta`, and `citations` events, which
-  `chat-service` forwards over SSE. The client (`client/src/lib/chat-api.ts` → `ChatPage.tsx`)
-  turns them into the live status line ("Searching Library…", "Searching the web…").
-- **Audit**: `logToolAudit()` emits a structured `agent_tool_audit` Pino line per call
-  (workspace, user, tool, ok, durationMs). **Logs only — there is no audit table.**
-- **Test seams**: `setAgentRunnerForTests`, `setAnthropicMessagesCreateForTests`,
-  `setWebSearchForTests`. In `NODE_ENV=test` the runner defaults to `defaultTestAgentRunner`, a
-  deterministic runner that mirrors the production routing without calling Anthropic.
+Compat: `register-compat-tools.ts` also registers the same tools on the ADR 0011 registry so
+`executeTool` / tests keep working.
 
-## 3. Adding a tool (current checklist — ADR 0011)
+---
 
-1. **Implementation** — domain module with workspace-scoped queries (never trust model args for
-   tenancy).
-2. **`registerTool({ definition, execute, statusLabel })`** — one call (see
-   `register-builtin-tools.ts`). No hand-sync of definition arrays or switch cases.
-3. **Tests** — unit coverage for the execute path; hard routes for catalog intents if applicable.
-4. **System prompt** — mention the tool in `AGENT_SYSTEM_PROMPT` when the model must choose it.
+## 3. How to add a tool
 
-The client uses `tool_call.statusLabel` from SSE — **no ChatPage edit** for new tools.
-Audit rows land in `AgentToolCall` via `recordToolCallAudit`.
+1. Prefer an existing Mastra first-party package if the capability is generic (search, crawl, MCP).
+2. Otherwise `createTool` in `server/src/mastra/tools/` with Zod schemas.
+3. Read tenancy only from `toolContextFromRequestContext(requestContext)`.
+4. Attach on `companyBrainAgent` in `agents/company-brain.ts`.
+5. Add status label in `status-labels.ts`.
+6. Ensure compat registry lists the tool (`Object.values(companyBrainTools)`).
+7. Tests for execute + clearance; chat SSE contract if new event shapes.
 
-## 4. Known gaps (fix before the tool count grows)
+---
 
-These are the reasons "keep defining more tools" is currently harder than it should be. They are
-tracked in `TODO.md` under **T0 — Tool platform**.
+## 4. Multi-agent
 
-- **No registry.** Definition, dispatch, and the test runner are three hand-synced lists. A
-  `registerTool({ definition, execute, testFixture })` registry with one import site would make each
-  new connector a single file instead of a four-file edit.
-- **No clearance at the tool boundary.** `LibraryToolContext` carries `workspaceId` (+ optional
-  `userId`). Once documents/channels/connectors have finer ACLs, filtering must happen _inside_ each
-  tool, and the context must carry the caller's clearance. Designing that after ten tools exist is
-  significantly worse than designing it now.
-- **Audit is logs, not rows.** Compliance questions ("what did the brain read about me?") need
-  queryable rows, not Pino output.
-- **No per-tool cost/credit accounting.** Credits are charged per assistant turn, not per tool call.
-  Connector tools that hit paid third-party APIs will need their own accounting.
-- **Result size**: tool payloads are truncated at 80,000 characters before being handed back to the
-  model. High-volume connectors (a busy Slack channel, a Jira project) must paginate and summarize
-  server-side rather than relying on truncation.
-- **Single tool surface**: tools are only reachable from in-app chat. The messaging bots in
-  [`connectors.md`](./connectors.md) need the same runtime callable from a webhook context with no
-  `Conversation` row — plan the entry point, don't fork the loop.
-
-## 5. Rules
-
-- A tool is **read-only** unless an ADR says otherwise. Write-capable tools (create a Jira ticket,
-  post to a channel, mark a workflow step done) need explicit scoping, an allowlist, and user
-  confirmation UX — see `AGENTS.md` §15.
-- Never return raw secrets, tokens, or another workspace's rows from a tool, even if the model asks.
-- A tool that can return nothing must say so in its result (`{ ok: true, data: { items: [] } }`), so
-  the model reports "nothing found" instead of inventing content. See `AGENT_SYSTEM_PROMPT` rule 4.
-- Tool descriptions are user-visible in effect (they steer answers). Keep them in the product's
-  language — see `CONTEXT.md`.
+See `server/src/mastra/multi-agent.md`. Default is **one** company-brain agent; supervisors only
+when tool sprawl justifies them.

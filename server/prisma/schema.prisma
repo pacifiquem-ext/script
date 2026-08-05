@@ -84,6 +84,24 @@ enum MemorySourceType {
   meeting
   channel
   work_item
+  workflow
+}
+
+enum WorkflowStatus {
+  draft
+  published
+}
+
+enum WorkflowStepStatus {
+  pending
+  done
+  skipped
+}
+
+enum WorkflowRunStatus {
+  pending
+  in_progress
+  completed
 }
 
 enum MeetingStatus {
@@ -130,6 +148,10 @@ model User {
   creditLedger    CreditLedgerEntry[]
   invitesSent     WorkspaceInvite[] @relation("InviteInvitedBy")
   auditEvents     AuditEvent[]      @relation("AuditActor")
+  workflowsCreated Workflow[]       @relation("WorkflowCreatedBy")
+  workflowVersionsCreated WorkflowVersion[] @relation("WorkflowVersionCreatedBy")
+  workflowRuns    WorkflowRun[]     @relation("WorkflowRunAssignee")
+  workflowStepsCompleted WorkflowStepState[] @relation("WorkflowStepCompletedBy")
 
   @@index([lastWorkspaceId])
 }
@@ -203,6 +225,10 @@ model Workspace {
   workItems          WorkItem[]
   slackInstalls      SlackInstall[]
   channelBindings    ChannelBinding[]
+  workflows          Workflow[]
+  workflowVersions   WorkflowVersion[]
+  workflowRuns       WorkflowRun[]
+  workflowStepStates WorkflowStepState[]
 
   /// Org retention hint (days). Null = use install default / unlimited. Documented in runbooks.
   retentionDays      Int?
@@ -641,6 +667,98 @@ model ChannelBinding {
 
   @@unique([slackInstallId, channelId])
   @@index([workspaceId])
+}
+
+/// Markdown-authored guided process catalog entry (ADR 0018 / C7).
+model Workflow {
+  id               String         @id @default(cuid())
+  workspaceId      String
+  name             String
+  status           WorkflowStatus @default(draft)
+  currentVersionId String?        @unique
+  createdById      String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  workspace      Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy      User?             @relation("WorkflowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  currentVersion WorkflowVersion?  @relation("WorkflowCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       WorkflowVersion[] @relation("WorkflowVersions")
+  runs           WorkflowRun[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, updatedAt])
+  @@index([createdById])
+}
+
+/// Append-only snapshot of workflow markdown + parsed step tree (ADR 0018).
+model WorkflowVersion {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  workflowId    String
+  versionNumber Int
+  markdown      String   @db.Text
+  title         String
+  stepsJson     Json
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  workspace  Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow   Workflow      @relation("WorkflowVersions", fields: [workflowId], references: [id], onDelete: Cascade)
+  createdBy  User?         @relation("WorkflowVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  currentFor Workflow?     @relation("WorkflowCurrentVersion")
+  runs       WorkflowRun[]
+
+  @@unique([workflowId, versionNumber])
+  @@index([workspaceId, workflowId])
+  @@index([workflowId])
+}
+
+/// One assignee’s traversal of one pinned WorkflowVersion (ADR 0018).
+model WorkflowRun {
+  id                String            @id @default(cuid())
+  workspaceId       String
+  workflowId        String
+  workflowVersionId String
+  assigneeUserId    String
+  status            WorkflowRunStatus @default(pending)
+  startedAt         DateTime          @default(now())
+  completedAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  workspace       Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow        Workflow            @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowVersion WorkflowVersion     @relation(fields: [workflowVersionId], references: [id], onDelete: Cascade)
+  assignee        User                @relation("WorkflowRunAssignee", fields: [assigneeUserId], references: [id], onDelete: Cascade)
+  steps           WorkflowStepState[]
+
+  @@index([workspaceId, assigneeUserId, status])
+  @@index([workflowId, assigneeUserId])
+  @@index([assigneeUserId, updatedAt])
+  @@index([workflowVersionId])
+}
+
+/// Per-step progress on a run (ADR 0018).
+model WorkflowStepState {
+  id            String             @id @default(cuid())
+  workspaceId   String
+  runId         String
+  stepKey       String
+  label         String
+  status        WorkflowStepStatus @default(pending)
+  completedAt   DateTime?
+  completedById String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  run         WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  completedBy User?       @relation("WorkflowStepCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@unique([runId, stepKey])
+  @@index([workspaceId, runId])
+  @@index([runId, status])
 }
 
 /// Per-workspace meetings connector credentials (Fireflies API key, etc.).

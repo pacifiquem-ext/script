@@ -91,7 +91,7 @@ export async function dualWriteDocumentMemoryChunks(input: {
 export type MemorySearchHit = {
   chunkId: string;
   content: string;
-  sourceType: 'document' | 'meeting';
+  sourceType: 'document' | 'meeting' | 'channel' | 'work_item' | 'workflow';
   position: number;
   score: number;
   documentId: string | null;

@@ -1,8 +1,11 @@
 # Workflows — markdown-defined guided processes
 
-**Status: ROADMAP. Nothing in this document is implemented.** There is no `Workflow` model, no
-markdown editor, and no workflow route in the repo today. `CONTEXT.md` reserves the term; this file
-is the design target. Needs an ADR before build (`AGENTS.md` §15).
+**Status: implemented (v1).** ADR 0018. Backend: Prisma models, markdown parser, HTTP routes, Mastra
+tools (`list_workflows`, `get_workflow`, `get_my_workflow_progress`, `complete_workflow_step`),
+publish-time memory embed (answerable primarily via tools). UI: author (textarea + outline + preview,
+no new editor package), runner (pinned markdown guidance + checklist + ConfirmModal complete).
+**Residuals:** agent write HITL/confirmToken (P5.6b), connector-verified completion (P5.7), passive
+RAG over workflow chunks in default chat retrieval.
 
 `product_path.txt` calls this **"the ultimate feature"**, so it gets a spec rather than a bullet.
 

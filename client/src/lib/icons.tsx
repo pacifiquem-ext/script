@@ -30,6 +30,7 @@ import {
   Tick01Icon,
   SidebarLeft01Icon,
   DocumentValidationIcon,
+  CheckListIcon,
   BarChartIcon,
   ZapIcon,
   LockIcon,
@@ -98,6 +99,8 @@ export const IconSidebar = ({ size = 18, className = '' }) =>
   icon(SidebarLeft01Icon, size, className);
 export const IconDocument = ({ size = 18, className = '' }) =>
   icon(DocumentValidationIcon, size, className);
+export const IconCheckList = ({ size = 18, className = '' }) =>
+  icon(CheckListIcon, size, className);
 export const IconBarChart = ({ size = 18, className = '' }) => icon(BarChartIcon, size, className);
 export const IconZap = ({ size = 18, className = '' }) => icon(ZapIcon, size, className);
 export const IconLock = ({ size = 18, className = '' }) => icon(LockIcon, size, className);

@@ -32,6 +32,9 @@
     "@fastify/helmet": "^13.0.0",
     "@fastify/multipart": "^9.0.1",
     "@fastify/rate-limit": "^10.1.1",
+    "@mastra/core": "^1.56.0",
+    "@mastra/libsql": "^1.19.0",
+    "@mastra/tavily": "^1.1.1",
     "@prisma/client": "^5.22.0",
     "@script/shared": "workspace:*",
     "argon2": "^0.44.0",
@@ -70,5 +73,8 @@
   },
   "prisma": {
     "seed": "node -r @swc-node/register prisma/seed.ts"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }
