@@ -23,6 +23,9 @@ import { licenseRoutes } from './modules/license/routes';
 import { auditRoutes } from './modules/audit/routes';
 import { ssoRoutes } from './modules/sso/routes';
 import { meetingRoutes } from './modules/meetings/routes';
+import { connectorRoutes } from './modules/connectors/routes';
+import { slackRoutes } from './modules/slack/routes';
+import { clearanceRoutes } from './modules/clearance/routes';
 
 export function buildApp() {
   registerIngestionProcessors();
@@ -68,6 +71,9 @@ export function buildApp() {
     await instance.register(auditRoutes);
     await instance.register(ssoRoutes);
     await instance.register(meetingRoutes);
+    await instance.register(connectorRoutes);
+    await instance.register(slackRoutes);
+    await instance.register(clearanceRoutes);
   });
   return app;
 }

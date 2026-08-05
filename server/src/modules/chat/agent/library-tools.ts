@@ -1,13 +1,16 @@
 import { RAG_MIN_SIMILARITY, RAG_TOP_K } from '@script/shared';
 import { prisma } from '../../../db/prisma';
 import { searchDocumentChunkVectors } from '../../../db/vector';
+import { filterAccessibleResourceIds } from '../../clearance/clearance-service';
 import { embedQuery } from '../../jobs/embeddings';
 import { searchMemoryChunks } from '../../memory/memory-chunks';
 
 export type LibraryToolContext = {
   workspaceId: string;
-  /** Member clearance (Org-P9b). Documents above this level are invisible. */
+  userId?: string;
+  /** Member clearance (Org-P9b / ADR 0014). Documents above this level are invisible. */
   maxClearanceLevel?: number;
+  elevated?: boolean;
 };
 
 export type LibraryDocRow = {
@@ -27,32 +30,53 @@ export async function listLibraryDocuments(
 ): Promise<{ total: number; documents: LibraryDocRow[] }> {
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
   const maxClearance = ctx.maxClearanceLevel ?? 0;
-  const where = {
-    workspaceId: ctx.workspaceId,
-    clearanceLevel: { lte: maxClearance },
-    ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
-    ...(input.q?.trim()
-      ? { name: { contains: input.q.trim(), mode: 'insensitive' as const } }
-      : {}),
-  };
-  const [total, rows] = await Promise.all([
-    prisma.document.count({ where }),
-    prisma.document.findMany({
-      where,
-      orderBy: [{ name: 'asc' }],
-      take: limit,
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        summary: true,
-        folderId: true,
-        mimeType: true,
-        updatedAt: true,
-        currentVersion: { select: { versionNumber: true, summary: true } },
-      },
-    }),
-  ]);
+  const candidates = await prisma.document.findMany({
+    where: {
+      workspaceId: ctx.workspaceId,
+      clearanceLevel: { lte: maxClearance },
+      ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
+      ...(input.q?.trim()
+        ? { name: { contains: input.q.trim(), mode: 'insensitive' as const } }
+        : {}),
+    },
+    orderBy: [{ name: 'asc' }],
+    take: Math.min(limit * 4, 400),
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      summary: true,
+      folderId: true,
+      mimeType: true,
+      updatedAt: true,
+      clearanceLevel: true,
+      visibility: true,
+      currentVersion: { select: { versionNumber: true, summary: true } },
+    },
+  });
+  const principal = ctx.userId
+    ? {
+        userId: ctx.userId,
+        workspaceId: ctx.workspaceId,
+        clearanceLevel: maxClearance,
+        role: ctx.elevated ? ('admin' as const) : ('member' as const),
+      }
+    : null;
+  const allowed = principal
+    ? await filterAccessibleResourceIds({
+        principal,
+        resourceKind: 'document',
+        candidates: candidates.map((c) => ({
+          id: c.id,
+          clearanceLevel: c.clearanceLevel,
+          visibility: c.visibility,
+        })),
+      })
+    : new Set(
+        candidates.filter((c) => c.visibility === 'workspace').map((c) => c.id),
+      );
+  const rows = candidates.filter((c) => allowed.has(c.id)).slice(0, limit);
+  const total = rows.length;
 
   return {
     total,
@@ -213,6 +237,8 @@ export async function searchLibrary(
     limit,
     maxClearanceLevel: maxClearance,
     documentIds: documentIds.length ? documentIds : undefined,
+    userId: ctx.userId,
+    elevated: ctx.elevated,
   });
 
   const hits = rows
