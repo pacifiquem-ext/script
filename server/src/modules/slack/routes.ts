@@ -9,6 +9,19 @@ export async function slackRoutes(app: FastifyInstance) {
     return slack.getSlackStatus(workspace.id);
   });
 
+  app.get('/slack/oauth/start', async (request, reply) => {
+    const { user, workspace } = await requireWorkspace(request);
+    requireWorkspaceRole(workspace, ['owner', 'admin']);
+    const url = slack.startSlackOAuth(workspace.id, user.id);
+    return reply.redirect(url);
+  });
+
+  app.get('/slack/oauth/callback', async (request, reply) => {
+    const q = request.query as { code?: string; state?: string; error?: string };
+    const location = await slack.handleSlackOAuthCallback(q);
+    return reply.redirect(location);
+  });
+
   app.post('/slack/install', async (request) => {
     const { user, workspace } = await requireWorkspace(request);
     requireWorkspaceRole(workspace, ['owner', 'admin']);
@@ -48,6 +61,13 @@ export async function slackRoutes(app: FastifyInstance) {
     return slack.unbindSlackChannel(workspace.id, user.id, bindingId);
   });
 
+  app.post('/slack/bindings/:bindingId/backfill', async (request) => {
+    const { user, workspace } = await requireWorkspace(request);
+    requireWorkspaceRole(workspace, ['owner', 'admin']);
+    const { bindingId } = request.params as { bindingId: string };
+    return slack.backfillChannelBinding(workspace.id, user.id, bindingId);
+  });
+
   app.post('/webhooks/slack/events', async (request, reply) => {
     const raw =
       typeof request.body === 'string' ? request.body : JSON.stringify(request.body ?? {});
@@ -66,9 +86,11 @@ export async function slackRoutes(app: FastifyInstance) {
       }
       return reply.code(503).send({ error: 'SLACK_SIGNING_SECRET not configured' });
     }
-    const result = await slack.handleSlackEventPayload(
-      request.body as Parameters<typeof slack.handleSlackEventPayload>[0],
-    );
+    const parsed =
+      typeof request.body === 'string'
+        ? (JSON.parse(request.body) as Parameters<typeof slack.handleSlackEventPayload>[0])
+        : (request.body as Parameters<typeof slack.handleSlackEventPayload>[0]);
+    const result = await slack.handleSlackEventPayload(parsed);
     if ('challenge' in result && result.challenge) {
       return { challenge: result.challenge };
     }

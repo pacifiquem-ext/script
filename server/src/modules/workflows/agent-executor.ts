@@ -25,7 +25,10 @@ import {
   browserSnapshot,
   closeBrowserSession,
   getBrowserActions,
+  getBrowserSession,
+  type BrowserSessionOptions,
 } from './browser-session';
+import { loadBrowserSessionStorageState } from './browser-vault';
 import * as workflows from './workflow-service';
 import type { PublicWorkflowRun, StepEvidence } from './workflow-service';
 
@@ -202,6 +205,7 @@ export async function* executeWorkflowRun(input: {
   role: WorkspaceRole;
   runId: string;
   maxClearanceLevel?: number;
+  browserSessionId?: string;
   signal?: AbortSignal;
 }): AsyncGenerator<WorkflowExecuteEvent> {
   const sessionKey = `run:${input.runId}`;
@@ -234,6 +238,17 @@ export async function* executeWorkflowRun(input: {
       );
       yield { type: 'error', code: 'FORBIDDEN', message: log.message, log };
       return;
+    }
+
+    if (input.browserSessionId) {
+      const storageState = await loadBrowserSessionStorageState(
+        input.workspaceId,
+        input.userId,
+        input.browserSessionId,
+      );
+      await getBrowserSession(sessionKey, {
+        storageState: storageState as BrowserSessionOptions['storageState'],
+      });
     }
 
     await setAgentRunning(input.runId);
@@ -448,6 +463,7 @@ Do not invent success. Write user-facing summaries in plain English.`;
         maxClearanceLevel: input.maxClearanceLevel,
         browserSessionId: sessionKey,
         runId: input.runId,
+        skipHitl: true,
       });
 
       try {

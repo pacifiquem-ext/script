@@ -2,8 +2,25 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
-import { apiRequest } from '../../lib/api-client';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { ApiClientError, apiRequest, getApiBaseUrl } from '../../lib/api-client';
 import { getErrorMessage } from '../../lib/form-errors';
+import { notify } from '../../components/ui/toast-alert';
+
+type GithubStatus = {
+  connected?: boolean;
+  repos?: string[];
+  lastSyncAt?: string | null;
+};
+
+type SlackBinding = { id: string; channelId: string; channelName: string | null };
+
+type SlackStatus = {
+  connected: boolean;
+  teamName: string | null;
+  oauthConfigured?: boolean;
+  bindings: SlackBinding[];
+};
 
 export function ConnectorsPage() {
   const qc = useQueryClient();
@@ -15,6 +32,9 @@ export function ConnectorsPage() {
   const [slackTeamId, setSlackTeamId] = useState('');
   const [channelId, setChannelId] = useState('');
   const [channelName, setChannelName] = useState('');
+  const [ghDisconnectOpen, setGhDisconnectOpen] = useState(false);
+  const [slackDisconnectOpen, setSlackDisconnectOpen] = useState(false);
+  const [unbindId, setUnbindId] = useState<string | null>(null);
 
   const connectorsQ = useQuery({
     queryKey: ['connectors'],
@@ -22,12 +42,7 @@ export function ConnectorsPage() {
   });
   const slackQ = useQuery({
     queryKey: ['slack-status'],
-    queryFn: async () =>
-      apiRequest<{
-        connected: boolean;
-        teamName: string | null;
-        bindings: Array<{ id: string; channelId: string; channelName: string | null }>;
-      }>('/slack/status'),
+    queryFn: async () => apiRequest<SlackStatus>('/slack/status'),
   });
 
   const invalidate = async () => {
@@ -65,6 +80,16 @@ export function ConnectorsPage() {
     onError: (e) => setError(getErrorMessage(e, 'GitHub sync failed')),
   });
 
+  const ghDisconnect = useMutation({
+    mutationFn: async () => apiRequest('/connectors/github', { method: 'DELETE' }),
+    onSuccess: async () => {
+      setGhDisconnectOpen(false);
+      setMsg('GitHub disconnected. Work items and their memory were removed.');
+      await invalidate();
+    },
+    onError: (e) => setError(getErrorMessage(e, 'GitHub disconnect failed')),
+  });
+
   const slackInstall = useMutation({
     mutationFn: async () =>
       apiRequest('/slack/install', {
@@ -77,6 +102,16 @@ export function ConnectorsPage() {
       await invalidate();
     },
     onError: (e) => setError(getErrorMessage(e, 'Slack install failed')),
+  });
+
+  const slackDisconnect = useMutation({
+    mutationFn: async () => apiRequest('/slack/install', { method: 'DELETE' }),
+    onSuccess: async () => {
+      setSlackDisconnectOpen(false);
+      setMsg('Slack disconnected.');
+      await invalidate();
+    },
+    onError: (e) => setError(getErrorMessage(e, 'Slack disconnect failed')),
   });
 
   const bindChannel = useMutation({
@@ -94,8 +129,35 @@ export function ConnectorsPage() {
     onError: (e) => setError(getErrorMessage(e, 'Bind failed')),
   });
 
-  const gh = connectorsQ.data?.connectors?.[0] as
-    { connected?: boolean; repos?: string[]; lastSyncAt?: string | null } | undefined;
+  const unbindChannel = useMutation({
+    mutationFn: async (bindingId: string) =>
+      apiRequest(`/slack/bindings/${bindingId}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      setUnbindId(null);
+      setMsg('Channel unbound.');
+      await invalidate();
+    },
+    onError: (e) => setError(getErrorMessage(e, 'Unbind failed')),
+  });
+
+  const backfillChannel = useMutation({
+    mutationFn: async (bindingId: string) =>
+      apiRequest(`/slack/bindings/${bindingId}/backfill`, { method: 'POST', body: {} }),
+    onSuccess: async () => {
+      notify.success('Channel backfill started.');
+      await invalidate();
+    },
+    onError: (e) => {
+      if (e instanceof ApiClientError && (e.status === 404 || e.status === 501)) {
+        notify.info('Channel backfill is not available on this install yet.');
+        return;
+      }
+      notify.error(getErrorMessage(e, 'Backfill failed'));
+    },
+  });
+
+  const gh = connectorsQ.data?.connectors?.[0] as GithubStatus | undefined;
+  const slackOauthUrl = `${getApiBaseUrl()}/slack/oauth/start`;
 
   return (
     <div className="h-full overflow-y-auto p-8 max-w-3xl">
@@ -136,18 +198,31 @@ export function ConnectorsPage() {
               Repos: {(gh.repos ?? []).join(', ') || '—'}
               {gh.lastSyncAt ? ` · last sync ${new Date(gh.lastSyncAt).toLocaleString()}` : ''}
             </p>
-            <Button
-              variant="primary"
-              size="sm"
-              className="w-fit"
-              loading={ghSync.isPending}
-              onClick={() => {
-                setError(null);
-                ghSync.mutate();
-              }}
-            >
-              Sync issues
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-fit"
+                loading={ghSync.isPending}
+                onClick={() => {
+                  setError(null);
+                  ghSync.mutate();
+                }}
+              >
+                Sync issues
+              </Button>
+              <Button
+                variant="error"
+                size="sm"
+                className="w-fit"
+                onClick={() => {
+                  setError(null);
+                  setGhDisconnectOpen(true);
+                }}
+              >
+                Disconnect
+              </Button>
+            </div>
           </>
         ) : (
           <>
@@ -184,18 +259,48 @@ export function ConnectorsPage() {
       <section className="border border-neutral-200 rounded-20 p-5 flex flex-col gap-3">
         <h2 className="text-[16px] font-semibold">Slack (messaging)</h2>
         <p className="text-[12px] text-neutral-500">
-          Install bot token (xoxb-…), bind channels to listen, Events API webhook{' '}
-          <code>/webhooks/slack/events</code> with <code>SLACK_SIGNING_SECRET</code>. Mentions ack
-          with hourglass and reply in thread.
+          Install via OAuth or paste a bot token (xoxb-…), bind channels to listen, Events API
+          webhook <code>/webhooks/slack/events</code> with <code>SLACK_SIGNING_SECRET</code>. Mentions
+          ack with hourglass and reply in thread.
         </p>
         {slackQ.data?.connected ? (
           <>
             <p className="text-[13px] text-primary-base">
               Connected{slackQ.data.teamName ? ` · ${slackQ.data.teamName}` : ''}
             </p>
-            <ul className="text-[12px] text-neutral-600 list-disc pl-5">
+            <ul className="text-[12px] text-neutral-600 list-none p-0 m-0 flex flex-col gap-2">
               {(slackQ.data.bindings ?? []).map((b) => (
-                <li key={b.id}>{b.channelName ? `#${b.channelName}` : b.channelId}</li>
+                <li
+                  key={b.id}
+                  className="flex flex-wrap items-center justify-between gap-2 border border-neutral-100 rounded-12 px-3 py-2"
+                >
+                  <span>{b.channelName ? `#${b.channelName}` : b.channelId}</span>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="neutral"
+                      size="sm"
+                      className="w-fit"
+                      loading={backfillChannel.isPending && backfillChannel.variables === b.id}
+                      onClick={() => {
+                        setError(null);
+                        backfillChannel.mutate(b.id);
+                      }}
+                    >
+                      Backfill
+                    </Button>
+                    <Button
+                      variant="error"
+                      size="sm"
+                      className="w-fit"
+                      onClick={() => {
+                        setError(null);
+                        setUnbindId(b.id);
+                      }}
+                    >
+                      Unbind
+                    </Button>
+                  </div>
+                </li>
               ))}
             </ul>
             <div className="flex flex-wrap gap-2 items-end">
@@ -224,10 +329,39 @@ export function ConnectorsPage() {
               >
                 Bind channel
               </Button>
+              <Button
+                variant="error"
+                size="sm"
+                className="w-fit"
+                onClick={() => {
+                  setError(null);
+                  setSlackDisconnectOpen(true);
+                }}
+              >
+                Disconnect Slack
+              </Button>
             </div>
           </>
         ) : (
           <>
+            {slackQ.data?.oauthConfigured ? (
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-fit"
+                type="button"
+                onClick={() => {
+                  window.location.assign(slackOauthUrl);
+                }}
+              >
+                Add to Slack
+              </Button>
+            ) : null}
+            <p className="text-[12px] text-neutral-500">
+              {slackQ.data?.oauthConfigured
+                ? 'Or paste a bot token if you cannot complete OAuth in this environment.'
+                : 'OAuth is not configured on this install. Paste a bot token to connect.'}
+            </p>
             <input
               type="password"
               className="h-9 px-3 border border-neutral-200 rounded-8 text-[13px]"
@@ -242,7 +376,7 @@ export function ConnectorsPage() {
               onChange={(e) => setSlackTeamId(e.target.value)}
             />
             <Button
-              variant="primary"
+              variant="neutral"
               size="sm"
               className="w-fit"
               loading={slackInstall.isPending}
@@ -257,6 +391,41 @@ export function ConnectorsPage() {
           </>
         )}
       </section>
+
+      <ConfirmModal
+        open={ghDisconnectOpen}
+        onOpenChange={setGhDisconnectOpen}
+        title="Disconnect GitHub?"
+        description="This removes the connector, imported work items, and their memory chunks for this workspace."
+        confirmLabel="Disconnect"
+        destructive
+        loading={ghDisconnect.isPending}
+        onConfirm={() => ghDisconnect.mutate()}
+      />
+      <ConfirmModal
+        open={slackDisconnectOpen}
+        onOpenChange={setSlackDisconnectOpen}
+        title="Disconnect Slack?"
+        description="This uninstalls the Slack bot and unbinds every channel in this workspace."
+        confirmLabel="Disconnect"
+        destructive
+        loading={slackDisconnect.isPending}
+        onConfirm={() => slackDisconnect.mutate()}
+      />
+      <ConfirmModal
+        open={Boolean(unbindId)}
+        onOpenChange={(next) => {
+          if (!next) setUnbindId(null);
+        }}
+        title="Unbind this channel?"
+        description="script will stop ingesting new messages from this Slack channel."
+        confirmLabel="Unbind"
+        destructive
+        loading={unbindChannel.isPending}
+        onConfirm={() => {
+          if (unbindId) unbindChannel.mutate(unbindId);
+        }}
+      />
     </div>
   );
 }

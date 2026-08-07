@@ -277,6 +277,41 @@ async function upsertFromFireflies(
   });
 }
 
+export async function resolveCommitmentOwner(
+  workspaceId: string,
+  ownerLabel: string | null | undefined,
+): Promise<string | null> {
+  const label = ownerLabel?.trim();
+  if (!label) return null;
+  const lowered = label.toLowerCase();
+
+  const identities = await prisma.personIdentity.findMany({
+    where: {
+      workspaceId,
+      userId: { not: null },
+      OR: [
+        { displayName: { equals: label, mode: 'insensitive' } },
+        { email: { equals: lowered, mode: 'insensitive' } },
+      ],
+    },
+    select: { userId: true },
+    take: 8,
+  });
+  const fromIdentity = identities.find((row) => row.userId)?.userId ?? null;
+  if (fromIdentity) return fromIdentity;
+
+  const members = await prisma.workspaceMember.findMany({
+    where: { workspaceId },
+    include: { user: { select: { id: true, name: true, email: true } } },
+  });
+  const member = members.find((row) => {
+    const name = row.user.name.trim().toLowerCase();
+    const email = row.user.email.trim().toLowerCase();
+    return name === lowered || email === lowered;
+  });
+  return member?.user.id ?? null;
+}
+
 export async function processMeetingEmbeddings(meetingId: string): Promise<void> {
   const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
   if (!meeting?.transcriptText) return;
@@ -393,12 +428,19 @@ export async function processMeetingEmbeddings(meetingId: string): Promise<void>
 
     await prisma.meetingCommitment.deleteMany({ where: { meetingId: meeting.id } });
     if (commitments.length > 0) {
+      const withOwners = await Promise.all(
+        commitments.map(async (c) => ({
+          ...c,
+          ownerUserId: await resolveCommitmentOwner(meeting.workspaceId, c.ownerLabel),
+        })),
+      );
       await prisma.meetingCommitment.createMany({
-        data: commitments.map((c) => ({
+        data: withOwners.map((c) => ({
           meetingId: meeting.id,
           workspaceId: meeting.workspaceId,
           text: c.text,
           ownerLabel: c.ownerLabel,
+          ownerUserId: c.ownerUserId,
           dueAt: c.dueAt ? new Date(c.dueAt) : null,
           sourceStartMs: c.sourceStartMs,
         })),
@@ -515,6 +557,7 @@ export async function getMeetingApi(
         id: c.id,
         text: c.text,
         ownerLabel: c.ownerLabel,
+        ownerUserId: c.ownerUserId,
         dueAt: c.dueAt?.toISOString() ?? null,
         sourceStartMs: c.sourceStartMs,
       })),

@@ -10,6 +10,8 @@ export type AgentToolContext = {
   /** owner/admin: bypass restricted principal checks */
   elevated?: boolean;
   conversationId?: string;
+  /** Workflow executor path: complete write tools without a chat ConfirmModal. */
+  skipHitl?: boolean;
 };
 
 export type ToolExecutionResult = {

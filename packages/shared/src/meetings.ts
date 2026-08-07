@@ -68,6 +68,7 @@ export const publicMeetingDetailSchema = publicMeetingSchema.extend({
       id: z.string(),
       text: z.string(),
       ownerLabel: z.string().nullable(),
+      ownerUserId: z.string().nullable().optional(),
       dueAt: z.string().datetime().nullable(),
       sourceStartMs: z.number().int().nullable(),
     }),

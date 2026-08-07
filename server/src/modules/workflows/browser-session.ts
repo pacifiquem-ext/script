@@ -1,4 +1,10 @@
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type BrowserContextOptions,
+  type Page,
+} from 'playwright';
 import { logger } from '../../lib/logger';
 
 const IDLE_MS = 15 * 60 * 1000;
@@ -36,25 +42,36 @@ function ensureSweep(): void {
   if (typeof timer.unref === 'function') timer.unref();
 }
 
-async function createSession(): Promise<Session> {
+export type BrowserSessionOptions = {
+  storageState?: BrowserContextOptions['storageState'];
+};
+
+async function createSession(opts?: BrowserSessionOptions): Promise<Session> {
   const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
-  const context = await browser.newContext({
+  const contextOptions: BrowserContextOptions = {
     viewport: { width: 1280, height: 720 },
     userAgent:
       'Mozilla/5.0 (compatible; ScriptWorkflowAgent/1.0; +https://script.local) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-  });
+  };
+  if (opts?.storageState) {
+    contextOptions.storageState = opts.storageState;
+  }
+  const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   return { browser, context, page, lastUsed: Date.now(), actions: [] };
 }
 
-export async function getBrowserSession(sessionKey: string): Promise<Session> {
+export async function getBrowserSession(
+  sessionKey: string,
+  opts?: BrowserSessionOptions,
+): Promise<Session> {
   ensureSweep();
   let session = sessions.get(sessionKey);
   if (!session) {
-    session = await createSession();
+    session = await createSession(opts);
     sessions.set(sessionKey, session);
     logger.info({ sessionKey }, 'workflow browser session opened');
   }

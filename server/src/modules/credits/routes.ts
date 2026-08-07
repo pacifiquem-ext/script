@@ -7,4 +7,9 @@ export async function creditsRoutes(app: FastifyInstance) {
     const { workspace } = await requireWorkspace(request);
     return credits.getBalance(workspace.id);
   });
+
+  app.get('/credits/usage', async (request) => {
+    const { workspace } = await requireWorkspace(request);
+    return credits.getWorkspaceUsage(workspace.id);
+  });
 }

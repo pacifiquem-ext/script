@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PublicMeeting, PublicMeetingDetail } from '@script/shared';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { apiRequest } from '../../lib/api-client';
 import { getErrorMessage } from '../../lib/form-errors';
@@ -18,12 +20,20 @@ type ConnectorStatus = {
 
 export function MeetingsPage() {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
   const [highlightMs, setHighlightMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fromQuery = searchParams.get('id');
+    if (fromQuery) setSelectedId(fromQuery);
+    const t = searchParams.get('t');
+    if (t && Number.isFinite(Number(t))) setHighlightMs(Number(t));
+  }, [searchParams]);
 
   const listQuery = useQuery({
     queryKey: ['meetings'],
@@ -115,7 +125,7 @@ export function MeetingsPage() {
                 </p>
               )}
               {connector.lastError && (
-                <p className="text-[11px] text-red-600">{connector.lastError}</p>
+                <Alert status="error" variant="stroke" compact description={connector.lastError} />
               )}
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -160,14 +170,32 @@ export function MeetingsPage() {
           )}
         </div>
         <div className="flex-1 overflow-y-auto p-2">
-          {listQuery.isLoading && <LoadingState />}
-          {!listQuery.isLoading && meetings.length === 0 && (
-            <EmptyState
-              title="No meetings yet"
-              description="Connect Fireflies and run Sync to import call transcripts."
+          {(listQuery.isLoading || connectorQuery.isLoading) && <LoadingState />}
+          {(listQuery.isError || connectorQuery.isError) && (
+            <ErrorState
+              message={getErrorMessage(
+                listQuery.error ?? connectorQuery.error,
+                'Failed to load meetings',
+              )}
+              onRetry={() => {
+                void listQuery.refetch();
+                void connectorQuery.refetch();
+              }}
             />
           )}
-          {meetings.map((m) => (
+          {!listQuery.isLoading &&
+            !connectorQuery.isLoading &&
+            !listQuery.isError &&
+            !connectorQuery.isError &&
+            meetings.length === 0 && (
+              <EmptyState
+                title="No meetings yet"
+                description="Connect Fireflies and run Sync to import call transcripts."
+              />
+            )}
+          {!listQuery.isError &&
+            !connectorQuery.isError &&
+            meetings.map((m) => (
             <button
               key={m.id}
               type="button"
@@ -274,6 +302,7 @@ export function MeetingsPage() {
                       >
                         {c.text}
                         {c.ownerLabel ? ` — ${c.ownerLabel}` : ''}
+                        {c.ownerUserId ? ' · linked member' : ''}
                         {c.sourceStartMs != null ? ` (${Math.floor(c.sourceStartMs / 1000)}s)` : ''}
                       </button>
                     </li>

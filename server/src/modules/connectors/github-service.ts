@@ -1,10 +1,13 @@
 import { prisma } from '../../db/prisma';
+import { setMemoryChunkEmbedding } from '../../db/vector';
 import { encryptSecret, decryptSecret, hasTokenEncryptionKey } from '../../lib/token-crypto';
 import { BadRequestError, NotFoundError } from '../../common/errors';
 import { assertLicenseAllowsWrite } from '../license/license-service';
 import { logger } from '../../lib/logger';
 import { recordAudit } from '../audit/audit-service';
 import { upsertPersonIdentity } from '../clearance/clearance-service';
+import { chunkText } from '../jobs/extract';
+import { embedTexts } from '../jobs/embeddings';
 
 const PROVIDER = 'github';
 
@@ -91,7 +94,28 @@ export async function connectGitHub(
 
 export async function disconnectGitHub(workspaceId: string, userId: string) {
   await assertLicenseAllowsWrite();
-  await prisma.systemConnector.deleteMany({ where: { workspaceId, provider: PROVIDER } });
+  const connector = await prisma.systemConnector.findUnique({
+    where: { workspaceId_provider: { workspaceId, provider: PROVIDER } },
+  });
+  if (connector) {
+    const items = await prisma.workItem.findMany({
+      where: {
+        workspaceId,
+        OR: [{ project: { connectorId: connector.id } }, { externalId: { startsWith: 'github:' } }],
+      },
+      select: { id: true, externalId: true },
+    });
+    const keys = [...new Set(items.flatMap((i) => [i.externalId, i.id]))];
+    if (keys.length > 0) {
+      await prisma.memorySource.deleteMany({
+        where: { workspaceId, type: 'work_item', externalKey: { in: keys } },
+      });
+    }
+    if (items.length > 0) {
+      await prisma.workItem.deleteMany({ where: { id: { in: items.map((i) => i.id) } } });
+    }
+    await prisma.systemConnector.delete({ where: { id: connector.id } });
+  }
   await recordAudit({
     workspaceId,
     actorUserId: userId,
@@ -185,7 +209,7 @@ export async function syncGitHub(workspaceId: string, userId: string) {
         });
         assigneeUserId = id?.userId ?? null;
       }
-      await prisma.workItem.upsert({
+      const workItem = await prisma.workItem.upsert({
         where: {
           workspaceId_externalId: { workspaceId, externalId },
         },
@@ -214,6 +238,14 @@ export async function syncGitHub(workspaceId: string, userId: string) {
           projectId: project.id,
         },
       });
+      await indexWorkItemMemory({
+        workspaceId,
+        workItemId: workItem.id,
+        externalId: workItem.externalId,
+        title: issue.title,
+        body: issue.body,
+        issueNumber: issue.number,
+      });
       imported += 1;
     }
   }
@@ -222,8 +254,85 @@ export async function syncGitHub(workspaceId: string, userId: string) {
     where: { id: connector.id },
     data: { lastSyncAt: new Date(), lastError: null },
   });
-  logger.info({ workspaceId, imported }, 'github sync complete');
+  logger.info({ workspaceId, userId, imported }, 'github sync complete');
   return { imported };
+}
+
+export async function indexWorkItemMemory(input: {
+  workspaceId: string;
+  workItemId: string;
+  externalId: string;
+  title: string;
+  body: string | null;
+  issueNumber: string | number;
+}): Promise<void> {
+  const externalKey = input.externalId || input.workItemId;
+  let source = await prisma.memorySource.findFirst({
+    where: { workspaceId: input.workspaceId, type: 'work_item', externalKey },
+  });
+  if (!source) {
+    source = await prisma.memorySource.create({
+      data: {
+        workspaceId: input.workspaceId,
+        type: 'work_item',
+        title: input.title,
+        externalKey,
+      },
+    });
+  } else if (source.title !== input.title) {
+    source = await prisma.memorySource.update({
+      where: { id: source.id },
+      data: { title: input.title },
+    });
+  }
+
+  const text = [input.title.trim(), input.body?.trim()].filter(Boolean).join('\n\n');
+  const chunks = chunkText(text);
+  if (chunks.length === 0) {
+    await prisma.memoryChunk.deleteMany({ where: { memorySourceId: source.id } });
+    return;
+  }
+
+  let embeddings: number[][] = [];
+  try {
+    embeddings = await embedTexts(
+      chunks.map((c) => c.content),
+      'document',
+    );
+  } catch (err) {
+    logger.warn(
+      { err, workItemId: input.workItemId },
+      'work item embed failed; storing text chunks only',
+    );
+  }
+
+  const issueNumber = String(input.issueNumber);
+  await prisma.$transaction(async (tx) => {
+    await tx.memoryChunk.deleteMany({ where: { memorySourceId: source.id } });
+    await tx.memoryChunk.createMany({
+      data: chunks.map((chunk, i) => ({
+        memorySourceId: source.id,
+        workspaceId: input.workspaceId,
+        sourceType: 'work_item' as const,
+        position: i,
+        content: chunk.content,
+        startOffset: chunk.startOffset,
+        endOffset: chunk.endOffset,
+        pageNumber: chunk.pageNumber,
+        externalId: issueNumber,
+      })),
+    });
+    if (embeddings.length === 0) return;
+    const rows = await tx.memoryChunk.findMany({
+      where: { memorySourceId: source.id },
+      select: { id: true, position: true },
+      orderBy: { position: 'asc' },
+    });
+    for (const row of rows) {
+      const emb = embeddings[row.position];
+      if (emb) await setMemoryChunkEmbedding(tx, row.id, emb);
+    }
+  });
 }
 
 /** Live assignee/state from GitHub so answers are not stale. */

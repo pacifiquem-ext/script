@@ -3,6 +3,8 @@ import { buildApp } from '../src/app';
 import { prisma } from '../src/db/prisma';
 import { sha256 } from '../src/lib/crypto';
 import { originHeaders } from './helpers';
+import { setMemoryChunkEmbedding } from '../src/db/vector';
+import { embedTexts } from '../src/modules/jobs/embeddings';
 import { createReadyDocumentWithVersion } from './helpers-documents';
 
 const app = buildApp();
@@ -199,5 +201,52 @@ describe('chat routes', () => {
       payload: { content: 'Use pending doc', documentIds: [pending.id] },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('passive RAG citations include workflow memory when unscoped', async () => {
+    const phrase =
+      'Workflow unique phrase: rotate the staging API keys weekly for acme-onboarding.';
+    const source = await prisma.memorySource.create({
+      data: {
+        workspaceId,
+        type: 'workflow',
+        title: 'Acme onboarding',
+        externalKey: `wf-chat-${Date.now()}`,
+      },
+    });
+    const chunk = await prisma.memoryChunk.create({
+      data: {
+        memorySourceId: source.id,
+        workspaceId,
+        sourceType: 'workflow',
+        position: 0,
+        content: phrase,
+        startOffset: 0,
+        endOffset: phrase.length,
+      },
+    });
+    const [embedding] = await embedTexts([phrase]);
+    await setMemoryChunkEmbedding(prisma, chunk.id, embedding);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/conversations/${conversationId}/messages/sync`,
+      headers: originHeaders(),
+      cookies,
+      payload: { content: phrase, documentIds: [] },
+    });
+    expect(res.statusCode).toBe(200);
+    const citations = res.json().message.citations as Array<{
+      sourceType?: string;
+      workflowId?: string;
+      documentName: string;
+      chunkId: string;
+    }>;
+    expect(citations.some((c) => c.sourceType === 'workflow' && c.chunkId === chunk.id)).toBe(
+      true,
+    );
+    const hit = citations.find((c) => c.chunkId === chunk.id);
+    expect(hit?.workflowId).toBe(source.externalKey);
+    expect(hit?.documentName).toMatch(/onboarding/i);
   });
 });

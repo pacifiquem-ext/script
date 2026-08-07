@@ -1,6 +1,7 @@
 import type { CreditLedgerReason, Prisma } from '@prisma/client';
 import { BadRequestError } from '../../common/errors';
 import { prisma } from '../../db/prisma';
+import { getLicenseStatus } from '../license/license-service';
 
 export async function getBalance(workspaceId: string) {
   const workspace = await prisma.workspace.findUniqueOrThrow({
@@ -10,6 +11,33 @@ export async function getBalance(workspaceId: string) {
   return {
     balance: workspace.creditBalance?.balance ?? 0,
     plan: workspace.plan,
+  };
+}
+
+export async function getWorkspaceUsage(workspaceId: string) {
+  const [workspace, memberCount, documentCount, conversationCount, meetingCount, license] =
+    await Promise.all([
+      prisma.workspace.findUniqueOrThrow({
+        where: { id: workspaceId },
+        include: { creditBalance: true },
+      }),
+      prisma.workspaceMember.count({ where: { workspaceId } }),
+      prisma.document.count({ where: { workspaceId } }),
+      prisma.conversation.count({ where: { workspaceId } }),
+      prisma.meeting.count({ where: { workspaceId } }),
+      getLicenseStatus(),
+    ]);
+
+  return {
+    plan: workspace.plan,
+    creditBalance: workspace.creditBalance?.balance ?? 0,
+    memberCount,
+    seatCap: license.enforced ? license.seats : null,
+    seatsUsed: license.enforced ? license.seatsUsed : memberCount,
+    documentCount,
+    conversationCount,
+    meetingCount,
+    licenseEnforced: license.enforced,
   };
 }
 

@@ -25,3 +25,10 @@ Until then: **one brain agent**, one entry (`chat-service` + `handleAgentAskWith
 
 Slack bot surface calls the same Mastra agent entry as web chat (T0.5). Do not adopt
 `@mastra/slack` until ADR reconciliation with 0009/0016.
+
+## HITL write confirmation (Phase M.6)
+
+Chat write tools (`complete_workflow_step`) use **Prisma `AgentWriteConfirmation` +
+confirmToken**, not a second Mastra `createWorkflow` graph. Product workflow runs stay
+Prisma (`WorkflowRun` / `WorkflowStepState`). The workflow-executor path sets
+`skipHitl` on RequestContext so evidence-backed browser completion is not double-gated.

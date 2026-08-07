@@ -213,6 +213,44 @@ export function getWorkflowRun(runId: string) {
   return apiRequest<PublicWorkflowRun>(`/workflows/runs/${runId}`);
 }
 
+export type PublicBrowserSession = {
+  id: string;
+  name: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+};
+
+export function listBrowserSessions() {
+  return apiRequest<{ sessions: PublicBrowserSession[] }>('/workflows/browser-sessions');
+}
+
+export function createBrowserSession(body: { name: string; storageState: unknown }) {
+  return apiRequest<PublicBrowserSession>('/workflows/browser-sessions', {
+    method: 'POST',
+    body,
+  });
+}
+
+export function deleteBrowserSession(id: string) {
+  return apiRequest<{ ok: true }>(`/workflows/browser-sessions/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export function confirmWriteConfirmation(confirmationId: string) {
+  return apiRequest<PublicWorkflowRun>(
+    `/workflows/write-confirmations/${encodeURIComponent(confirmationId)}/confirm`,
+    { method: 'POST', body: {} },
+  );
+}
+
+export function rejectWriteConfirmation(confirmationId: string) {
+  return apiRequest<{ ok: true }>(
+    `/workflows/write-confirmations/${encodeURIComponent(confirmationId)}/reject`,
+    { method: 'POST', body: {} },
+  );
+}
+
 export function completeWorkflowStep(
   runId: string,
   stepKey: string,
@@ -243,10 +281,13 @@ export function completeWorkflowStep(
  */
 export async function* executeWorkflowRunStream(
   runId: string,
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal; browserSessionId?: string },
 ): AsyncGenerator<WorkflowExecuteEvent> {
   const baseUrl = getApiBaseUrl();
-  const headers = new Headers({ Accept: 'text/event-stream' });
+  const headers = new Headers({
+    Accept: 'text/event-stream',
+    'Content-Type': 'application/json',
+  });
   const workspaceId = readCookie(COOKIE_WORKSPACE_ID);
   if (workspaceId) headers.set(WORKSPACE_HEADER, workspaceId);
 
@@ -254,6 +295,9 @@ export async function* executeWorkflowRunStream(
     method: 'POST',
     credentials: 'include',
     headers,
+    body: JSON.stringify(
+      opts?.browserSessionId ? { browserSessionId: opts.browserSessionId } : {},
+    ),
     signal: opts?.signal,
   });
 

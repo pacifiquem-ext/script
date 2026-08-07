@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { prisma } from '../../db/prisma';
 import * as workflows from '../../modules/workflows/workflow-service';
+import { createWriteConfirmation } from '../../modules/workflows/write-confirm';
 import { toolContextFromRequestContext } from '../request-context';
 
 async function memberRole(workspaceId: string, userId: string | undefined) {
@@ -68,21 +69,23 @@ export const getMyWorkflowProgressTool = createTool({
   },
 });
 
+const evidenceSchema = z.object({
+  method: z
+    .enum(['agent_browser', 'agent_tool', 'manual'])
+    .describe('How the step was completed'),
+  summary: z.string().min(1).describe('What was done and how you verified it'),
+  finalUrl: z.string().optional().describe('Page URL after the action, if browser was used'),
+  actions: z.array(z.string()).optional().describe('Short list of tool actions taken'),
+});
+
 export const completeWorkflowStepTool = createTool({
   id: 'complete_workflow_step',
   description:
-    'WRITE tool: mark a checklist step done after you actually performed it (browser tools or other tools). Requires runId + stepKey and evidence.summary of what you did (final URL, visible proof). Do NOT call this for steps you have not executed. Prefer method agent_browser when browser tools were used.',
+    'WRITE tool: mark a checklist step done after you actually performed it (browser tools or other tools). Requires runId + stepKey and evidence.summary of what you did (final URL, visible proof). Do NOT call this for steps you have not executed. Prefer method agent_browser when browser tools were used. In chat, if the result has needsConfirmation, stop and tell the user to confirm in the UI. You cannot complete the write yourself — retrying this tool will only queue another confirmation.',
   inputSchema: z.object({
     runId: z.string(),
     stepKey: z.string(),
-    evidence: z.object({
-      method: z
-        .enum(['agent_browser', 'agent_tool', 'manual'])
-        .describe('How the step was completed'),
-      summary: z.string().min(1).describe('What was done and how you verified it'),
-      finalUrl: z.string().optional().describe('Page URL after the action, if browser was used'),
-      actions: z.array(z.string()).optional().describe('Short list of tool actions taken'),
-    }),
+    evidence: evidenceSchema,
   }),
   execute: async (input, { requestContext }) => {
     const ctx = toolContextFromRequestContext(requestContext);
@@ -90,18 +93,34 @@ export const completeWorkflowStepTool = createTool({
       return { error: 'userId required to complete a workflow step' };
     }
     const role = await memberRole(ctx.workspaceId, ctx.userId);
+
+    const runId = input.runId;
+    const stepKey = input.stepKey;
+    const evidence = input.evidence;
+
+    if (!ctx.skipHitl) {
+      const confirmationId = await createWriteConfirmation({
+        workspaceId: ctx.workspaceId,
+        userId: ctx.userId,
+        toolName: 'complete_workflow_step',
+        payload: { runId, stepKey, evidence },
+      });
+      return {
+        ok: true,
+        needsConfirmation: true,
+        confirmationId,
+        runId,
+        stepKey,
+        message: 'Waiting for the user to confirm this write in the chat UI. Do not retry.',
+      };
+    }
+
     try {
-      const run = await workflows.completeStep(
-        ctx.workspaceId,
-        ctx.userId,
-        input.runId,
-        input.stepKey,
-        {
-          role,
-          source: input.evidence.method === 'agent_browser' ? 'agent_browser' : 'agent',
-          evidence: input.evidence,
-        },
-      );
+      const run = await workflows.completeStep(ctx.workspaceId, ctx.userId, runId, stepKey, {
+        role,
+        source: evidence.method === 'agent_browser' ? 'agent_browser' : 'agent',
+        evidence,
+      });
       return {
         ok: true,
         runId: run.id,

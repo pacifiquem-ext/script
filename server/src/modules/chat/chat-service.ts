@@ -14,6 +14,7 @@ import {
   type CreateConversationBody,
   type ListConversationsQuery,
   type ListMessagesQuery,
+  type MemorySourceType,
   type MessageCitation,
   type SendMessageBody,
   type UpdateConversationBody,
@@ -25,6 +26,7 @@ import { logger } from '../../lib/logger';
 import { assertHasCredits, decrementCredits } from '../credits/credits-service';
 import { searchDocumentChunkVectors } from '../../db/vector';
 import { embedQuery } from '../jobs/embeddings';
+import { searchMemoryChunks } from '../memory/memory-chunks';
 
 import { assertLicenseAllowsWrite } from '../license/license-service';
 import { formatDocumentVersionChangelog } from '../library/document-versions';
@@ -40,6 +42,14 @@ export type ChatStreamEvent =
   | { type: 'citations'; citations: MessageCitation[] }
   | { type: 'tool_call'; name: string; input?: unknown; statusLabel?: string }
   | { type: 'tool_result'; name: string; ok: boolean }
+  | {
+      type: 'write_confirm';
+      tool: string;
+      confirmToken: string;
+      runId: string;
+      stepKey: string;
+      summary?: string;
+    }
   | { type: 'delta'; text: string }
   | { type: 'done'; message: ReturnType<typeof mapMessage> }
   | { type: 'error'; code: string; message: string };
@@ -207,7 +217,30 @@ type RetrievedChunk = {
   end_offset: number | null;
   page_number: number | null;
   score: number;
+  sourceType?: MemorySourceType;
+  meetingId?: string | null;
+  workItemId?: string | null;
+  workflowId?: string | null;
+  href?: string;
+  speaker?: string | null;
+  startMs?: number | null;
+  endMs?: number | null;
 };
+
+function mergeCitations(existing: MessageCitation[], incoming: MessageCitation[]): MessageCitation[] {
+  const byId = new Map<string, MessageCitation>();
+  for (const c of existing) {
+    if (c.chunkId) byId.set(c.chunkId, c);
+  }
+  for (const c of incoming) {
+    if (!c.chunkId) continue;
+    const prev = byId.get(c.chunkId);
+    if (!prev || (c.score ?? 0) > (prev.score ?? 0)) byId.set(c.chunkId, c);
+  }
+  return [...byId.values()]
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, RAG_TOP_K);
+}
 
 function documentNameMatches(content: string, name: string): boolean {
   const hay = content.toLowerCase();
@@ -284,7 +317,7 @@ async function retrieveContext(
     elevated: access?.elevated,
   });
 
-  return rows
+  const docChunks: RetrievedChunk[] = rows
     .map((row) => ({
       id: row.id,
       content: row.content,
@@ -296,8 +329,65 @@ async function retrieveContext(
       end_offset: row.end_offset,
       page_number: row.page_number,
       score: Math.max(0, Math.min(1, 1 - Number(row.distance))),
+      sourceType: 'document' as const,
     }))
     .filter((row) => row.score >= RAG_MIN_SIMILARITY);
+
+  if (documentIds.length > 0) {
+    return docChunks.slice(0, RAG_TOP_K);
+  }
+
+  const [meetingHits, workflowHits] = await Promise.all([
+    searchMemoryChunks({
+      workspaceId,
+      queryEmbedding: embedding,
+      sourceType: 'meeting',
+      limit: RAG_TOP_K,
+      minSimilarity: RAG_MIN_SIMILARITY,
+      maxClearanceLevel,
+      userId: access?.userId,
+      elevated: access?.elevated,
+    }),
+    searchMemoryChunks({
+      workspaceId,
+      queryEmbedding: embedding,
+      sourceType: 'workflow',
+      limit: RAG_TOP_K,
+      minSimilarity: RAG_MIN_SIMILARITY,
+      maxClearanceLevel,
+      userId: access?.userId,
+      elevated: access?.elevated,
+    }),
+  ]);
+  const memoryHits = [...meetingHits, ...workflowHits];
+
+  const memoryChunks: RetrievedChunk[] = memoryHits.map((hit) => ({
+    id: hit.chunkId,
+    content: hit.content,
+    document_id: hit.documentId ?? '',
+    document_version_id: hit.documentVersionId ?? '',
+    name: hit.sourceTitle ?? hit.documentName ?? hit.meetingTitle ?? 'Memory',
+    position: hit.position,
+    start_offset: hit.startOffset,
+    end_offset: hit.endOffset,
+    page_number: hit.pageNumber,
+    score: hit.score,
+    sourceType: hit.sourceType,
+    meetingId: hit.meetingId,
+    workItemId: hit.workItemId,
+    workflowId: hit.workflowId,
+    href: hit.href,
+    speaker: hit.speaker,
+    startMs: hit.startMs,
+    endMs: hit.endMs,
+  }));
+
+  const byId = new Map<string, RetrievedChunk>();
+  for (const chunk of [...docChunks, ...memoryChunks]) {
+    const prev = byId.get(chunk.id);
+    if (!prev || chunk.score > prev.score) byId.set(chunk.id, chunk);
+  }
+  return [...byId.values()].sort((a, b) => b.score - a.score).slice(0, RAG_TOP_K);
 }
 
 function toCitations(chunks: RetrievedChunk[]): MessageCitation[] {
@@ -322,15 +412,23 @@ function toCitations(chunks: RetrievedChunk[]): MessageCitation[] {
       endOffset = startOffset + (local.endOffset - local.startOffset);
     }
     return {
-      documentId: c.document_id,
+      sourceType: c.sourceType ?? 'document',
+      documentId: c.document_id || '',
       documentName: c.name,
-      documentVersionId: c.document_version_id,
+      documentVersionId: c.document_version_id || undefined,
       chunkId: c.id,
       position: c.position,
       score: Number(c.score.toFixed(4)),
       startOffset,
       endOffset,
       pageNumber: c.page_number,
+      meetingId: c.meetingId ?? undefined,
+      workItemId: c.workItemId ?? undefined,
+      workflowId: c.workflowId ?? undefined,
+      href: c.href,
+      speaker: c.speaker,
+      startMs: c.startMs,
+      endMs: c.endMs,
     };
   });
 }
@@ -532,22 +630,23 @@ export async function* streamAssistantReply(input: {
     // Prefer agent tool loop (P0/P4). Legacy completionStreamer remains for tests that inject it.
     const useLegacyStreamer = env.NODE_ENV === 'test' && completionStreamer !== testStreamer;
 
+    let contexts: RetrievedChunk[] = [];
+    try {
+      contexts = await retrieveContext(
+        input.workspaceId,
+        input.body.content,
+        documentIds,
+        maxClearance,
+        { userId: input.userId, elevated },
+      );
+    } catch (error) {
+      await prisma.message.delete({ where: { id: userMessage.id } }).catch(() => undefined);
+      throw error;
+    }
+    citations = toCitations(contexts);
+    if (citations.length) yield { type: 'citations', citations };
+
     if (useLegacyStreamer) {
-      let contexts: RetrievedChunk[] = [];
-      try {
-        contexts = await retrieveContext(
-          input.workspaceId,
-          input.body.content,
-          documentIds,
-          maxClearance,
-          { userId: input.userId, elevated },
-        );
-      } catch (error) {
-        await prisma.message.delete({ where: { id: userMessage.id } }).catch(() => undefined);
-        throw error;
-      }
-      citations = toCitations(contexts);
-      yield { type: 'citations', citations };
       const contextBlock = contexts
         .map((c, i) => `[${i + 1}] ${c.name} (chunk ${c.position})\n${c.content}`)
         .join('\n\n');
@@ -591,7 +690,7 @@ export async function* streamAssistantReply(input: {
           full += event.text;
           yield { type: 'delta', text: event.text };
         } else if (event.type === 'citations') {
-          citations = event.citations;
+          citations = mergeCitations(citations, event.citations);
           yield { type: 'citations', citations };
         } else if (event.type === 'tool_call') {
           yield {
@@ -602,6 +701,8 @@ export async function* streamAssistantReply(input: {
           };
         } else if (event.type === 'tool_result') {
           yield { type: 'tool_result', name: event.name, ok: event.ok };
+        } else if (event.type === 'write_confirm') {
+          yield event;
         }
       }
     }

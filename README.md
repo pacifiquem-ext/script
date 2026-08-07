@@ -14,12 +14,12 @@ definition in [`product_path.txt`](./product_path.txt)):
 |     | Capability                                | Status                                                  |
 | --- | ----------------------------------------- | ------------------------------------------------------- |
 | C1  | Document brain (Library + cited RAG chat) | **Shipped**                                             |
-| C2  | Agent tools / environment awareness       | **Partial** — runtime shipped, Library + web tools only |
-| C3  | Calls & meeting summaries                 | Not started                                             |
-| C4  | Bot surface — **Slack in v1** (ADR 0009)  | Not started                                             |
-| C5  | Channel context as memory                 | Not started                                             |
-| C6  | Notion / Jira / GitHub work context       | Not started                                             |
-| C7  | Markdown-authored workflows               | Not started                                             |
+| C2  | Agent tools / environment awareness       | **Shipped (v1)** — Mastra + domain tools + HITL         |
+| C3  | Calls & meeting summaries                 | **Shipped (v1)** — Fireflies (live key required)        |
+| C4  | Bot surface — **Slack in v1** (ADR 0009)  | **Shipped (v1 code)** — live Events need Slack keys     |
+| C5  | Channel context as memory                 | **Shipped (v1 code)** — ingest/backfill; ACL-gated RAG  |
+| C6  | Notion / Jira / GitHub work context       | **Partial** — GitHub PAT only; Jira/Notion Phase 8      |
+| C7  | Markdown-authored workflows               | **Shipped (v1)** — residuals: connector verify, live login E2E |
 
 **v1 ships with Slack as the only connector app** — Teams next, WhatsApp after
 ([ADR 0009](./docs/adr/0009-slack-first-messaging-connector.md)). Self-hosting the full product

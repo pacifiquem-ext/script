@@ -152,6 +152,8 @@ model User {
   workflowVersionsCreated WorkflowVersion[] @relation("WorkflowVersionCreatedBy")
   workflowRuns    WorkflowRun[]     @relation("WorkflowRunAssignee")
   workflowStepsCompleted WorkflowStepState[] @relation("WorkflowStepCompletedBy")
+  browserSessionVaults BrowserSessionVault[]
+  writeConfirmations   AgentWriteConfirmation[]
 
   @@index([lastWorkspaceId])
 }
@@ -229,6 +231,8 @@ model Workspace {
   workflowVersions   WorkflowVersion[]
   workflowRuns       WorkflowRun[]
   workflowStepStates WorkflowStepState[]
+  browserSessionVaults BrowserSessionVault[]
+  writeConfirmations   AgentWriteConfirmation[]
 
   /// Org retention hint (days). Null = use install default / unlimited. Documented in runbooks.
   retentionDays      Int?
@@ -478,6 +482,8 @@ model MemoryChunk {
   speaker           String?
   startMs           Int?
   endMs             Int?
+  /// Provider message/issue id (Slack ts, GitHub issue number, etc.) for delete/update.
+  externalId        String?
   createdAt         DateTime                     @default(now())
 
   memorySource MemorySource @relation(fields: [memorySourceId], references: [id], onDelete: Cascade)
@@ -489,6 +495,7 @@ model MemoryChunk {
   @@index([documentId])
   @@index([documentVersionId])
   @@index([meetingId])
+  @@index([workspaceId, sourceType, externalId])
 }
 
 model Meeting {
@@ -797,6 +804,7 @@ model MeetingCommitment {
   workspaceId   String
   text          String    @db.Text
   ownerLabel    String?
+  ownerUserId   String?
   dueAt         DateTime?
   sourceStartMs Int?
   createdAt     DateTime  @default(now())
@@ -806,6 +814,44 @@ model MeetingCommitment {
 
   @@index([workspaceId, meetingId])
   @@index([meetingId])
+  @@index([ownerUserId])
+}
+
+/// Encrypted Playwright storageState JSON for logged-in workflow browser runs (P5.8b).
+model BrowserSessionVault {
+  id                    String    @id @default(cuid())
+  workspaceId           String
+  userId                String
+  name                  String
+  encryptedStorageState String    @db.Text
+  lastUsedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, name])
+  @@index([workspaceId, userId])
+}
+
+/// HITL confirm token for agent write tools (P5.6b / Phase M.6).
+model AgentWriteConfirmation {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  toolName    String
+  payloadJson Json
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId])
+  @@index([expiresAt])
 }
 
 /// Persisted agent tool audit (Phase 1 / T0.3). Complements Pino agent_tool_audit.
