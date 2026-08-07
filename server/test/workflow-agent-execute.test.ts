@@ -105,6 +105,10 @@ describe('workflow agent execute (browser)', () => {
     });
     expect(created.statusCode).toBe(200);
     workflowId = created.json().id;
+    await prisma.workflowVersion.updateMany({
+      where: { workflowId },
+      data: { verifiedAt: new Date(), verifiedRunId: 'agent-execute-verify' },
+    });
     const published = await app.inject({
       method: 'POST',
       url: `/workflows/${workflowId}/publish`,
