@@ -66,12 +66,76 @@ describe('citations helpers', () => {
   it('dedupes source chips by document', () => {
     const chips = uniqueSourceChips(sample);
     expect(chips).toHaveLength(2);
+    expect(chips[0]?.sourceType).toBe('document');
+    expect(chips[0]?.label).toBe('api.md');
     expect(chips[0]?.documentName).toBe('api.md');
     expect(chips[0]?.indices).toEqual([1, 4]);
     expect(chips[1]?.documentName).toBe('storage.md');
     expect(chips[1]?.indices).toEqual([2, 3]);
     // best chunk is highest score for storage
     expect(chips[1]?.best.chunkId).toBe('c3');
+  });
+
+  it('groups mixed source types by identity', () => {
+    const mixed: MessageCitation[] = [
+      {
+        sourceType: 'meeting',
+        meetingId: 'm1',
+        documentId: '',
+        documentName: 'Standup',
+        chunkId: 'mc1',
+        position: 0,
+        score: 0.5,
+      },
+      {
+        sourceType: 'meeting',
+        meetingId: 'm1',
+        documentId: '',
+        documentName: 'Standup',
+        chunkId: 'mc2',
+        position: 1,
+        score: 0.9,
+        href: '/app/meetings/m1',
+      },
+      {
+        sourceType: 'work_item',
+        workItemId: 'wi1',
+        documentId: '',
+        documentName: 'Fix login',
+        chunkId: 'wc1',
+        position: 0,
+        score: 0.8,
+      },
+      {
+        sourceType: 'channel',
+        documentId: '',
+        documentName: '#eng',
+        chunkId: 'ch1',
+        position: 0,
+        score: 0.4,
+      },
+      {
+        sourceType: 'workflow',
+        workflowId: 'wf1',
+        documentId: '',
+        documentName: 'Onboarding',
+        chunkId: 'wfchunk',
+        position: 0,
+        score: 0.6,
+      },
+    ];
+    const chips = uniqueSourceChips(mixed);
+    expect(chips).toHaveLength(4);
+    expect(chips[0]).toMatchObject({
+      sourceType: 'meeting',
+      label: 'Standup',
+      href: '/app/meetings/m1',
+    });
+    expect(chips[0]?.indices).toEqual([1, 2]);
+    expect(chips[0]?.best.chunkId).toBe('mc2');
+    expect(chips[1]).toMatchObject({ sourceType: 'work_item', label: 'Fix login' });
+    expect(chips[2]).toMatchObject({ sourceType: 'channel', label: '#eng' });
+    expect(chips[3]).toMatchObject({ sourceType: 'workflow', label: 'Onboarding' });
   });
 
   it('extracts a local hint around a citation marker', () => {

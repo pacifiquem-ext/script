@@ -13,22 +13,22 @@ adoption story in research numbering — prefer Phase M IDs when updating the le
 
 ## 1. What Mastra is
 
-**Positioning.** Mastra is an open-source **TypeScript framework for AI agents and AI-powered applications**. Official copy: *“Build, observe, and improve agents… the leading TypeScript agent framework”* ([mastra.ai](https://mastra.ai/), [GitHub README](https://github.com/mastra-ai/mastra)). It targets production agents (tools, memory, workflows, multi-agent, channels, observability, evals), not a single-vendor chat SDK.
+**Positioning.** Mastra is an open-source **TypeScript framework for AI agents and AI-powered applications**. Official copy: _“Build, observe, and improve agents… the leading TypeScript agent framework”_ ([mastra.ai](https://mastra.ai/), [GitHub README](https://github.com/mastra-ai/mastra)). It targets production agents (tools, memory, workflows, multi-agent, channels, observability, evals), not a single-vendor chat SDK.
 
 **What it ships (product surface):**
 
-| Surface | Role |
-| --- | --- |
-| **Agents** | LLM + tools loop until final answer or stop condition |
-| **Workflows** | Graph-based multi-step orchestration (`.then` / `.branch` / `.parallel`) |
-| **Memory** | Thread history, working memory, semantic recall, observational memory |
-| **Harness / AgentController** | Multi-mode collaborative session runtime (modes, permissions, subagents) |
-| **Mastra instance + server** | Registry of agents/workflows/MCP; standalone or framework-mounted HTTP API |
-| **Observability + evals** | Traces, metrics, logs, feedback, scorers, datasets |
-| **MCP** | Client (consume remote tools) + Server (expose Mastra primitives) |
-| **RAG** | Document chunk/embed + vector store APIs (`@mastra/rag`, store packages) |
-| **Channels / signals** | Slack/Teams/etc. messaging; GitHub PR event signals for long-running agents |
-| **Model router** | `"provider/model"` string → 100s of models / 40–168 providers (docs vary by page age) |
+| Surface                       | Role                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| **Agents**                    | LLM + tools loop until final answer or stop condition                                 |
+| **Workflows**                 | Graph-based multi-step orchestration (`.then` / `.branch` / `.parallel`)              |
+| **Memory**                    | Thread history, working memory, semantic recall, observational memory                 |
+| **Harness / AgentController** | Multi-mode collaborative session runtime (modes, permissions, subagents)              |
+| **Mastra instance + server**  | Registry of agents/workflows/MCP; standalone or framework-mounted HTTP API            |
+| **Observability + evals**     | Traces, metrics, logs, feedback, scorers, datasets                                    |
+| **MCP**                       | Client (consume remote tools) + Server (expose Mastra primitives)                     |
+| **RAG**                       | Document chunk/embed + vector store APIs (`@mastra/rag`, store packages)              |
+| **Channels / signals**        | Slack/Teams/etc. messaging; GitHub PR event signals for long-running agents           |
+| **Model router**              | `"provider/model"` string → 100s of models / 40–168 providers (docs vary by page age) |
 
 **License (dual model)** — [LICENSE.md](https://github.com/mastra-ai/mastra/blob/main/LICENSE.md), [README Licensing](https://github.com/mastra-ai/mastra):
 
@@ -91,16 +91,16 @@ export const weatherTool = createTool({
 
 **Important capabilities for script:**
 
-| Feature | Purpose for us |
-| --- | --- |
-| `inputSchema` / `outputSchema` | Replaces hand-written Anthropic tool JSON schemas |
-| `toModelOutput` | Shrink tool result for the model; keep full result for app/UI |
-| `transform` | Shape tool I/O for display/transcript (separate from model payload) |
-| `requireApproval` | HITL before sensitive tools run |
-| `hooks` (`beforeToolCall` / `afterToolCall`) | Audit, policy blocks, clearance guards at agent level |
-| Lifecycle stream hooks | `onInputStart` / `onInputDelta` / `onInputAvailable` / `onOutput` for status lines |
-| `context.writer` | Emit custom stream events from tool execution |
-| Agents-as-tools / workflows-as-tools | Multi-agent & orchestration composition |
+| Feature                                      | Purpose for us                                                                     |
+| -------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `inputSchema` / `outputSchema`               | Replaces hand-written Anthropic tool JSON schemas                                  |
+| `toModelOutput`                              | Shrink tool result for the model; keep full result for app/UI                      |
+| `transform`                                  | Shape tool I/O for display/transcript (separate from model payload)                |
+| `requireApproval`                            | HITL before sensitive tools run                                                    |
+| `hooks` (`beforeToolCall` / `afterToolCall`) | Audit, policy blocks, clearance guards at agent level                              |
+| Lifecycle stream hooks                       | `onInputStart` / `onInputDelta` / `onInputAvailable` / `onOutput` for status lines |
+| `context.writer`                             | Emit custom stream events from tool execution                                      |
+| Agents-as-tools / workflows-as-tools         | Multi-agent & orchestration composition                                            |
 
 Built-in provider tools (from tools docs): **`webSearchTool`** (provider-native search: OpenAI, Anthropic, Gemini, xAI), **`webFetchTool`**. Third-party packages: `@mastra/tavily`, Bright Data, Perplexity, Firecrawl guides.
 
@@ -142,7 +142,7 @@ await agent.generate('…', {
 
 **Multi-agent isolation:** subagent delegation gets fresh `threadId`, resource `{parentResourceId}-{agentName}`; resource-scoped memory can still share working/semantic memory across agents with same `resource`.
 
-**Not the same as script “company memory”.** Mastra Memory = *conversation/agent state*. Script Library / `MemoryChunk` / DocumentVersion = *tenant knowledge base*. Keep product RAG in our Prisma/pgvector path; use Mastra Memory only for chat threads if we migrate off our `Conversation`/`Message` tables (or dual-write carefully).
+**Not the same as script “company memory”.** Mastra Memory = _conversation/agent state_. Script Library / `MemoryChunk` / DocumentVersion = _tenant knowledge base_. Keep product RAG in our Prisma/pgvector path; use Mastra Memory only for chat threads if we migrate off our `Conversation`/`Message` tables (or dual-write carefully).
 
 ### 2.5 Harness / AgentController
 
@@ -231,14 +231,14 @@ Docs: [Supervisor agents](https://mastra.ai/docs/agents/supervisor-agents), [mul
 
 ### Patterns Mastra supports
 
-| Pattern | Mechanism |
-| --- | --- |
-| **Supervisor** | Parent `Agent` with `agents: { research, writing }` — each subagent becomes `agent-<key>` tool; supervisor delegates via stream/generate |
-| **Agents as tools** | Same registration; subagent needs `description` for routing |
-| **Workflows as tools** | `workflows: { researchWorkflow }` → `workflow-<key>` tool |
-| **Workflow orchestration** | Explicit DAG when steps are known; agents inside steps for open-ended work |
-| **AgentController subagents** | Constrained child agents with `allowedControllerTools` / forked threads |
-| **Network** | `routingAgent.network(…)` exists in request-context docs (routing / multi-agent network API) |
+| Pattern                       | Mechanism                                                                                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Supervisor**                | Parent `Agent` with `agents: { research, writing }` — each subagent becomes `agent-<key>` tool; supervisor delegates via stream/generate |
+| **Agents as tools**           | Same registration; subagent needs `description` for routing                                                                              |
+| **Workflows as tools**        | `workflows: { researchWorkflow }` → `workflow-<key>` tool                                                                                |
+| **Workflow orchestration**    | Explicit DAG when steps are known; agents inside steps for open-ended work                                                               |
+| **AgentController subagents** | Constrained child agents with `allowedControllerTools` / forked threads                                                                  |
+| **Network**                   | `routingAgent.network(…)` exists in request-context docs (routing / multi-agent network API)                                             |
 
 ### Supervisor controls
 
@@ -267,25 +267,25 @@ Sources: monorepo layout ([GitHub tree](https://github.com/mastra-ai/mastra)), p
 
 ### 4.1 Web search
 
-| Option | Package / API | Notes |
-| --- | --- | --- |
-| Provider-native | `webSearchTool` from `@mastra/core/tools` | OpenAI / Anthropic / Gemini / xAI native search |
-| Tavily | `@mastra/tavily` | `createTavilySearchTool`, extract/crawl/map — **closest to our `web-search.ts` (Tavily)** |
-| Exa | guide pattern with `createTool` + `exa-js` | [Web search guide](https://mastra.ai/guides/guide/web-search) |
-| Bright Data / Perplexity / Firecrawl | `@mastra/…` tool packages / guides | Optional |
+| Option                               | Package / API                              | Notes                                                                                     |
+| ------------------------------------ | ------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Provider-native                      | `webSearchTool` from `@mastra/core/tools`  | OpenAI / Anthropic / Gemini / xAI native search                                           |
+| Tavily                               | `@mastra/tavily`                           | `createTavilySearchTool`, extract/crawl/map — **closest to our `web-search.ts` (Tavily)** |
+| Exa                                  | guide pattern with `createTool` + `exa-js` | [Web search guide](https://mastra.ai/guides/guide/web-search)                             |
+| Bright Data / Perplexity / Firecrawl | `@mastra/…` tool packages / guides         | Optional                                                                                  |
 
 **Recommendation:** reimplement `web_search` as `createTool` wrapping existing Tavily logic **or** adopt `@mastra/tavily` and drop custom HTTP. Keep `TAVILY_API_KEY` in `ENV.md`.
 
 ### 4.2 RAG / vector / pgvector
 
-| Piece | Package |
-| --- | --- |
-| Document chunking | `@mastra/rag` (`MDocument`) |
-| PG storage + `PgVector` | `@mastra/pg` (`PostgresStore`, `PgVector`, domain partials e.g. `WorkflowsPG`) |
-| Other vectors | `stores/chroma`, `pinecone`, `qdrant`, `mongodb`, … |
-| Voyage embedder | `@mastra/voyageai` (default model **voyage-3.5**, dims 256/512/1024/2048 — matches ADR 0002) |
-| Rerank | Voyage rerankers in `@mastra/voyageai` |
-| Query tool | `createVectorQueryTool` from `@mastra/rag` |
+| Piece                   | Package                                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| Document chunking       | `@mastra/rag` (`MDocument`)                                                                  |
+| PG storage + `PgVector` | `@mastra/pg` (`PostgresStore`, `PgVector`, domain partials e.g. `WorkflowsPG`)               |
+| Other vectors           | `stores/chroma`, `pinecone`, `qdrant`, `mongodb`, …                                          |
+| Voyage embedder         | `@mastra/voyageai` (default model **voyage-3.5**, dims 256/512/1024/2048 — matches ADR 0002) |
+| Rerank                  | Voyage rerankers in `@mastra/voyageai`                                                       |
+| Query tool              | `createVectorQueryTool` from `@mastra/rag`                                                   |
 
 **script:** keep Prisma `MemoryChunk` + `vector.ts` as source of truth. Optionally use `@mastra/voyageai` to replace our Voyage client for embeddings (ingestion + query) for one less hand-rolled client — **only if** dims/model stay voyage-3.5 @ 1024 and clearance filters remain on our queries.
 
@@ -348,16 +348,16 @@ Domains: memory, workflows, observability, scores, datasets, experiments, backgr
 
 Relevant providers for us:
 
-| Package | Use |
-| --- | --- |
-| `@mastra/pg` | Production memory/workflow snapshots on Postgres (can share Neon with **separate schema/tables** — not Prisma models) |
-| `@mastra/libsql` | Local/dev Studio |
-| `@mastra/redis` / Upstash | Cache / some domains |
-| Composite store | Route observability to DuckDB/ClickHouse |
+| Package                   | Use                                                                                                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `@mastra/pg`              | Production memory/workflow snapshots on Postgres (can share Neon with **separate schema/tables** — not Prisma models) |
+| `@mastra/libsql`          | Local/dev Studio                                                                                                      |
+| `@mastra/redis` / Upstash | Cache / some domains                                                                                                  |
+| Composite store           | Route observability to DuckDB/ClickHouse                                                                              |
 
 **Critical:** Mastra storage is **Mastra’s runtime state**, not a substitute for Prisma tenant data (Workspace, Document, Conversation, credits). Plan either:
 
-- **A.** Mastra PG tables in same DB, different schema (`mastra_*`), Prisma owns product tables; or  
+- **A.** Mastra PG tables in same DB, different schema (`mastra_*`), Prisma owns product tables; or
 - **B.** Keep Conversation/Message in Prisma; disable Mastra Memory / pass history as `context` messages only.
 
 ### 4.10 Fastify / server adapters
@@ -412,13 +412,13 @@ pnpm --filter @script/server add -D mastra
 
 ### 5.2 Compatibility gates (must resolve before install)
 
-| Gate | Mastra | script today | Action |
-| --- | --- | --- | --- |
-| Node | `>=22.13.0` on Mastra packages | engines `>=20`; local often Node 24 | Bump root `engines.node` to `>=22.13.0`; enforce in CI/Docker |
-| Module system | ESM (`"type": "module"`) | server is **CommonJS** (`"type": "commonjs"`, SWC → CJS) | Need interop plan: migrate server to ESM **or** dynamic `import()` seams + careful dual packaging |
-| Zod | Catalog often Zod 4 | server/shared on **Zod 3** | Test Standard Schema interop; may need dual Zod or upgrade monorepo carefully |
-| AI SDK | V2/V5+ model stack | Direct Anthropic SDK | Accept AI SDK as transitive; remove direct Anthropic tool loop later |
-| Auth | Mastra server auth optional | JWT cookies + workspace | Keep **script auth** on product routes; only use Mastra auth if mounting Mastra routes publicly |
+| Gate          | Mastra                         | script today                                             | Action                                                                                            |
+| ------------- | ------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Node          | `>=22.13.0` on Mastra packages | engines `>=20`; local often Node 24                      | Bump root `engines.node` to `>=22.13.0`; enforce in CI/Docker                                     |
+| Module system | ESM (`"type": "module"`)       | server is **CommonJS** (`"type": "commonjs"`, SWC → CJS) | Need interop plan: migrate server to ESM **or** dynamic `import()` seams + careful dual packaging |
+| Zod           | Catalog often Zod 4            | server/shared on **Zod 3**                               | Test Standard Schema interop; may need dual Zod or upgrade monorepo carefully                     |
+| AI SDK        | V2/V5+ model stack             | Direct Anthropic SDK                                     | Accept AI SDK as transitive; remove direct Anthropic tool loop later                              |
+| Auth          | Mastra server auth optional    | JWT cookies + workspace                                  | Keep **script auth** on product routes; only use Mastra auth if mounting Mastra routes publicly   |
 
 ### 5.3 Suggested folder layout
 
@@ -505,43 +505,43 @@ chat-service.ts
                     └── web-search.ts (Tavily)
 ```
 
-| Our component | Path | Mastra counterpart | Migration notes |
-| --- | --- | --- | --- |
-| Tool registry | `agent/registry.ts` | `createTool` + `Agent.tools` | Register tools on agent; keep audit via `hooks.afterToolCall` → `AgentToolCall` table |
-| Tool definitions | Anthropic `Tool` JSON | Zod `inputSchema` on `createTool` | Single source; drop hand JSON schemas |
-| Builtin tools bootstrap | `register-builtin-tools.ts` | `server/src/mastra/tools/*` imported into agent | Same tools: list / summary / search / web |
-| Library tools + clearance | `library-tools.ts` | `createTool` execute + `RequestContext` | **Keep** `filterAccessibleResourceIds` / `clearanceLevel lte` inside execute — never in model args |
-| Web search | `web-search.ts` | `@mastra/tavily` or `createTool` wrapper | Preserve citations shape for web hits |
-| Agent loop | `agent-runtime.ts` `runAgentWithTools` | `Agent.stream` / `generate` | Mastra owns maxSteps, tool loop, retries |
-| Anthropic SDK completion | `defaultAnthropicCreate` | Model router `model: 'anthropic/<id>'` | Drop direct `messages.create` for agent path |
-| System prompt | `AGENT_SYSTEM_PROMPT` | `Agent.instructions` (string or async fn) | Can still inject workspace-specific instructions via `RequestContext` |
-| Hard inventory routes | `inventory-intent` / forced tools | Keep as **pre-agent** branch in chat-service **or** input processor | Deterministic catalog answers remain product rule (AGENTS.md §2.5) — do not rely only on model tool choice |
-| SSE streaming | chat-service yields events | Map Mastra stream → `AgentStreamEvent` | Keep client `chat-api.ts` stable in phase 1 |
-| Tool status labels | `statusLabel` on registry | Map `tool-call` → label table or tool metadata | Client UX dependency |
-| Tool audit | `recordToolCallAudit` | `hooks.afterToolCall` + existing Prisma | Don’t rely on Mastra observability alone for compliance rows |
-| Credits billing | `assertHasCredits` / `decrementCredits` in chat-service | **Stay outside Mastra** | Bill per turn before/after agent call using usage tokens from stream |
-| Agent entry (Slack/webhooks) | `agent-entry.ts` | Same entry → Mastra agent | Clearance/workspace still from our binding layer |
-| Conversations | Prisma Conversation/Message | Optional Mastra Memory threads | Phase 1: Prisma only |
-| RAG retrieval | `search_library` + `vector.ts` | Custom tool only | Do not switch to generic `createVectorQueryTool` without clearance |
+| Our component                | Path                                                    | Mastra counterpart                                                  | Migration notes                                                                                            |
+| ---------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Tool registry                | `agent/registry.ts`                                     | `createTool` + `Agent.tools`                                        | Register tools on agent; keep audit via `hooks.afterToolCall` → `AgentToolCall` table                      |
+| Tool definitions             | Anthropic `Tool` JSON                                   | Zod `inputSchema` on `createTool`                                   | Single source; drop hand JSON schemas                                                                      |
+| Builtin tools bootstrap      | `register-builtin-tools.ts`                             | `server/src/mastra/tools/*` imported into agent                     | Same tools: list / summary / search / web                                                                  |
+| Library tools + clearance    | `library-tools.ts`                                      | `createTool` execute + `RequestContext`                             | **Keep** `filterAccessibleResourceIds` / `clearanceLevel lte` inside execute — never in model args         |
+| Web search                   | `web-search.ts`                                         | `@mastra/tavily` or `createTool` wrapper                            | Preserve citations shape for web hits                                                                      |
+| Agent loop                   | `agent-runtime.ts` `runAgentWithTools`                  | `Agent.stream` / `generate`                                         | Mastra owns maxSteps, tool loop, retries                                                                   |
+| Anthropic SDK completion     | `defaultAnthropicCreate`                                | Model router `model: 'anthropic/<id>'`                              | Drop direct `messages.create` for agent path                                                               |
+| System prompt                | `AGENT_SYSTEM_PROMPT`                                   | `Agent.instructions` (string or async fn)                           | Can still inject workspace-specific instructions via `RequestContext`                                      |
+| Hard inventory routes        | `inventory-intent` / forced tools                       | Keep as **pre-agent** branch in chat-service **or** input processor | Deterministic catalog answers remain product rule (AGENTS.md §2.5) — do not rely only on model tool choice |
+| SSE streaming                | chat-service yields events                              | Map Mastra stream → `AgentStreamEvent`                              | Keep client `chat-api.ts` stable in phase 1                                                                |
+| Tool status labels           | `statusLabel` on registry                               | Map `tool-call` → label table or tool metadata                      | Client UX dependency                                                                                       |
+| Tool audit                   | `recordToolCallAudit`                                   | `hooks.afterToolCall` + existing Prisma                             | Don’t rely on Mastra observability alone for compliance rows                                               |
+| Credits billing              | `assertHasCredits` / `decrementCredits` in chat-service | **Stay outside Mastra**                                             | Bill per turn before/after agent call using usage tokens from stream                                       |
+| Agent entry (Slack/webhooks) | `agent-entry.ts`                                        | Same entry → Mastra agent                                           | Clearance/workspace still from our binding layer                                                           |
+| Conversations                | Prisma Conversation/Message                             | Optional Mastra Memory threads                                      | Phase 1: Prisma only                                                                                       |
+| RAG retrieval                | `search_library` + `vector.ts`                          | Custom tool only                                                    | Do not switch to generic `createVectorQueryTool` without clearance                                         |
 
 ---
 
 ## 7. What we should NOT reinvent if Mastra provides it
 
-| Capability | Use Mastra | Keep ours |
-| --- | --- | --- |
-| Tool-use agent loop / max steps / multi-step tool chaining | ✅ | — |
-| Model routing, fallbacks, provider options | ✅ | — |
-| Streaming event model (internally) | ✅ | SSE façade mapping |
-| Workflow DAG + suspend/resume | ✅ (when product workflows land) | Markdown workflow product design still ours |
-| Multi-agent supervisor / delegation | ✅ | — |
-| MCP client/server plumbing | ✅ | — |
-| Observability traces for LLM/tool spans | ✅ (optional, add exporters) | Pino request logs stay |
-| Evals / rubric scorers for agent quality | ✅ | — |
-| Conversation memory layers (if we adopt) | ✅ | Product Conversation UI/API |
-| Slack channel adapter boilerplate | ✅ evaluate | Workspace binding, clearance, credits |
-| Voyage client for embeddings | ✅ evaluate `@mastra/voyageai` | Ingest pipeline, chunk storage schema |
-| Tavily tool schema/boilerplate | ✅ evaluate `@mastra/tavily` | SSRF policy, rate limits, citation DTO |
+| Capability                                                 | Use Mastra                       | Keep ours                                   |
+| ---------------------------------------------------------- | -------------------------------- | ------------------------------------------- |
+| Tool-use agent loop / max steps / multi-step tool chaining | ✅                               | —                                           |
+| Model routing, fallbacks, provider options                 | ✅                               | —                                           |
+| Streaming event model (internally)                         | ✅                               | SSE façade mapping                          |
+| Workflow DAG + suspend/resume                              | ✅ (when product workflows land) | Markdown workflow product design still ours |
+| Multi-agent supervisor / delegation                        | ✅                               | —                                           |
+| MCP client/server plumbing                                 | ✅                               | —                                           |
+| Observability traces for LLM/tool spans                    | ✅ (optional, add exporters)     | Pino request logs stay                      |
+| Evals / rubric scorers for agent quality                   | ✅                               | —                                           |
+| Conversation memory layers (if we adopt)                   | ✅                               | Product Conversation UI/API                 |
+| Slack channel adapter boilerplate                          | ✅ evaluate                      | Workspace binding, clearance, credits       |
+| Voyage client for embeddings                               | ✅ evaluate `@mastra/voyageai`   | Ingest pipeline, chunk storage schema       |
+| Tavily tool schema/boilerplate                             | ✅ evaluate `@mastra/tavily`     | SSRF policy, rate limits, citation DTO      |
 
 **Still reinvent / must remain product-owned:**
 
@@ -696,23 +696,23 @@ Mitigation: keep pre-agent hard routes or implement as Mastra **input processor*
 
 ## 10. Package inventory (quick reference)
 
-| npm package | Role |
-| --- | --- |
-| `@mastra/core` | Agent, workflows, tools, request-context, harness/controller, signals, storage interfaces |
-| `@mastra/memory` | Memory layers |
-| `@mastra/pg` | Postgres store + PgVector |
-| `@mastra/libsql` | Local store |
-| `@mastra/fastify` | Fastify `MastraServer` adapter |
-| `@mastra/mcp` | MCPClient / MCPServer |
-| `@mastra/observability` | Tracing/metrics exporters |
-| `@mastra/evals` | Scorers / prebuilt rubrics |
-| `@mastra/rag` | MDocument, vector query tools |
-| `@mastra/voyageai` | Voyage embeddings + rerank |
-| `@mastra/tavily` | Web search tools |
-| `@mastra/slack` | SlackProvider (app factory) |
-| `@mastra/github-signals` | GitHub PR signal provider |
-| `@mastra/ai-sdk` | Stream/message bridges to AI SDK UI |
-| `mastra` (CLI) | `mastra dev` / `build` / Studio |
+| npm package              | Role                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| `@mastra/core`           | Agent, workflows, tools, request-context, harness/controller, signals, storage interfaces |
+| `@mastra/memory`         | Memory layers                                                                             |
+| `@mastra/pg`             | Postgres store + PgVector                                                                 |
+| `@mastra/libsql`         | Local store                                                                               |
+| `@mastra/fastify`        | Fastify `MastraServer` adapter                                                            |
+| `@mastra/mcp`            | MCPClient / MCPServer                                                                     |
+| `@mastra/observability`  | Tracing/metrics exporters                                                                 |
+| `@mastra/evals`          | Scorers / prebuilt rubrics                                                                |
+| `@mastra/rag`            | MDocument, vector query tools                                                             |
+| `@mastra/voyageai`       | Voyage embeddings + rerank                                                                |
+| `@mastra/tavily`         | Web search tools                                                                          |
+| `@mastra/slack`          | SlackProvider (app factory)                                                               |
+| `@mastra/github-signals` | GitHub PR signal provider                                                                 |
+| `@mastra/ai-sdk`         | Stream/message bridges to AI SDK UI                                                       |
+| `mastra` (CLI)           | `mastra dev` / `build` / Studio                                                           |
 
 Monorepo also: `browser/*`, `voice/*`, `stores/*`, `auth/*`, `deployers/*`, `client-sdks/*`, `observability/*`.
 
@@ -720,46 +720,46 @@ Monorepo also: `browser/*`, `voice/*`, `stores/*`, `auth/*`, `deployers/*`, `cli
 
 ## 11. Decision summary (for a future ADR)
 
-| Question | Research recommendation |
-| --- | --- |
-| Adopt Mastra for agent loop? | **Yes, as library** — retire hand-rolled Anthropic loop after parity |
-| Replace Fastify with Mastra server? | **No** — use `@mastra/fastify` optionally; keep product routes |
-| Replace Prisma RAG with Mastra RAG? | **No** — custom tools over existing pgvector + clearance |
-| Use Mastra Memory for chat? | **Defer** — keep Prisma Conversation until dual-write plan |
-| Use Mastra Slack immediately? | **No** — after agent migration + Slack ADR reconciliation |
-| Production EE features? | **Avoid** until license decision |
+| Question                            | Research recommendation                                              |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| Adopt Mastra for agent loop?        | **Yes, as library** — retire hand-rolled Anthropic loop after parity |
+| Replace Fastify with Mastra server? | **No** — use `@mastra/fastify` optionally; keep product routes       |
+| Replace Prisma RAG with Mastra RAG? | **No** — custom tools over existing pgvector + clearance             |
+| Use Mastra Memory for chat?         | **Defer** — keep Prisma Conversation until dual-write plan           |
+| Use Mastra Slack immediately?       | **No** — after agent migration + Slack ADR reconciliation            |
+| Production EE features?             | **Avoid** until license decision                                     |
 
 ---
 
 ## 12. Source index (primary)
 
-| Topic | URL |
-| --- | --- |
-| Site / positioning | https://mastra.ai/ |
-| Docs home | https://mastra.ai/docs |
-| GitHub | https://github.com/mastra-ai/mastra |
-| License | https://github.com/mastra-ai/mastra/blob/main/LICENSE.md |
-| Agents | https://mastra.ai/docs/agents/overview |
-| Tools | https://mastra.ai/docs/agents/using-tools |
-| Supervisors | https://mastra.ai/docs/agents/supervisor-agents |
-| Workflows | https://mastra.ai/docs/workflows/overview |
-| Memory | https://mastra.ai/docs/memory/overview |
-| AgentController | https://mastra.ai/docs/harness/agent-controller |
-| MCP | https://mastra.ai/docs/mcp/overview |
-| RAG | https://mastra.ai/guides/rag/overview |
-| Models | https://mastra.ai/models |
-| Streaming | https://mastra.ai/guides/concepts/streaming |
-| Storage | https://mastra.ai/docs/storage/overview |
-| Observability | https://mastra.ai/docs/observability/overview |
-| Server adapters | https://mastra.ai/docs/server/server-adapters |
-| Fastify adapter | https://mastra.ai/reference/server/fastify-adapter |
-| Request context | https://mastra.ai/docs/server/request-context |
-| Channels | https://mastra.ai/docs/capabilities/channels/overview |
-| Manual install | https://mastra.ai/guides/getting-started/manual-install |
-| Slack package README | https://github.com/mastra-ai/mastra/blob/main/channels/slack/README.md |
+| Topic                 | URL                                                                        |
+| --------------------- | -------------------------------------------------------------------------- |
+| Site / positioning    | https://mastra.ai/                                                         |
+| Docs home             | https://mastra.ai/docs                                                     |
+| GitHub                | https://github.com/mastra-ai/mastra                                        |
+| License               | https://github.com/mastra-ai/mastra/blob/main/LICENSE.md                   |
+| Agents                | https://mastra.ai/docs/agents/overview                                     |
+| Tools                 | https://mastra.ai/docs/agents/using-tools                                  |
+| Supervisors           | https://mastra.ai/docs/agents/supervisor-agents                            |
+| Workflows             | https://mastra.ai/docs/workflows/overview                                  |
+| Memory                | https://mastra.ai/docs/memory/overview                                     |
+| AgentController       | https://mastra.ai/docs/harness/agent-controller                            |
+| MCP                   | https://mastra.ai/docs/mcp/overview                                        |
+| RAG                   | https://mastra.ai/guides/rag/overview                                      |
+| Models                | https://mastra.ai/models                                                   |
+| Streaming             | https://mastra.ai/guides/concepts/streaming                                |
+| Storage               | https://mastra.ai/docs/storage/overview                                    |
+| Observability         | https://mastra.ai/docs/observability/overview                              |
+| Server adapters       | https://mastra.ai/docs/server/server-adapters                              |
+| Fastify adapter       | https://mastra.ai/reference/server/fastify-adapter                         |
+| Request context       | https://mastra.ai/docs/server/request-context                              |
+| Channels              | https://mastra.ai/docs/capabilities/channels/overview                      |
+| Manual install        | https://mastra.ai/guides/getting-started/manual-install                    |
+| Slack package README  | https://github.com/mastra-ai/mastra/blob/main/channels/slack/README.md     |
 | Voyage package README | https://github.com/mastra-ai/mastra/blob/main/embedders/voyageai/README.md |
-| GitHub signals docs | https://mastra.ai/docs/long-running-agents/signal-providers |
+| GitHub signals docs   | https://mastra.ai/docs/long-running-agents/signal-providers                |
 
 ---
 
-*End of baseline. Implementation requires a user-approved ADR and Phase 0 spike results before dependency install lands on main.*
+_End of baseline. Implementation requires a user-approved ADR and Phase 0 spike results before dependency install lands on main._

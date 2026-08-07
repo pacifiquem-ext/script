@@ -4,6 +4,8 @@ import { isAppError } from '../../common/errors';
 import { buildSseHeaders } from '../../lib/sse-headers';
 import { requireWorkspace, requireWorkspaceRole } from '../../plugins/auth';
 import { executeWorkflowRun } from './agent-executor';
+import * as browserVault from './browser-vault';
+import * as writeConfirm from './write-confirm';
 import * as workflows from './workflow-service';
 
 const createBodySchema = z.object({
@@ -31,6 +33,18 @@ const completeBodySchema = z
   .optional()
   .default({});
 
+const executeBodySchema = z
+  .object({
+    browserSessionId: z.string().min(1).optional(),
+  })
+  .optional()
+  .default({});
+
+const createBrowserSessionBodySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  storageState: z.unknown(),
+});
+
 function writeEvent(reply: { raw: NodeJS.WritableStream }, payload: unknown) {
   reply.raw.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
@@ -48,6 +62,53 @@ export async function workflowRoutes(app: FastifyInstance) {
     return workflows.createWorkflow(workspace.id, user.id, body);
   });
 
+  app.get('/workflows/browser-sessions', async (request) => {
+    const { user, workspace } = await requireWorkspace(request);
+    return browserVault.listBrowserSessions(workspace.id, user.id);
+  });
+
+  app.post('/workflows/browser-sessions', async (request) => {
+    const { user, workspace } = await requireWorkspace(request);
+    const body = createBrowserSessionBodySchema.parse(request.body ?? {});
+    return browserVault.createBrowserSession(workspace.id, user.id, {
+      name: body.name,
+      storageState: body.storageState,
+    });
+  });
+
+  app.delete('/workflows/browser-sessions/:id', async (request) => {
+    const { user, workspace } = await requireWorkspace(request);
+    const { id } = request.params as { id: string };
+    return browserVault.deleteBrowserSession(workspace.id, user.id, id);
+  });
+
+  app.post('/workflows/write-confirmations/:confirmationId/confirm', async (request) => {
+    const { user, workspace } = await requireWorkspace(request);
+    const { confirmationId } = request.params as { confirmationId: string };
+    const consumed = await writeConfirm.consumeWriteConfirmation(
+      workspace.id,
+      user.id,
+      confirmationId,
+    );
+    return workflows.completeStep(
+      workspace.id,
+      user.id,
+      consumed.payload.runId,
+      consumed.payload.stepKey,
+      {
+        role: workspace.role,
+        source: consumed.payload.evidence.method === 'agent_browser' ? 'agent_browser' : 'agent',
+        evidence: consumed.payload.evidence,
+      },
+    );
+  });
+
+  app.post('/workflows/write-confirmations/:confirmationId/reject', async (request) => {
+    const { user, workspace } = await requireWorkspace(request);
+    const { confirmationId } = request.params as { confirmationId: string };
+    return writeConfirm.rejectWriteConfirmation(workspace.id, user.id, confirmationId);
+  });
+
   // Static run paths before /workflows/:id
   app.get('/workflows/runs/mine', async (request) => {
     const { user, workspace } = await requireWorkspace(request);
@@ -63,6 +124,7 @@ export async function workflowRoutes(app: FastifyInstance) {
   app.post('/workflows/runs/:runId/execute', async (request, reply) => {
     const { user, workspace } = await requireWorkspace(request);
     const { runId } = request.params as { runId: string };
+    const body = executeBodySchema.parse(request.body ?? {});
     const controller = new AbortController();
     const onResponseClose = () => {
       if (!reply.raw.writableEnded) controller.abort();
@@ -79,6 +141,7 @@ export async function workflowRoutes(app: FastifyInstance) {
         role: workspace.role,
         runId,
         maxClearanceLevel: workspace.clearanceLevel,
+        browserSessionId: body.browserSessionId,
         signal: controller.signal,
       })) {
         if (controller.signal.aborted) break;

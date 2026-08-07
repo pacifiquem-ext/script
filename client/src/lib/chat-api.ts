@@ -85,11 +85,21 @@ export function useChatMutations() {
   return { createConversation, renameConversation, deleteConversation, queryClient };
 }
 
+export type WriteConfirmEvent = {
+  type: 'write_confirm';
+  tool: string;
+  confirmToken: string;
+  runId: string;
+  stepKey: string;
+  summary?: string;
+};
+
 export type StreamHandlers = {
   onUserMessage?: (message: PublicMessage) => void;
   onCitations?: (citations: MessageCitation[]) => void;
   onToolCall?: (name: string, input?: unknown, statusLabel?: string) => void;
   onToolResult?: (name: string, ok: boolean) => void;
+  onWriteConfirm?: (event: WriteConfirmEvent) => void;
   onDelta: (text: string) => void;
   onDone?: (message: PublicMessage) => void;
   signal?: AbortSignal;
@@ -137,6 +147,7 @@ export async function streamMessage(
         | { type: 'citations'; citations: MessageCitation[] }
         | { type: 'tool_call'; name: string; input?: unknown; statusLabel?: string }
         | { type: 'tool_result'; name: string; ok: boolean }
+        | WriteConfirmEvent
         | { type: 'delta'; text: string }
         | { type: 'done'; message: PublicMessage }
         | { type: 'error'; code?: string; message?: string };
@@ -145,6 +156,7 @@ export async function streamMessage(
       if (payload.type === 'tool_call')
         opts.onToolCall?.(payload.name, payload.input, payload.statusLabel);
       if (payload.type === 'tool_result') opts.onToolResult?.(payload.name, payload.ok);
+      if (payload.type === 'write_confirm') opts.onWriteConfirm?.(payload);
       if (payload.type === 'delta' && payload.text) opts.onDelta(payload.text);
       if (payload.type === 'done') {
         doneMessage = payload.message;

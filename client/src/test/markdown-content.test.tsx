@@ -58,7 +58,7 @@ describe('MarkdownContent', () => {
     const html = renderToStaticMarkup(
       <MarkdownContent
         compact
-        content={'```ts\nconst secret = \"abc\";\n```\n\n```\nSTORAGE_DRIVER=s3\n```'}
+        content={'```ts\nconst secret = "abc";\n```\n\n```\nSTORAGE_DRIVER=s3\n```'}
       />,
     );
     expect(html).toContain('bg-neutral-900');

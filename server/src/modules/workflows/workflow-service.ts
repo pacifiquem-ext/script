@@ -134,9 +134,7 @@ function isAdminRole(role: WorkspaceRole): boolean {
   return role === 'owner' || role === 'admin';
 }
 
-function progressFromSteps(
-  steps: Array<{ status: string }>,
-): PublicWorkflowRun['progress'] {
+function progressFromSteps(steps: Array<{ status: string }>): PublicWorkflowRun['progress'] {
   let done = 0;
   let pending = 0;
   let skipped = 0;
@@ -267,10 +265,7 @@ async function loadWorkflowOrThrow(workspaceId: string, workflowId: string) {
   return wf;
 }
 
-function assertCanReadWorkflow(
-  status: WorkflowStatus,
-  role: WorkspaceRole,
-): void {
+function assertCanReadWorkflow(status: WorkflowStatus, role: WorkspaceRole): void {
   if (status === 'draft' && !isAdminRole(role)) {
     throw new ForbiddenError('Draft workflows are only visible to workspace admins');
   }
@@ -280,9 +275,7 @@ export async function listWorkflows(
   workspaceId: string,
   role: WorkspaceRole,
 ): Promise<{ workflows: PublicWorkflowListItem[] }> {
-  const where = isAdminRole(role)
-    ? { workspaceId }
-    : { workspaceId, status: 'published' as const };
+  const where = isAdminRole(role) ? { workspaceId } : { workspaceId, status: 'published' as const };
 
   const rows = await prisma.workflow.findMany({
     where,
@@ -905,7 +898,13 @@ export async function getMyProgress(
   workflowId?: string,
 ): Promise<{
   runs: PublicWorkflowRun[];
-  nextSteps: Array<{ runId: string; workflowId: string; workflowName: string; stepKey: string; label: string }>;
+  nextSteps: Array<{
+    runId: string;
+    workflowId: string;
+    workflowName: string;
+    stepKey: string;
+    label: string;
+  }>;
 }> {
   const where = {
     workspaceId,

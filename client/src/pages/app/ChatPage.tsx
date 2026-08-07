@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   humanizeIngestionFailure,
   type MessageCitation,
@@ -10,6 +10,7 @@ import voiceBubble from '../../assets/1440w/voice-bubble.png';
 import { DocumentCanvas } from '../../components/app/DocumentCanvas';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { MarkdownContent, CHAT_BODY_CLASS } from '../../components/ui/MarkdownContent';
@@ -24,7 +25,9 @@ import {
   useChatMutations,
   useCredits,
   useMessages,
+  type WriteConfirmEvent,
 } from '../../lib/chat-api';
+import { confirmWriteConfirmation, rejectWriteConfirmation } from '../../lib/workflows-api';
 import { matchDocumentsInText, useDocument, useDocuments, useFolders } from '../../lib/library-api';
 import { getErrorMessage } from '../../lib/form-errors';
 import { queryKeys } from '../../lib/query-client';
@@ -110,6 +113,7 @@ function fileTypeEmoji(kind: string): string {
 
 export function ChatPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const displayName = user?.name ?? 'there';
   const firstName = displayName.split(/\s+/)[0] ?? displayName;
@@ -135,6 +139,8 @@ export function ChatPage() {
   const [atIndex, setAtIndex] = useState(0);
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const [mentionAnchor, setMentionAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [writeConfirm, setWriteConfirm] = useState<WriteConfirmEvent | null>(null);
+  const [writeConfirmLoading, setWriteConfirmLoading] = useState(false);
   const handledInitial = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -304,6 +310,7 @@ export function ChatPage() {
             setStreaming((prev) => prev + delta);
           },
           onCitations: (citations) => setLiveCitations(citations),
+          onWriteConfirm: (event) => setWriteConfirm(event),
           onDone: (message) => {
             appendMessageToCache(queryClient, id, message);
             setStreaming('');
@@ -437,6 +444,28 @@ export function ChatPage() {
     index1Based?: number,
     messageContent?: string | null,
   ) {
+    const sourceType = citation.sourceType ?? 'document';
+    if (sourceType === 'meeting' && citation.meetingId) {
+      const ms = citation.startMs != null ? `&t=${citation.startMs}` : '';
+      navigate(`/app/meetings?id=${encodeURIComponent(citation.meetingId)}${ms}`);
+      return;
+    }
+    if (sourceType === 'workflow' && citation.workflowId) {
+      navigate(`/app/workflows?id=${encodeURIComponent(citation.workflowId)}`);
+      return;
+    }
+    if (sourceType === 'work_item' && citation.href) {
+      window.open(citation.href, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (sourceType === 'channel') {
+      notify.info(
+        'Channel memory is cited from Slack — open Connectors to manage bindings.',
+        'Channel',
+      );
+      return;
+    }
+    if (!citation.documentId) return;
     const hasRange =
       citation.startOffset != null &&
       citation.endOffset != null &&
@@ -467,17 +496,21 @@ export function ChatPage() {
         {chips.map((chip) => (
           <button
             type="button"
-            key={chip.documentId}
+            key={`${chip.sourceType}:${chip.documentId || chip.label}:${chip.indices[0]}`}
             className="text-[11px] px-2 py-0.5 rounded-full border border-primary-base/20 bg-primary-alpha-10 text-primary-base hover:bg-primary-base hover:text-white transition-colors"
             onClick={() => openCitation(chip.best, chip.indices[0], messageContent)}
             title={
               chip.best.score != null
-                ? `${chip.documentName} · refs ${chip.indices.map((n) => `[${n}]`).join(' ')} · relevance ${(chip.best.score * 100).toFixed(0)}%`
-                : `${chip.documentName} · refs ${chip.indices.map((n) => `[${n}]`).join(' ')}`
+                ? `${chip.label} · ${chip.sourceType} · refs ${chip.indices.map((n) => `[${n}]`).join(' ')} · relevance ${(chip.best.score * 100).toFixed(0)}%`
+                : `${chip.label} · ${chip.sourceType} · refs ${chip.indices.map((n) => `[${n}]`).join(' ')}`
             }
           >
-            <span>{chip.documentName}</span>
-            {chip.indices.length > 1 ? (
+            <span>{chip.label}</span>
+            {chip.sourceType !== 'document' ? (
+              <span className="ml-1 opacity-70 capitalize">
+                {chip.sourceType.replace('_', ' ')}
+              </span>
+            ) : chip.indices.length > 1 ? (
               <span className="ml-1 opacity-70">×{chip.indices.length}</span>
             ) : (
               <span className="ml-1 opacity-70">[{chip.indices[0]}]</span>
@@ -952,6 +985,40 @@ export function ChatPage() {
           </div>
         </>
       ) : null}
+
+      <ConfirmModal
+        open={Boolean(writeConfirm)}
+        onOpenChange={(open) => {
+          if (open) return;
+          const pending = writeConfirm;
+          setWriteConfirm(null);
+          if (!pending || writeConfirmLoading) return;
+          void rejectWriteConfirmation(pending.confirmToken).catch(() => undefined);
+        }}
+        title="Mark workflow step complete?"
+        description={
+          writeConfirm
+            ? writeConfirm.summary?.trim() ||
+              `Confirm the agent may mark step “${writeConfirm.stepKey}” done on this workflow run.`
+            : undefined
+        }
+        confirmLabel="Confirm"
+        cancelLabel="Cancel"
+        loading={writeConfirmLoading}
+        onConfirm={async () => {
+          if (!writeConfirm) return;
+          setWriteConfirmLoading(true);
+          try {
+            await confirmWriteConfirmation(writeConfirm.confirmToken);
+            notify.success('Workflow step marked complete.', 'Confirmed');
+            setWriteConfirm(null);
+          } catch (err) {
+            notify.error(getErrorMessage(err, 'Could not confirm workflow step'));
+          } finally {
+            setWriteConfirmLoading(false);
+          }
+        }}
+      />
     </div>
   );
 }

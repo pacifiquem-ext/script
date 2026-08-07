@@ -141,9 +141,7 @@ Rules:
 }
 
 /** Short human summary of each step for agent prompts. */
-export function buildPolishedStepBrief(
-  steps: Array<{ stepKey: string; label: string }>,
-): string {
+export function buildPolishedStepBrief(steps: Array<{ stepKey: string; label: string }>): string {
   return steps
     .map((s, i) => {
       const polished = polishWorkflowMarkdownDeterministic(`- [ ] ${s.label}`)

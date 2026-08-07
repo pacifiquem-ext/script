@@ -78,4 +78,33 @@ describe('library routes', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().balance).toBeGreaterThan(0);
   });
+
+  it('returns real workspace usage without fake prices', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/credits/usage',
+      headers: originHeaders(),
+      cookies,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      plan: string;
+      creditBalance: number;
+      memberCount: number;
+      seatCap: number | null;
+      seatsUsed: number;
+      documentCount: number;
+      conversationCount: number;
+      meetingCount: number;
+    };
+    expect(body.plan).toBeTruthy();
+    expect(body.creditBalance).toBeGreaterThanOrEqual(0);
+    expect(body.memberCount).toBeGreaterThanOrEqual(1);
+    expect(body.seatCap).toBeNull();
+    expect(body.seatsUsed).toBe(body.memberCount);
+    expect(body.documentCount).toBeGreaterThanOrEqual(0);
+    expect(body.conversationCount).toBeGreaterThanOrEqual(0);
+    expect(body.meetingCount).toBeGreaterThanOrEqual(0);
+    expect(JSON.stringify(body)).not.toMatch(/\$49|156 files|June 20/);
+  });
 });

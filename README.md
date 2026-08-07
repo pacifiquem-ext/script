@@ -11,15 +11,15 @@ shipped scope, and the marketing landing for the same story in product language.
 **Where we are** — the capability scorecard ([`projectdef.md`](./projectdef.md) §2, owner's
 definition in [`product_path.txt`](./product_path.txt)):
 
-|     | Capability                                | Status                                                  |
-| --- | ----------------------------------------- | ------------------------------------------------------- |
-| C1  | Document brain (Library + cited RAG chat) | **Shipped**                                             |
-| C2  | Agent tools / environment awareness       | **Partial** — runtime shipped, Library + web tools only |
-| C3  | Calls & meeting summaries                 | Not started                                             |
-| C4  | Bot surface — **Slack in v1** (ADR 0009)  | Not started                                             |
-| C5  | Channel context as memory                 | Not started                                             |
-| C6  | Notion / Jira / GitHub work context       | Not started                                             |
-| C7  | Markdown-authored workflows               | Not started                                             |
+|     | Capability                                | Status                                                         |
+| --- | ----------------------------------------- | -------------------------------------------------------------- |
+| C1  | Document brain (Library + cited RAG chat) | **Shipped**                                                    |
+| C2  | Agent tools / environment awareness       | **Shipped (v1)** — Mastra + domain tools + HITL                |
+| C3  | Calls & meeting summaries                 | **Shipped (v1)** — Fireflies (live key required)               |
+| C4  | Bot surface — **Slack in v1** (ADR 0009)  | **Shipped (v1 code)** — live Events need Slack keys            |
+| C5  | Channel context as memory                 | **Shipped (v1 code)** — ingest/backfill; ACL-gated RAG         |
+| C6  | Notion / Jira / GitHub work context       | **Partial** — GitHub PAT only; Jira/Notion Phase 8             |
+| C7  | Markdown-authored workflows               | **Shipped (v1)** — residuals: connector verify, live login E2E |
 
 **v1 ships with Slack as the only connector app** — Teams next, WhatsApp after
 ([ADR 0009](./docs/adr/0009-slack-first-messaging-connector.md)). Self-hosting the full product
@@ -64,29 +64,29 @@ npx hyperframes render . -o ../script-intro.mp4 -q high
 
 Read in this order if you're new to the repo:
 
-| Doc                                                            | What it's for                                                                         |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [`AGENTS.md`](./AGENTS.md)                                     | Engineering constitution — rules, tech baseline, skills, workflow. Start here.        |
-| [`product_path.txt`](./product_path.txt)                       | The owner's definition of the destination — the source `projectdef.md` §2 answers to. |
-| [`projectdef.md`](./projectdef.md)                             | Product vision (company brain), C1–C7 scorecard, shipped slice, backend requirements. |
-| [`pipeline.md`](./pipeline.md)                                 | Idea ledger: product C1–C7 bets + org-ready commercial order before items hit TODO.   |
-| [`docs/agent-tools.md`](./docs/agent-tools.md)                 | The shipped tool runtime, how to add a tool, and the platform gaps to fix first.      |
-| [`docs/research/mastra-baseline.md`](./docs/research/mastra-baseline.md) | Research: Mastra as agent platform baseline; adoption mapped to Phase M.       |
-| [`docs/connectors.md`](./docs/connectors.md)                   | **Roadmap spec** — messaging bots, channel context, work systems, calls.              |
-| [`docs/workflows.md`](./docs/workflows.md)                     | **Roadmap spec** — markdown-authored, run-tracked guided processes.                   |
-| [`docs/pitch-ready.md`](./docs/pitch-ready.md)                 | Pitch checklist G1–G16 (packaging, security pack, pilot kit, legal, …).               |
-| [`docs/org-deploy.md`](./docs/org-deploy.md)                   | Org deploy runbook (license, seats, backups, TLS).                                    |
-| [`docs/air-gap.md`](./docs/air-gap.md)                         | Air-gap / local LLM + embeddings profile.                                             |
-| [`docs/secret-rotation.md`](./docs/secret-rotation.md)         | JWT / license / OAuth secret rotation notes.                                          |
-| [`docs/retention.md`](./docs/retention.md)                     | Retention hints + clearance notes (Org-P9b).                                          |
-| [`understanding.md`](./understanding.md)                       | Frontend UI/design-system conventions (Align-UI, Huge Icons, tokens).                 |
-| [`TODO.md`](./TODO.md)                                         | Live task ledger — what's done, in progress, next.                                    |
-| [`ENV.md`](./ENV.md)                                           | Every environment variable: what exists, what's missing.                              |
-| [`docs/storage.md`](./docs/storage.md)                         | File storage strategy — managed default + self-hosted (Garage) option.                |
-| [`CONTEXT.md`](./CONTEXT.md)                                   | Domain glossary (ubiquitous language).                                                |
-| [`docs/pgvector.md`](./docs/pgvector.md)                       | pgvector extension + SQL-managed HNSW/partial indexes.                                |
-| [`docs/embeddings-backfill.md`](./docs/embeddings-backfill.md) | Backfill job interface when embedding model changes.                                  |
-| `docs/adr/`                                                    | Architecture decision records (through 0017 Mastra agent baseline).                   |
+| Doc                                                                      | What it's for                                                                         |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [`AGENTS.md`](./AGENTS.md)                                               | Engineering constitution — rules, tech baseline, skills, workflow. Start here.        |
+| [`product_path.txt`](./product_path.txt)                                 | The owner's definition of the destination — the source `projectdef.md` §2 answers to. |
+| [`projectdef.md`](./projectdef.md)                                       | Product vision (company brain), C1–C7 scorecard, shipped slice, backend requirements. |
+| [`pipeline.md`](./pipeline.md)                                           | Idea ledger: product C1–C7 bets + org-ready commercial order before items hit TODO.   |
+| [`docs/agent-tools.md`](./docs/agent-tools.md)                           | The shipped tool runtime, how to add a tool, and the platform gaps to fix first.      |
+| [`docs/research/mastra-baseline.md`](./docs/research/mastra-baseline.md) | Research: Mastra as agent platform baseline; adoption mapped to Phase M.              |
+| [`docs/connectors.md`](./docs/connectors.md)                             | **Roadmap spec** — messaging bots, channel context, work systems, calls.              |
+| [`docs/workflows.md`](./docs/workflows.md)                               | **Roadmap spec** — markdown-authored, run-tracked guided processes.                   |
+| [`docs/pitch-ready.md`](./docs/pitch-ready.md)                           | Pitch checklist G1–G16 (packaging, security pack, pilot kit, legal, …).               |
+| [`docs/org-deploy.md`](./docs/org-deploy.md)                             | Org deploy runbook (license, seats, backups, TLS).                                    |
+| [`docs/air-gap.md`](./docs/air-gap.md)                                   | Air-gap / local LLM + embeddings profile.                                             |
+| [`docs/secret-rotation.md`](./docs/secret-rotation.md)                   | JWT / license / OAuth secret rotation notes.                                          |
+| [`docs/retention.md`](./docs/retention.md)                               | Retention hints + clearance notes (Org-P9b).                                          |
+| [`understanding.md`](./understanding.md)                                 | Frontend UI/design-system conventions (Align-UI, Huge Icons, tokens).                 |
+| [`TODO.md`](./TODO.md)                                                   | Live task ledger — what's done, in progress, next.                                    |
+| [`ENV.md`](./ENV.md)                                                     | Every environment variable: what exists, what's missing.                              |
+| [`docs/storage.md`](./docs/storage.md)                                   | File storage strategy — managed default + self-hosted (Garage) option.                |
+| [`CONTEXT.md`](./CONTEXT.md)                                             | Domain glossary (ubiquitous language).                                                |
+| [`docs/pgvector.md`](./docs/pgvector.md)                                 | pgvector extension + SQL-managed HNSW/partial indexes.                                |
+| [`docs/embeddings-backfill.md`](./docs/embeddings-backfill.md)           | Backfill job interface when embedding model changes.                                  |
+| `docs/adr/`                                                              | Architecture decision records (through 0017 Mastra agent baseline).                   |
 
 ## Layout
 

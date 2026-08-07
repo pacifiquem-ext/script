@@ -11,7 +11,6 @@ import {
   IconSparkles,
   IconChevronDown,
   IconCheck,
-  IconSearch,
   IconPlus,
   IconArrowRight,
 } from '../../lib/icons';
@@ -23,8 +22,10 @@ import {
 } from '../../components/ui/BrandIcons';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { FormModal } from '../../components/ui/FormModal';
 import { Input } from '../../components/ui/Input';
+import { LoadingState } from '../../components/ui/LoadingState';
 import { notify } from '../../components/ui/toast-alert';
 import { useAuth } from '../../contexts/useAuth';
 import { useWorkspaceMembers, useWorkspaces } from '../../lib/workspaces';
@@ -41,6 +42,30 @@ import {
 interface Props {
   open: boolean;
   onClose: () => void;
+}
+
+type WorkspaceUsage = {
+  plan: string;
+  creditBalance: number;
+  memberCount: number;
+  seatCap: number | null;
+  seatsUsed: number;
+  documentCount: number;
+  conversationCount: number;
+  meetingCount: number;
+  licenseEnforced: boolean;
+};
+
+function formatPlanLabel(plan: string | undefined) {
+  if (!plan) return 'Free';
+  return plan.charAt(0).toUpperCase() + plan.slice(1);
+}
+
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '•';
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase();
 }
 
 const SIDEBAR_NAV = [
@@ -157,12 +182,18 @@ export function SettingsModal({ open, onClose }: Props) {
       return data.license;
     },
   });
+  const usageQuery = useQuery({
+    queryKey: ['workspace-usage'],
+    enabled: open && Boolean(user) && (activeItem === 'workspace' || activeItem === 'billing'),
+    queryFn: async () => apiRequest<WorkspaceUsage>('/credits/usage'),
+  });
   const workspaces = workspacesQuery.data ?? [];
   const activeWorkspace =
     workspaces.find((workspace) => workspace.id === user?.lastWorkspaceId) ?? workspaces[0];
   const members = membersQuery.data ?? [];
   const invites = invitesQuery.data ?? [];
   const license = licenseQuery.data;
+  const usage = usageQuery.data;
   const displayName = user?.name ?? 'Account';
   const displayEmail = user?.email ?? '';
   const memberSince = user?.createdAt
@@ -283,7 +314,7 @@ export function SettingsModal({ open, onClose }: Props) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-neutral-200 flex items-center justify-center text-[12px] font-bold text-neutral-600 shrink-0">
-                        JB
+                        {initialsFromName(displayName)}
                       </div>
                       <div className="flex flex-col">
                         <p className="text-[14px] font-medium text-neutral-950">
@@ -296,7 +327,11 @@ export function SettingsModal({ open, onClose }: Props) {
                         </p>
                       </div>
                     </div>
-                    <button className="px-4 py-1.5 border border-neutral-200 rounded-8 bg-white text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 transition-colors">
+                    <button
+                      type="button"
+                      className="px-4 py-1.5 border border-neutral-200 rounded-8 bg-white text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+                      onClick={() => setActiveItem('people')}
+                    >
                       Manage
                     </button>
                   </div>
@@ -309,16 +344,24 @@ export function SettingsModal({ open, onClose }: Props) {
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-[13px] text-neutral-500">Your role</span>
-                      <span className="text-[14px] font-medium text-neutral-950">Admin</span>
+                      <span className="text-[14px] font-medium text-neutral-950 capitalize">
+                        {activeWorkspace?.role ?? '—'}
+                      </span>
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-[13px] text-neutral-500">Team members</span>
-                      <span className="text-[14px] font-medium text-neutral-950">3/10 seats</span>
+                      <span className="text-[14px] font-medium text-neutral-950">
+                        {usage
+                          ? usage.seatCap == null
+                            ? `${usage.memberCount} · Open dev — no seat cap`
+                            : `${usage.seatsUsed} / ${usage.seatCap} seats`
+                          : '—'}
+                      </span>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <span className="text-[13px] text-neutral-500">Plan renewal</span>
+                      <span className="text-[13px] text-neutral-500">Billing</span>
                       <span className="text-[14px] font-medium text-neutral-950">
-                        June 20, 2025
+                        Credits only (payments post-v1)
                       </span>
                     </div>
                   </div>
@@ -330,24 +373,45 @@ export function SettingsModal({ open, onClose }: Props) {
                   <p className="text-[13px] text-neutral-500">Usage analytics and metrics.</p>
                 </div>
                 <div className="flex-1 w-full max-w-[500px]">
-                  <div className="grid grid-cols-2 gap-y-6 gap-x-8">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[13px] text-neutral-500">Conversations</span>
-                      <span className="text-[14px] font-medium text-neutral-950">2,847</span>
+                  {usageQuery.isLoading ? (
+                    <LoadingState label="Loading usage…" />
+                  ) : usageQuery.isError ? (
+                    <ErrorState
+                      message="Could not load usage. Retry to load live workspace totals."
+                      onRetry={() => void usageQuery.refetch()}
+                    />
+                  ) : (
+                    <div className="grid grid-cols-2 gap-y-6 gap-x-8">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[13px] text-neutral-500">Conversations</span>
+                        <span className="text-[14px] font-medium text-neutral-950">
+                          {(usage?.conversationCount ?? 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[13px] text-neutral-500">Meetings</span>
+                        <span className="text-[14px] font-medium text-neutral-950">
+                          {(usage?.meetingCount ?? 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[13px] text-neutral-500">Documents</span>
+                        <span className="text-[14px] font-medium text-neutral-950">
+                          {(usage?.documentCount ?? 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[13px] text-neutral-500">Credits remaining</span>
+                        <span className="text-[14px] font-medium text-neutral-950">
+                          {(
+                            usage?.creditBalance ??
+                            activeWorkspace?.creditBalance ??
+                            0
+                          ).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[13px] text-neutral-500">Active projects</span>
-                      <span className="text-[14px] font-medium text-neutral-950">59</span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[13px] text-neutral-500">Files uploaded</span>
-                      <span className="text-[14px] font-medium text-neutral-950">156</span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[13px] text-neutral-500">Storage used</span>
-                      <span className="text-[14px] font-medium text-neutral-950">24%</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
               <div className="py-8 border-t border-neutral-200 flex items-start gap-12 max-lg:flex-col max-lg:gap-6">
@@ -358,27 +422,41 @@ export function SettingsModal({ open, onClose }: Props) {
                   </p>
                 </div>
                 <div className="flex-1 flex flex-col gap-5 w-full max-w-[500px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] text-neutral-600 w-[100px]">Team seats</span>
-                    <div className="flex-1 mx-4">
-                      <SegmentedBar percentage={60} color="#7c3aed" />
+                  {usage?.seatCap != null ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] text-neutral-600 w-[100px]">Team seats</span>
+                      <div className="flex-1 mx-4">
+                        <SegmentedBar
+                          percentage={
+                            usage.seatCap > 0
+                              ? Math.min(100, (usage.seatsUsed / usage.seatCap) * 100)
+                              : 0
+                          }
+                          color="#7c3aed"
+                        />
+                      </div>
+                      <span className="text-[12px] text-neutral-500 w-[72px] text-right">
+                        {usage.seatsUsed}/{usage.seatCap}
+                      </span>
                     </div>
-                    <span className="text-[12px] text-neutral-500 w-[30px] text-right">60%</span>
-                  </div>
+                  ) : (
+                    <p className="text-[13px] text-neutral-600 m-0">Open dev — no seat cap</p>
+                  )}
                   <div className="flex items-center justify-between">
-                    <span className="text-[13px] text-neutral-600 w-[100px]">Storage</span>
-                    <div className="flex-1 mx-4">
-                      <SegmentedBar percentage={8} color="#0d9488" />
-                    </div>
-                    <span className="text-[12px] text-neutral-500 w-[30px] text-right">8%</span>
+                    <span className="text-[13px] text-neutral-600 w-[100px]">Credits</span>
+                    <span className="text-[13px] text-neutral-700">
+                      {(
+                        usage?.creditBalance ??
+                        activeWorkspace?.creditBalance ??
+                        0
+                      ).toLocaleString()}{' '}
+                      remaining
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] text-neutral-600 w-[100px]">API</span>
-                    <div className="flex-1 mx-4">
-                      <SegmentedBar percentage={25} color="#ea580c" />
-                    </div>
-                    <span className="text-[12px] text-neutral-500 w-[30px] text-right">25%</span>
-                  </div>
+                  <p className="text-[12px] text-neutral-500 m-0">
+                    Storage bytes and API quotas are not metered in v1. Counts above are live
+                    workspace totals.
+                  </p>
                 </div>
               </div>
             </div>
@@ -419,37 +497,50 @@ export function SettingsModal({ open, onClose }: Props) {
                         </div>
                         <div className="flex flex-col">
                           <p className="text-[15px] font-bold text-neutral-950">
-                            Professional Organization
+                            {formatPlanLabel(usage?.plan ?? activeWorkspace?.plan)} plan
                           </p>
                           <p className="text-[12px] text-neutral-500 mt-0.5">
-                            Shared workspace for up to 10 members
+                            In-workspace credits only. No payment processor in v1.
                           </p>
                         </div>
                       </div>
-                      <span className="text-[16px] font-bold text-neutral-950">
-                        $49<span className="text-neutral-400 font-normal text-[13px]">/mo</span>
-                      </span>
                     </div>
 
                     <div className="space-y-4">
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[13px] font-medium text-neutral-700">
-                            Workspace Credit Usage
+                            Workspace credits
                           </span>
                           <span className="text-[13px] font-bold text-primary-base">
-                            {(activeWorkspace?.creditBalance ?? 0).toLocaleString()} credits
+                            {(
+                              usage?.creditBalance ??
+                              activeWorkspace?.creditBalance ??
+                              0
+                            ).toLocaleString()}{' '}
+                            remaining
                           </span>
                         </div>
-                        <SegmentedBar percentage={72.5} color="#6060FF" />
                       </div>
-                      <div className="flex items-center gap-3 pt-2">
-                        <Button variant="primary" size="sm">
-                          Upgrade Plan
-                        </Button>
-                        <Button variant="neutral" mode="stroke" size="sm">
-                          Purchase Credits
-                        </Button>
+                      <div className="flex flex-col gap-2 pt-2">
+                        <div className="flex items-center gap-3">
+                          <Button variant="primary" size="sm" className="w-fit" disabled>
+                            Upgrade Plan
+                          </Button>
+                          <Button
+                            variant="neutral"
+                            mode="stroke"
+                            size="sm"
+                            className="w-fit"
+                            disabled
+                          >
+                            Purchase Credits
+                          </Button>
+                        </div>
+                        <p className="text-[12px] text-neutral-500 m-0">
+                          Payments are post-v1 (ADR 0006). Upgrade and purchase are disabled until a
+                          processor ships.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -460,7 +551,11 @@ export function SettingsModal({ open, onClose }: Props) {
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-[14px] font-medium text-neutral-950">
-                        4 / 10 active seats
+                        {usage
+                          ? usage.seatCap == null
+                            ? 'Open dev — no seat cap'
+                            : `${usage.seatsUsed} / ${usage.seatCap} active seats`
+                          : '—'}
                       </span>
                     </div>
                     <div className="flex flex-col gap-1">
@@ -468,7 +563,7 @@ export function SettingsModal({ open, onClose }: Props) {
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-[14px] font-medium text-neutral-950">
-                        June 20, 2025
+                        None — no subscription
                       </span>
                     </div>
                   </div>
@@ -482,48 +577,10 @@ export function SettingsModal({ open, onClose }: Props) {
                   <p className="text-[13px] text-neutral-500">Invoice history and payments.</p>
                 </div>
                 <div className="flex-1 flex flex-col gap-5 w-full max-w-[500px]">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 relative">
-                      <IconSearch
-                        size={14}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Search invoices..."
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-neutral-200 rounded-8 text-[13px] outline-none focus:border-primary-base focus:ring-1 focus:ring-primary-base transition-all"
-                      />
-                    </div>
-                    <button className="flex items-center gap-2 px-3 py-2 border border-neutral-200 rounded-8 bg-white text-[13px] text-neutral-700 hover:bg-neutral-50 transition-colors">
-                      All status <IconChevronDown size={14} className="text-neutral-400" />
-                    </button>
-                  </div>
                   <div className="flex flex-col gap-0 border-t border-neutral-100 mt-2 pt-2">
-                    {[
-                      'April 15, 2024',
-                      'May 15, 2024',
-                      'Jun 15, 2024',
-                      'July 15, 2024',
-                      'Aug 15, 2024',
-                    ].map((date, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between py-4 border-b border-neutral-100 last:border-0"
-                      >
-                        <span className="text-[13px] text-neutral-500 w-[140px]">{date}</span>
-                        <span className="text-[13px] text-neutral-700 flex-1">$49</span>
-                        <div className="flex items-center gap-4">
-                          <span className="flex items-center gap-1.5 text-[13px] text-neutral-700">
-                            <IconCheck size={14} className="text-[#10b981]" /> Paid
-                          </span>
-                          <button className="text-neutral-400 hover:text-neutral-700 bg-transparent border-none p-1 flex flex-col gap-[2px]">
-                            <div className="w-[3px] h-[3px] rounded-full bg-current" />
-                            <div className="w-[3px] h-[3px] rounded-full bg-current" />
-                            <div className="w-[3px] h-[3px] rounded-full bg-current" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                    <p className="text-[13px] text-neutral-500 py-4 m-0">
+                      No invoices. This install does not bill through a payment processor yet.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1619,10 +1676,12 @@ export function SettingsModal({ open, onClose }: Props) {
     }
   };
 
+  if (!open) return null;
+
   return (
     <>
       <div
-        className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-[200] transition-opacity duration-300 flex items-center justify-center ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[200] flex items-center justify-center"
         onClick={onClose}
       />
       <div
@@ -1630,7 +1689,7 @@ export function SettingsModal({ open, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Settings"
-        className={`fixed top-1/2 left-1/2 w-[min(1024px,95vw)] h-[min(760px,90vh)] bg-white z-[201] rounded-[24px] shadow-2xl transition-all duration-300 flex overflow-hidden ${open ? '-translate-x-1/2 -translate-y-1/2 scale-100 opacity-100 pointer-events-auto' : '-translate-x-1/2 -translate-y-[45%] scale-95 opacity-0 pointer-events-none'}`}
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(1024px,95vw)] h-[min(760px,90vh)] bg-white z-[201] rounded-[24px] shadow-2xl flex overflow-hidden"
       >
         {/* Sidebar */}
         <div className="w-[260px] bg-white border-r border-neutral-200 flex flex-col shrink-0 overflow-y-auto">
@@ -1645,11 +1704,11 @@ export function SettingsModal({ open, onClose }: Props) {
               >
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full bg-neutral-200 flex items-center justify-center text-[10px] font-bold text-neutral-600">
-                    J
+                    {initialsFromName(displayName).slice(0, 1)}
                   </div>
                   <span className="text-[13px] font-medium text-neutral-950">{displayName}</span>
                   <span className="text-[9px] font-bold text-primary-base bg-primary-alpha-10 px-1.5 py-0.5 rounded-4 tracking-wide">
-                    PRO
+                    {formatPlanLabel(usage?.plan ?? activeWorkspace?.plan).toUpperCase()}
                   </span>
                 </div>
                 <IconChevronDown size={14} className="text-neutral-400 -rotate-90" />

@@ -29,7 +29,8 @@ Rules:
 4. For "what should I do next?" / onboarding / checklist progress, use get_my_workflow_progress and list_workflows. Direct users to **Run with agent** on the Workflows page for browser-capable steps; do not self-attest completion without evidence.
 5. Prefer company memory tools over web_search. Use web_search only for external/public information.
 6. Never invent documents, meetings, work items, or workflows that tools did not return. Never expose secrets or credentials.
-7. Be concise and helpful. If tools return empty, say so clearly. Clearance may hide sources you cannot see.`;
+7. Be concise and helpful. If tools return empty, say so clearly. Clearance may hide sources you cannot see.
+8. If complete_workflow_step returns needsConfirmation, tell the user to confirm in the chat UI. Do not retry that tool — retries cannot complete the write.`;
 
 function resolveMastraModel(): string {
   if (env.COMPLETION_PROVIDER === 'openai_compatible' && env.COMPLETION_MODEL) {

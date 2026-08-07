@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from '../../components/ui/Alert';
 import { Badge } from '../../components/ui/Badge';
@@ -7,20 +8,32 @@ import { Button } from '../../components/ui/Button';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { Input } from '../../components/ui/Input';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { MarkdownContent } from '../../components/ui/MarkdownContent';
+import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+} from '../../components/ui/Modal';
 import { useAuth } from '../../contexts/useAuth';
 import { getErrorMessage } from '../../lib/form-errors';
-import { IconCheck, IconPlus } from '../../lib/icons';
+import { IconCheck, IconDelete, IconPlus } from '../../lib/icons';
 import { maskSecrets } from '../../lib/mask-secrets';
 import { parseWorkflowOutline } from '../../lib/parse-workflow-outline';
+import { notify } from '../../components/ui/toast-alert';
 import { useWorkspaces } from '../../lib/workspaces';
 import {
   completeWorkflowStep,
+  createBrowserSession,
   createWorkflow,
+  deleteBrowserSession,
   executeWorkflowRunStream,
   getWorkflow,
   getWorkflowRun,
+  listBrowserSessions,
   listMyWorkflowRuns,
   listWorkflows,
   markWorkflowVerified,
@@ -29,6 +42,7 @@ import {
   updateWorkflow,
   verifyWorkflow,
   type ExecutionLogEntry,
+  type PublicBrowserSession,
   type PublicWorkflowDetail,
   type PublicWorkflowListItem,
   type PublicWorkflowRun,
@@ -59,6 +73,7 @@ function nextPendingStep(run: PublicWorkflowRun) {
 
 export function WorkflowsPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const workspacesQuery = useWorkspaces(Boolean(user));
   const activeWorkspace =
     workspacesQuery.data?.find((w) => w.id === user?.lastWorkspaceId) ??
@@ -83,6 +98,17 @@ export function WorkflowsPage() {
   const [agentExecuting, setAgentExecuting] = useState(false);
   const [activityLog, setActivityLog] = useState<ExecutionLogEntry[]>([]);
   const [liveReasoning, setLiveReasoning] = useState('');
+  const [selectedVaultId, setSelectedVaultId] = useState<string>('');
+  const [vaultModalOpen, setVaultModalOpen] = useState(false);
+  const [vaultDeleteId, setVaultDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fromQuery = searchParams.get('id');
+    if (fromQuery) {
+      setSelectedWorkflowId(fromQuery);
+      setPanel('edit');
+    }
+  }, [searchParams]);
 
   const listQuery = useQuery({
     queryKey: ['workflows'],
@@ -111,6 +137,14 @@ export function WorkflowsPage() {
     enabled: Boolean(selectedRunId) && panel === 'run',
     queryFn: async () => getWorkflowRun(selectedRunId!),
     refetchInterval: agentExecuting ? 2000 : false,
+  });
+
+  const vaultQuery = useQuery({
+    queryKey: ['workflows', 'browser-sessions'],
+    queryFn: async () => {
+      const data = await listBrowserSessions();
+      return data.sessions;
+    },
   });
 
   useEffect(() => {
@@ -195,16 +229,37 @@ export function WorkflowsPage() {
     },
   });
 
-  const runWithAgent = async (
-    runId: string,
-    opts?: { markVerifiedWorkflowId?: string },
-  ) => {
+  const createVaultMutation = useMutation({
+    mutationFn: (input: { name: string; storageState: unknown }) => createBrowserSession(input),
+    onSuccess: async (session) => {
+      setVaultModalOpen(false);
+      setSelectedVaultId(session.id);
+      notify.success('Browser login saved encrypted.', 'Vault');
+      await queryClient.invalidateQueries({ queryKey: ['workflows', 'browser-sessions'] });
+    },
+    onError: (err) => notify.error(getErrorMessage(err, 'Could not save browser session')),
+  });
+
+  const deleteVaultMutation = useMutation({
+    mutationFn: (id: string) => deleteBrowserSession(id),
+    onSuccess: async (_ok, id) => {
+      if (selectedVaultId === id) setSelectedVaultId('');
+      setVaultDeleteId(null);
+      notify.success('Browser login removed.', 'Vault');
+      await queryClient.invalidateQueries({ queryKey: ['workflows', 'browser-sessions'] });
+    },
+    onError: (err) => notify.error(getErrorMessage(err, 'Could not delete browser session')),
+  });
+
+  const runWithAgent = async (runId: string, opts?: { markVerifiedWorkflowId?: string }) => {
     setError(null);
     setMessage(null);
     setAgentExecuting(true);
     setLiveReasoning('');
     try {
-      for await (const event of executeWorkflowRunStream(runId)) {
+      for await (const event of executeWorkflowRunStream(runId, {
+        browserSessionId: selectedVaultId || undefined,
+      })) {
         if ('log' in event && event.log) pushActivity(event.log);
 
         if (event.type === 'step_completed' || event.type === 'step_failed') {
@@ -402,9 +457,7 @@ export function WorkflowsPage() {
             />
           )}
 
-          {published.length > 0 && (
-            <SectionLabel>Published</SectionLabel>
-          )}
+          {published.length > 0 && <SectionLabel>Published</SectionLabel>}
           {published.map((wf) => (
             <WorkflowListRow
               key={wf.id}
@@ -444,7 +497,9 @@ export function WorkflowsPage() {
           )}
 
           <SectionLabel>My runs</SectionLabel>
-          {runsQuery.isLoading && <p className="px-3 py-2 text-[12px] text-neutral-500">Loading…</p>}
+          {runsQuery.isLoading && (
+            <p className="px-3 py-2 text-[12px] text-neutral-500">Loading…</p>
+          )}
           {!runsQuery.isLoading && myRuns.length === 0 && (
             <p className="px-3 py-2 text-[12px] text-neutral-500">No runs yet.</p>
           )}
@@ -459,12 +514,76 @@ export function WorkflowsPage() {
                   : 'bg-transparent hover:bg-neutral-50'
               }`}
             >
-              <p className="text-[13px] font-medium text-neutral-950 truncate">{run.workflowName}</p>
+              <p className="text-[13px] font-medium text-neutral-950 truncate">
+                {run.workflowName}
+              </p>
               <p className="text-[11px] text-neutral-500 capitalize">
                 {run.status.replace('_', ' ')} · {progressLabel(run)}
               </p>
             </button>
           ))}
+
+          <SectionLabel>Browser login vault</SectionLabel>
+          <p className="px-3 pb-2 text-[11px] text-neutral-500 leading-relaxed">
+            Encrypted Playwright cookies for logged-in agent runs. Export{' '}
+            <code className="text-[11px]">storageState</code> from codegen.
+          </p>
+          {vaultQuery.isLoading && (
+            <p className="px-3 py-2 text-[12px] text-neutral-500">Loading vault…</p>
+          )}
+          {vaultQuery.isError && (
+            <p className="px-3 py-2 text-[12px] text-error-base" role="alert">
+              {getErrorMessage(vaultQuery.error, 'Could not load vault')}
+            </p>
+          )}
+          {(vaultQuery.data ?? []).map((session) => (
+            <div
+              key={session.id}
+              className={`flex items-center gap-1 rounded-10 px-2 py-1 mb-1 ${
+                selectedVaultId === session.id ? 'bg-primary-alpha-10' : ''
+              }`}
+            >
+              <button
+                type="button"
+                className="min-w-0 flex-1 border-none bg-transparent text-left cursor-pointer px-1 py-1"
+                onClick={() =>
+                  setSelectedVaultId((prev) => (prev === session.id ? '' : session.id))
+                }
+              >
+                <p className="text-[13px] font-medium text-neutral-950 truncate m-0">
+                  {session.name}
+                </p>
+                <p className="text-[11px] text-neutral-500 m-0">
+                  {session.lastUsedAt
+                    ? `Used ${new Date(session.lastUsedAt).toLocaleDateString()}`
+                    : `Saved ${new Date(session.createdAt).toLocaleDateString()}`}
+                </p>
+              </button>
+              <Button
+                type="button"
+                size="xs"
+                variant="neutral"
+                mode="ghost"
+                className="w-fit shrink-0"
+                aria-label={`Delete ${session.name}`}
+                onClick={() => setVaultDeleteId(session.id)}
+              >
+                <IconDelete size={14} />
+              </Button>
+            </div>
+          ))}
+          <div className="px-3 pt-1 pb-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="neutral"
+              mode="stroke"
+              className="w-fit"
+              onClick={() => setVaultModalOpen(true)}
+            >
+              Add login
+            </Button>
+          </div>
         </div>
       </aside>
 
@@ -567,15 +686,16 @@ export function WorkflowsPage() {
         {panel === 'run' && (
           <RunnerPanel
             loading={runQuery.isLoading}
-            error={
-              runQuery.isError ? getErrorMessage(runQuery.error, 'Failed to load run') : null
-            }
+            error={runQuery.isError ? getErrorMessage(runQuery.error, 'Failed to load run') : null}
             onRetry={() => void runQuery.refetch()}
             run={activeRun ?? null}
             nextStep={nextStep}
             agentExecuting={agentExecuting}
             activityLog={activityLog}
             liveReasoning={liveReasoning}
+            vaults={vaultQuery.data ?? []}
+            selectedVaultId={selectedVaultId}
+            onSelectVault={setSelectedVaultId}
             onRunWithAgent={() => {
               if (!activeRun) return;
               void runWithAgent(activeRun.id);
@@ -631,6 +751,29 @@ export function WorkflowsPage() {
           completeMutation.mutate(completeTarget);
         }}
       />
+
+      <BrowserVaultModal
+        open={vaultModalOpen}
+        loading={createVaultMutation.isPending}
+        onOpenChange={setVaultModalOpen}
+        onSubmit={(input) => createVaultMutation.mutate(input)}
+      />
+
+      <ConfirmModal
+        open={Boolean(vaultDeleteId)}
+        onOpenChange={(open) => {
+          if (!open) setVaultDeleteId(null);
+        }}
+        title="Delete browser login?"
+        description="This removes the encrypted cookies. Agent runs will start anonymous until you add another login."
+        confirmLabel="Delete"
+        destructive
+        loading={deleteVaultMutation.isPending}
+        onConfirm={() => {
+          if (!vaultDeleteId) return;
+          deleteVaultMutation.mutate(vaultDeleteId);
+        }}
+      />
     </div>
   );
 }
@@ -668,7 +811,9 @@ function WorkflowListRow({
         className="w-full text-left bg-transparent border-none cursor-pointer p-0"
       >
         <div className="flex items-center gap-2 min-w-0">
-          <p className="text-[13px] font-medium text-neutral-950 truncate flex-1">{workflow.name}</p>
+          <p className="text-[13px] font-medium text-neutral-950 truncate flex-1">
+            {workflow.name}
+          </p>
           <Badge size="sm" variant={workflow.status === 'published' ? 'success' : 'neutral'}>
             {workflow.status}
           </Badge>
@@ -715,9 +860,7 @@ function WelcomePanel({
   startLoading: boolean;
   onEdit: (id: string) => void;
 }) {
-  const selected = selectedWorkflowId
-    ? workflows.find((w) => w.id === selectedWorkflowId)
-    : null;
+  const selected = selectedWorkflowId ? workflows.find((w) => w.id === selectedWorkflowId) : null;
 
   if (selected && selected.status === 'published' && !canAuthor) {
     return (
@@ -833,7 +976,9 @@ function AuthorPanel({
   if (loading) return <LoadingState label="Loading workflow…" />;
   if (error) return <ErrorState message={error} onRetry={onRetry} />;
   if (!workflow) {
-    return <EmptyState title="Workflow not found" description="Select another workflow from the list." />;
+    return (
+      <EmptyState title="Workflow not found" description="Select another workflow from the list." />
+    );
   }
 
   if (!canAuthor) {
@@ -945,8 +1090,9 @@ function AuthorPanel({
       </div>
 
       <p className="text-[12px] text-neutral-500">
-        Use <code className="text-[12px]"># Title</code>, <code className="text-[12px]">## Section</code>,
-        and <code className="text-[12px]">- [ ] step</code> for tracked checklist items. Other prose is
+        Use <code className="text-[12px]"># Title</code>,{' '}
+        <code className="text-[12px]">## Section</code>, and{' '}
+        <code className="text-[12px]">- [ ] step</code> for tracked checklist items. Other prose is
         guidance only. <strong>Verify with agent</strong> polishes wording and runs the agent so you
         see Activity logs before publishing.
       </p>
@@ -1130,10 +1276,7 @@ function ActivityPanel({
       ) : (
         <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
           {activityLog.map((entry) => (
-            <div
-              key={entry.id}
-              className={`rounded-12 border px-3 py-2 ${kindStyles(entry.kind)}`}
-            >
+            <div key={entry.id} className={`rounded-12 border px-3 py-2 ${kindStyles(entry.kind)}`}>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
                   {kindLabel(entry.kind)}
@@ -1194,6 +1337,9 @@ function RunnerPanel({
   agentExecuting,
   activityLog,
   liveReasoning,
+  vaults,
+  selectedVaultId,
+  onSelectVault,
   onRunWithAgent,
   onCompleteStep,
 }: {
@@ -1205,6 +1351,9 @@ function RunnerPanel({
   agentExecuting: boolean;
   activityLog: ExecutionLogEntry[];
   liveReasoning: string;
+  vaults: PublicBrowserSession[];
+  selectedVaultId: string;
+  onSelectVault: (id: string) => void;
   onRunWithAgent: () => void;
   onCompleteStep: (step: PublicWorkflowRun['steps'][number]) => void;
 }) {
@@ -1215,9 +1364,7 @@ function RunnerPanel({
   }
 
   const pct =
-    run.progress.total === 0
-      ? 0
-      : Math.round((run.progress.done / run.progress.total) * 100);
+    run.progress.total === 0 ? 0 : Math.round((run.progress.done / run.progress.total) * 100);
   const hasPending = run.progress.pending > 0;
 
   return (
@@ -1230,16 +1377,34 @@ function RunnerPanel({
           </p>
         </div>
         {hasPending ? (
-          <Button
-            variant="primary"
-            size="sm"
-            className="w-fit"
-            loading={agentExecuting}
-            disabled={agentExecuting}
-            onClick={onRunWithAgent}
-          >
-            {agentExecuting ? 'Agent running…' : 'Run agent now'}
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            <label className="flex flex-col gap-1 text-[12px] text-neutral-600">
+              Browser login
+              <select
+                className="h-8 min-w-[180px] rounded-8 border border-neutral-200 bg-white px-2 text-[12px] text-neutral-900"
+                value={selectedVaultId}
+                disabled={agentExecuting}
+                onChange={(e) => onSelectVault(e.target.value)}
+              >
+                <option value="">Anonymous (no cookies)</option>
+                {vaults.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              variant="primary"
+              size="sm"
+              className="w-fit"
+              loading={agentExecuting}
+              disabled={agentExecuting}
+              onClick={onRunWithAgent}
+            >
+              {agentExecuting ? 'Agent running…' : 'Run agent now'}
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -1364,5 +1529,115 @@ function RunnerPanel({
         </ul>
       </section>
     </div>
+  );
+}
+
+function BrowserVaultModal({
+  open,
+  loading,
+  onOpenChange,
+  onSubmit,
+}: {
+  open: boolean;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: { name: string; storageState: unknown }) => void;
+}) {
+  const nameId = useId();
+  const jsonId = useId();
+  const [name, setName] = useState('');
+  const [jsonText, setJsonText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setName('');
+      setJsonText('');
+      setError(null);
+    }
+  }, [open]);
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError('Name is required');
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      setError('storageState must be valid JSON (Playwright cookies / origins).');
+      return;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      setError('storageState must be a JSON object with cookies[] or origins[].');
+      return;
+    }
+    const rec = parsed as { cookies?: unknown; origins?: unknown };
+    if (!Array.isArray(rec.cookies) && !Array.isArray(rec.origins)) {
+      setError('storageState must include a cookies array or origins array.');
+      return;
+    }
+    setError(null);
+    onSubmit({ name: trimmedName, storageState: parsed });
+  }
+
+  return (
+    <Modal open={open} onOpenChange={onOpenChange}>
+      <ModalContent showClose={!loading} size="lg">
+        <ModalHeader title="Save browser login" />
+        <ModalBody align="start">
+          Paste a Playwright <code className="text-[12px]">storageState</code> JSON file (from
+          codegen or <code className="text-[12px]">context.storageState()</code>). Cookies are
+          encrypted at rest and never shown again.
+        </ModalBody>
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          {error ? <Alert status="error" variant="lighter" compact description={error} /> : null}
+          <Input
+            id={nameId}
+            label="Name"
+            placeholder="GitHub logged-in"
+            value={name}
+            disabled={loading}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[#4B5563] text-label-sm" htmlFor={jsonId}>
+              storageState JSON
+            </label>
+            <textarea
+              id={jsonId}
+              value={jsonText}
+              disabled={loading}
+              spellCheck={false}
+              rows={8}
+              placeholder='{"cookies":[{"name":"session","value":"…","domain":".example.com","path":"/"}],"origins":[]}'
+              className="min-h-[160px] w-full resize-y rounded-10 border border-neutral-200 bg-[#F9FAFB] px-3 py-2 font-mono text-[12px] leading-relaxed text-neutral-800 focus:outline-none focus:border-primary-base"
+              onChange={(e) => setJsonText(e.target.value)}
+            />
+          </div>
+          <ModalFooter align="end">
+            <Button
+              type="button"
+              size="sm"
+              variant="neutral"
+              mode="stroke"
+              disabled={loading}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" className="w-fit" loading={loading}>
+              Save encrypted
+            </Button>
+          </ModalFooter>
+        </form>
+        <Dialog.Description className="sr-only">
+          Save encrypted Playwright storageState for workflow browser runs
+        </Dialog.Description>
+      </ModalContent>
+    </Modal>
   );
 }

@@ -1,5 +1,10 @@
+import type { MemorySourceType } from '@script/shared';
 import { prisma } from '../../db/prisma';
-import { searchMemoryChunkVectors, setMemoryChunkEmbedding } from '../../db/vector';
+import {
+  searchMemoryChunkVectors,
+  setMemoryChunkEmbedding,
+  type MemorySourceTypeName,
+} from '../../db/vector';
 
 export type TextChunk = {
   content: string;
@@ -91,7 +96,7 @@ export async function dualWriteDocumentMemoryChunks(input: {
 export type MemorySearchHit = {
   chunkId: string;
   content: string;
-  sourceType: 'document' | 'meeting' | 'channel' | 'work_item' | 'workflow';
+  sourceType: MemorySourceType;
   position: number;
   score: number;
   documentId: string | null;
@@ -99,6 +104,10 @@ export type MemorySearchHit = {
   documentName: string | null;
   meetingId: string | null;
   meetingTitle: string | null;
+  sourceTitle: string | null;
+  workItemId: string | null;
+  workflowId: string | null;
+  href?: string;
   startOffset: number | null;
   endOffset: number | null;
   pageNumber: number | null;
@@ -107,14 +116,35 @@ export type MemorySearchHit = {
   endMs: number | null;
 };
 
+function hrefForHit(row: {
+  source_type: MemorySourceTypeName;
+  meeting_id: string | null;
+  external_key: string | null;
+}): string | undefined {
+  if (row.source_type === 'meeting' && row.meeting_id) {
+    return `/app/meetings?id=${encodeURIComponent(row.meeting_id)}`;
+  }
+  if (row.source_type === 'workflow' && row.external_key) {
+    return `/app/workflows?id=${encodeURIComponent(row.external_key)}`;
+  }
+  if (row.source_type === 'work_item' && row.external_key?.startsWith('github:')) {
+    const m = row.external_key.match(/^github:([^/]+\/[^#]+)#(\d+)$/);
+    if (m) return `https://github.com/${m[1]}/issues/${m[2]}`;
+  }
+  return undefined;
+}
+
 export async function searchMemoryChunks(input: {
   workspaceId: string;
   queryEmbedding: number[];
-  sourceType?: 'document' | 'meeting';
+  sourceType?: MemorySourceTypeName;
   documentIds?: string[];
   meetingIds?: string[];
   limit: number;
   minSimilarity: number;
+  maxClearanceLevel?: number;
+  userId?: string;
+  elevated?: boolean;
 }): Promise<MemorySearchHit[]> {
   try {
     const rows = await searchMemoryChunkVectors({
@@ -124,6 +154,9 @@ export async function searchMemoryChunks(input: {
       sourceType: input.sourceType ?? null,
       documentIds: input.documentIds,
       meetingIds: input.meetingIds,
+      maxClearanceLevel: input.maxClearanceLevel,
+      userId: input.userId,
+      elevated: input.elevated,
     });
     return rows
       .map((row) => ({
@@ -137,6 +170,10 @@ export async function searchMemoryChunks(input: {
         documentName: row.source_type === 'document' ? row.source_title : null,
         meetingId: row.meeting_id,
         meetingTitle: row.source_type === 'meeting' ? row.source_title : null,
+        sourceTitle: row.source_title,
+        workItemId: row.source_type === 'work_item' ? row.external_key : null,
+        workflowId: row.source_type === 'workflow' ? row.external_key : null,
+        href: hrefForHit(row),
         startOffset: row.start_offset,
         endOffset: row.end_offset,
         pageNumber: row.page_number,

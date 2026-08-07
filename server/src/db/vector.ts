@@ -143,10 +143,12 @@ export async function searchDocumentChunkVectors(input: {
   `;
 }
 
+export type MemorySourceTypeName = 'document' | 'meeting' | 'channel' | 'work_item' | 'workflow';
+
 export type MemoryVectorHit = {
   id: string;
   content: string;
-  source_type: 'document' | 'meeting';
+  source_type: MemorySourceTypeName;
   position: number;
   distance: number;
   document_id: string | null;
@@ -159,36 +161,115 @@ export type MemoryVectorHit = {
   start_ms: number | null;
   end_ms: number | null;
   source_title: string;
+  external_key: string | null;
 };
+
+function memoryClearanceSql(input: {
+  workspaceId: string;
+  maxClearanceLevel?: number;
+  userId?: string | null;
+  elevated?: boolean;
+}): Prisma.Sql {
+  if (input.maxClearanceLevel === undefined) return Prisma.sql`TRUE`;
+  const maxClearance = input.maxClearanceLevel;
+  const userId = input.userId ?? null;
+  const elevated = input.elevated === true;
+
+  const docRestricted = elevated
+    ? Prisma.sql`TRUE`
+    : userId
+      ? Prisma.sql`(
+          d.visibility = 'workspace'::"ResourceVisibility"
+          OR EXISTS (
+            SELECT 1 FROM "ResourcePrincipal" rp
+            WHERE rp."workspaceId" = ${input.workspaceId}
+              AND rp."resourceKind" = 'document'::"ResourceKind"
+              AND rp."resourceId" = d.id
+              AND rp."userId" = ${userId}
+          )
+        )`
+      : Prisma.sql`d.visibility = 'workspace'::"ResourceVisibility"`;
+
+  const meetingRestricted = elevated
+    ? Prisma.sql`TRUE`
+    : userId
+      ? Prisma.sql`(
+          m.visibility = 'workspace'::"ResourceVisibility"
+          OR EXISTS (
+            SELECT 1 FROM "ResourcePrincipal" rp
+            WHERE rp."workspaceId" = ${input.workspaceId}
+              AND rp."resourceKind" = 'meeting'::"ResourceKind"
+              AND rp."resourceId" = m.id
+              AND rp."userId" = ${userId}
+          )
+        )`
+      : Prisma.sql`m.visibility = 'workspace'::"ResourceVisibility"`;
+
+  return Prisma.sql`(
+    (
+      c."sourceType" <> 'document'::"MemorySourceType"
+      OR (
+        d.id IS NOT NULL
+        AND d.status = 'ready'
+        AND d."clearanceLevel" <= ${maxClearance}
+        AND ${docRestricted}
+      )
+    )
+    AND (
+      c."sourceType" <> 'meeting'::"MemorySourceType"
+      OR (
+        m.id IS NOT NULL
+        AND m."clearanceLevel" <= ${maxClearance}
+        AND ${meetingRestricted}
+      )
+    )
+  )`;
+}
 
 export async function searchMemoryChunkVectors(input: {
   workspaceId: string;
   queryEmbedding: number[];
   limit: number;
-  sourceType?: 'document' | 'meeting' | null;
+  sourceType?: MemorySourceTypeName | null;
   documentIds?: string[];
   meetingIds?: string[];
+  maxClearanceLevel?: number;
+  userId?: string | null;
+  elevated?: boolean;
 }): Promise<MemoryVectorHit[]> {
   const vector = vectorLiteral(input.queryEmbedding);
   const sourceType = input.sourceType ?? null;
   const documentIds = input.documentIds?.filter(Boolean) ?? [];
   const meetingIds = input.meetingIds?.filter(Boolean) ?? [];
+  const clearance = memoryClearanceSql({
+    workspaceId: input.workspaceId,
+    maxClearanceLevel: input.maxClearanceLevel,
+    userId: input.userId,
+    elevated: input.elevated,
+  });
+
+  const selectSql = Prisma.sql`
+    SELECT c.id, c.content, c."sourceType" as source_type, c.position,
+           c."documentId" as document_id, c."documentVersionId" as document_version_id,
+           c."meetingId" as meeting_id,
+           c."startOffset" as start_offset, c."endOffset" as end_offset, c."pageNumber" as page_number,
+           c.speaker, c."startMs" as start_ms, c."endMs" as end_ms,
+           s.title as source_title, s."externalKey" as external_key,
+           (c.embedding <=> ${vector}::vector) as distance
+    FROM "MemoryChunk" c
+    JOIN "MemorySource" s ON s.id = c."memorySourceId"
+    LEFT JOIN "Document" d ON d.id = c."documentId" AND c."sourceType" = 'document'::"MemorySourceType"
+    LEFT JOIN "Meeting" m ON m.id = c."meetingId" AND c."sourceType" = 'meeting'::"MemorySourceType"
+  `;
 
   if (documentIds.length > 0) {
     return prisma.$queryRaw<MemoryVectorHit[]>`
-      SELECT c.id, c.content, c."sourceType" as source_type, c.position,
-             c."documentId" as document_id, c."documentVersionId" as document_version_id,
-             c."meetingId" as meeting_id,
-             c."startOffset" as start_offset, c."endOffset" as end_offset, c."pageNumber" as page_number,
-             c.speaker, c."startMs" as start_ms, c."endMs" as end_ms,
-             s.title as source_title,
-             (c.embedding <=> ${vector}::vector) as distance
-      FROM "MemoryChunk" c
-      JOIN "MemorySource" s ON s.id = c."memorySourceId"
+      ${selectSql}
       WHERE c."workspaceId" = ${input.workspaceId}
         AND c.embedding IS NOT NULL
         AND (${sourceType}::"MemorySourceType" IS NULL OR c."sourceType" = ${sourceType}::"MemorySourceType")
         AND c."documentId" IN (${Prisma.join(documentIds)})
+        AND ${clearance}
       ORDER BY c.embedding <=> ${vector}::vector
       LIMIT ${input.limit}
     `;
@@ -196,19 +277,12 @@ export async function searchMemoryChunkVectors(input: {
 
   if (meetingIds.length > 0) {
     return prisma.$queryRaw<MemoryVectorHit[]>`
-      SELECT c.id, c.content, c."sourceType" as source_type, c.position,
-             c."documentId" as document_id, c."documentVersionId" as document_version_id,
-             c."meetingId" as meeting_id,
-             c."startOffset" as start_offset, c."endOffset" as end_offset, c."pageNumber" as page_number,
-             c.speaker, c."startMs" as start_ms, c."endMs" as end_ms,
-             s.title as source_title,
-             (c.embedding <=> ${vector}::vector) as distance
-      FROM "MemoryChunk" c
-      JOIN "MemorySource" s ON s.id = c."memorySourceId"
+      ${selectSql}
       WHERE c."workspaceId" = ${input.workspaceId}
         AND c.embedding IS NOT NULL
         AND (${sourceType}::"MemorySourceType" IS NULL OR c."sourceType" = ${sourceType}::"MemorySourceType")
         AND c."meetingId" IN (${Prisma.join(meetingIds)})
+        AND ${clearance}
       ORDER BY c.embedding <=> ${vector}::vector
       LIMIT ${input.limit}
     `;
@@ -216,35 +290,21 @@ export async function searchMemoryChunkVectors(input: {
 
   if (sourceType) {
     return prisma.$queryRaw<MemoryVectorHit[]>`
-      SELECT c.id, c.content, c."sourceType" as source_type, c.position,
-             c."documentId" as document_id, c."documentVersionId" as document_version_id,
-             c."meetingId" as meeting_id,
-             c."startOffset" as start_offset, c."endOffset" as end_offset, c."pageNumber" as page_number,
-             c.speaker, c."startMs" as start_ms, c."endMs" as end_ms,
-             s.title as source_title,
-             (c.embedding <=> ${vector}::vector) as distance
-      FROM "MemoryChunk" c
-      JOIN "MemorySource" s ON s.id = c."memorySourceId"
+      ${selectSql}
       WHERE c."workspaceId" = ${input.workspaceId}
         AND c.embedding IS NOT NULL
         AND c."sourceType" = ${sourceType}::"MemorySourceType"
+        AND ${clearance}
       ORDER BY c.embedding <=> ${vector}::vector
       LIMIT ${input.limit}
     `;
   }
 
   return prisma.$queryRaw<MemoryVectorHit[]>`
-    SELECT c.id, c.content, c."sourceType" as source_type, c.position,
-           c."documentId" as document_id, c."documentVersionId" as document_version_id,
-           c."meetingId" as meeting_id,
-           c."startOffset" as start_offset, c."endOffset" as end_offset, c."pageNumber" as page_number,
-           c.speaker, c."startMs" as start_ms, c."endMs" as end_ms,
-           s.title as source_title,
-           (c.embedding <=> ${vector}::vector) as distance
-    FROM "MemoryChunk" c
-    JOIN "MemorySource" s ON s.id = c."memorySourceId"
+    ${selectSql}
     WHERE c."workspaceId" = ${input.workspaceId}
       AND c.embedding IS NOT NULL
+      AND ${clearance}
     ORDER BY c.embedding <=> ${vector}::vector
     LIMIT ${input.limit}
   `;

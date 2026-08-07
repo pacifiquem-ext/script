@@ -23,7 +23,15 @@ export type AgentStreamEvent =
   | { type: 'tool_call'; name: string; input: unknown; statusLabel?: string }
   | { type: 'tool_result'; name: string; ok: boolean }
   | { type: 'delta'; text: string }
-  | { type: 'citations'; citations: MessageCitation[] };
+  | { type: 'citations'; citations: MessageCitation[] }
+  | {
+      type: 'write_confirm';
+      tool: string;
+      confirmToken: string;
+      runId: string;
+      stepKey: string;
+      summary?: string;
+    };
 
 export type AgentRunInput = {
   system: string;
@@ -147,6 +155,37 @@ function collectCitationsFromToolResult(
   }
 }
 
+function writeConfirmFromToolResult(
+  toolName: string,
+  result: unknown,
+): Extract<AgentStreamEvent, { type: 'write_confirm' }> | null {
+  if (!result || typeof result !== 'object') return null;
+  const r = result as Record<string, unknown>;
+  if (r.needsConfirmation !== true) return null;
+  const confirmationId =
+    typeof r.confirmationId === 'string'
+      ? r.confirmationId
+      : typeof r.confirmToken === 'string'
+        ? r.confirmToken
+        : '';
+  if (!confirmationId) return null;
+  if (typeof r.runId !== 'string' || typeof r.stepKey !== 'string') return null;
+  let summary: string | undefined;
+  if (r.evidence && typeof r.evidence === 'object') {
+    const s = (r.evidence as { summary?: unknown }).summary;
+    if (typeof s === 'string' && s.trim()) summary = s;
+  }
+  if (!summary && typeof r.message === 'string') summary = r.message;
+  return {
+    type: 'write_confirm',
+    tool: toolName,
+    confirmToken: confirmationId,
+    runId: r.runId,
+    stepKey: r.stepKey,
+    summary,
+  };
+}
+
 /**
  * Production agent loop via Mastra (ADR 0017).
  * Inventory intents hard-routed for Library and Meetings (no product regex NLU for inventory —
@@ -232,6 +271,8 @@ export async function* runAgentWithTools(input: AgentRunInput): AsyncGenerator<A
         const result = payload.result;
         collectCitationsFromToolResult(result, citationMap);
         yield { type: 'tool_result', name, ok: !isError };
+        const writeConfirm = writeConfirmFromToolResult(name, result);
+        if (writeConfirm) yield writeConfirm;
         continue;
       }
     }
@@ -366,7 +407,7 @@ export function setAgentRunnerForTests(runner: AgentRunner | null) {
 }
 
 /** @deprecated Prefer Mastra stream; retained for tests that stub Anthropic message create. */
-export function setAnthropicMessagesCreateForTests(_fn: unknown) {
+export function setAnthropicMessagesCreateForTests() {
   if (env.NODE_ENV !== 'test') {
     throw new Error('setAnthropicMessagesCreateForTests is only available in test');
   }

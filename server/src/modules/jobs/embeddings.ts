@@ -1,7 +1,6 @@
-import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, VOYAGE_EMBED_BATCH_SIZE } from '@script/shared';
+import { EMBEDDING_DIMENSIONS } from '@script/shared';
 import { ConfigurationError } from '../../common/errors';
-import { env, requireVoyageApiKey } from '../../config/env';
-import { logger } from '../../lib/logger';
+import { env } from '../../config/env';
 import {
   createConfiguredEmbedder,
   type Embedder,
@@ -9,10 +8,6 @@ import {
 } from '../ai/embeddings-provider';
 
 export type { Embedder, EmbedInputType };
-
-async function sleep(ms: number) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function assertEmbedding(vector: number[] | undefined, index: number): number[] {
   if (!vector || vector.length !== EMBEDDING_DIMENSIONS) {
@@ -25,76 +20,6 @@ function assertEmbedding(vector: number[] | undefined, index: number): number[] 
   }
   return vector;
 }
-
-async function voyageEmbed(texts: string[], inputType: EmbedInputType): Promise<number[][]> {
-  if (texts.length === 0) return [];
-  const apiKey = requireVoyageApiKey();
-  const vectors: number[][] = new Array(texts.length);
-  for (let start = 0; start < texts.length; start += VOYAGE_EMBED_BATCH_SIZE) {
-    const batch = texts.slice(start, start + VOYAGE_EMBED_BATCH_SIZE);
-    let attempt = 0;
-    while (true) {
-      attempt += 1;
-      const response = await fetch('https://api.voyageai.com/v1/embeddings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          input: batch,
-          model: EMBEDDING_MODEL,
-          input_type: inputType,
-          output_dimension: EMBEDDING_DIMENSIONS,
-        }),
-      });
-      if (response.ok) {
-        const payload = (await response.json()) as {
-          data: Array<{ embedding: number[]; index: number }>;
-        };
-        if (!payload.data || payload.data.length !== batch.length) {
-          throw new Error(
-            `Voyage returned ${payload.data?.length ?? 0} embeddings for batch of ${batch.length}`,
-          );
-        }
-        const sorted = [...payload.data].sort((a, b) => a.index - b.index);
-        for (let i = 0; i < sorted.length; i += 1) {
-          vectors[start + i] = assertEmbedding(sorted[i]?.embedding, start + i);
-        }
-        logger.info(
-          { batchSize: batch.length, inputType, model: EMBEDDING_MODEL },
-          'voyage embeddings batch ok',
-        );
-        break;
-      }
-      const body = await response.text();
-      const retryable = response.status === 429 || response.status >= 500;
-      if (!retryable || attempt >= 4) {
-        if (response.status === 429 || /payment method|rate limit|tpm|rpm|billing/i.test(body)) {
-          throw new Error(
-            'Processing failed due to low embedding tokens. Buy more credits or contact support.',
-          );
-        }
-        throw new Error(`Voyage embeddings failed: ${response.status} ${body.slice(0, 200)}`);
-      }
-      const delay = Math.min(8000, 500 * 2 ** (attempt - 1));
-      logger.warn(
-        { status: response.status, attempt, delay, inputType },
-        'voyage embeddings retry',
-      );
-      await sleep(delay);
-    }
-  }
-  return vectors as number[][];
-}
-
-const voyageEmbedder: Embedder = {
-  embedTexts: (texts, inputType = 'document') => voyageEmbed(texts, inputType),
-  embedQuery: async (text) => {
-    const [vector] = await voyageEmbed([text], 'query');
-    return assertEmbedding(vector, 0);
-  },
-};
 
 function testEmbed(text: string): number[] {
   const vector = Array.from({ length: EMBEDDING_DIMENSIONS }, () => 0);

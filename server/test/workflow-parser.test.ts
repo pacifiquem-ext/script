@@ -6,10 +6,7 @@ import {
 } from '../src/modules/workflows/parse-workflow-markdown';
 
 function expectedKey(label: string): string {
-  return createHash('sha256')
-    .update(normalizeStepLabel(label))
-    .digest('hex')
-    .slice(0, 16);
+  return createHash('sha256').update(normalizeStepLabel(label)).digest('hex').slice(0, 16);
 }
 
 describe('parseWorkflowMarkdown', () => {

@@ -1,10 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { LibSQLStore } from '@mastra/libsql';
-import { companyBrainAgent, COMPANY_BRAIN_AGENT_ID } from './agents/company-brain';
-import {
-  workflowExecutorAgent,
-  WORKFLOW_EXECUTOR_AGENT_ID,
-} from './agents/workflow-executor';
+import { companyBrainAgent } from './agents/company-brain';
+import { workflowExecutorAgent } from './agents/workflow-executor';
 
 /**
  * Mastra composition root (ADR 0017).

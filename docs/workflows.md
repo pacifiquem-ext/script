@@ -76,12 +76,12 @@ onboarding process?" is answerable in chat by anyone, independent of whether the
 
 Per [`agent-tools.md`](./agent-tools.md), workflows enter the brain as tools:
 
-| Tool                       | Purpose                                                 |
-| -------------------------- | ------------------------------------------------------- |
-| `list_workflows`           | What guided processes exist in this workspace           |
-| `get_workflow`             | The steps and instructions of one workflow              |
-| `get_my_workflow_progress` | Where the current user is, what's next, what's blocking |
-| `complete_workflow_step`   | **Write** — mark done **with evidence** after work      |
+| Tool                       | Purpose                                                  |
+| -------------------------- | -------------------------------------------------------- |
+| `list_workflows`           | What guided processes exist in this workspace            |
+| `get_workflow`             | The steps and instructions of one workflow               |
+| `get_my_workflow_progress` | Where the current user is, what's next, what's blocking  |
+| `complete_workflow_step`   | **Write** — mark done **with evidence** after work       |
 | `browser_*`                | Playwright navigate/click/type/snapshot (executor agent) |
 
 `complete_workflow_step` is the project's first agent **write**. Evidence is required for agent

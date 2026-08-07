@@ -7,7 +7,8 @@ import {
 } from '../src/modules/chat/agent';
 import { classifyInventoryIntentHeuristicForTests } from '../src/modules/chat/agent/inventory-intent';
 import { buildTranscriptText, secondsToMs } from '../src/modules/meetings/fireflies-client';
-import { parseActionItemsOnlyForTest } from '../src/modules/meetings/commitment-extract';
+import { resolveCommitmentOwner } from '../src/modules/meetings/meeting-service';
+import { prisma } from '../src/db/prisma';
 
 describe('tool registry (Phase 1)', () => {
   it('registers library, web, and meeting tools with status labels', () => {
@@ -68,5 +69,49 @@ describe('Fireflies normalization', () => {
     expect(text).toContain('[01:05] Ada:');
     expect(text).toContain('We will ship the connector.');
     expect(secondsToMs(1.5)).toBe(1500);
+  });
+});
+
+describe('resolveCommitmentOwner (X3)', () => {
+  it('matches PersonIdentity displayName/email and workspace member names', async () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const user = await prisma.user.create({
+      data: {
+        email: `owner-${suffix}@example.com`,
+        name: 'Ada Lovelace',
+        passwordHash: 'x',
+        emailVerifiedAt: new Date(),
+        memberships: {
+          create: {
+            role: 'owner',
+            workspace: { create: { name: 'Owner WS' } },
+          },
+        },
+      },
+      include: { memberships: true },
+    });
+    const workspaceId = user.memberships[0]!.workspaceId;
+    await prisma.personIdentity.create({
+      data: {
+        workspaceId,
+        provider: 'slack',
+        externalId: `U${suffix}`,
+        displayName: 'Ben Bitdiddle',
+        email: `ben-${suffix}@example.com`,
+        userId: user.id,
+      },
+    });
+
+    try {
+      expect(await resolveCommitmentOwner(workspaceId, null)).toBeNull();
+      expect(await resolveCommitmentOwner(workspaceId, '  ')).toBeNull();
+      expect(await resolveCommitmentOwner(workspaceId, 'ada lovelace')).toBe(user.id);
+      expect(await resolveCommitmentOwner(workspaceId, user.email.toUpperCase())).toBe(user.id);
+      expect(await resolveCommitmentOwner(workspaceId, 'BEN BITDIDDLE')).toBe(user.id);
+      expect(await resolveCommitmentOwner(workspaceId, `ben-${suffix}@example.com`)).toBe(user.id);
+      expect(await resolveCommitmentOwner(workspaceId, 'Nobody Known')).toBeNull();
+    } finally {
+      await prisma.workspace.delete({ where: { id: workspaceId } });
+    }
   });
 });

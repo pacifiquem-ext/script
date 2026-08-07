@@ -49,9 +49,7 @@ export function humanizeToolCall(
     case 'browser_type': {
       const label = str(args.text) ?? str(args.selector);
       return {
-        message: label
-          ? `Typing into “${label.slice(0, 60)}”`
-          : 'Typing into a field',
+        message: label ? `Typing into “${label.slice(0, 60)}”` : 'Typing into a field',
       };
     }
     case 'browser_press': {
@@ -123,8 +121,14 @@ export function humanizeToolResult(
 
 export function humanizePhase(message: string): string {
   return message
-    .replace(/Phase 1: auto-navigate steps \(no LLM\)/i, 'Quick web steps (open links automatically)')
-    .replace(/Phase 2: workflow agent for (\d+) remaining step\(s\)/i, 'Working through $1 remaining step(s) with the agent')
+    .replace(
+      /Phase 1: auto-navigate steps \(no LLM\)/i,
+      'Quick web steps (open links automatically)',
+    )
+    .replace(
+      /Phase 2: workflow agent for (\d+) remaining step\(s\)/i,
+      'Working through $1 remaining step(s) with the agent',
+    )
     .replace(/Starting agent execution…/i, 'Starting the agent…')
     .replace(/Polishing workflow instructions…/i, 'Polishing instructions for clarity…');
 }

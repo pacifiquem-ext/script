@@ -104,9 +104,9 @@ describe('workflows API (C7)', () => {
       },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json().version?.steps?.some((s: { label: string }) => s.label.includes('email'))).toBe(
-      true,
-    );
+    expect(
+      updated.json().version?.steps?.some((s: { label: string }) => s.label.includes('email')),
+    ).toBe(true);
     expect(updated.json().version?.versionNumber).toBe(1);
   });
 
@@ -244,9 +244,7 @@ describe('workflows API (C7)', () => {
       cookies,
     });
     expect(pub.statusCode).toBeGreaterThanOrEqual(400);
-    expect(String(pub.json()?.message ?? pub.json()?.error?.message ?? '')).toMatch(
-      /verif/i,
-    );
+    expect(String(pub.json()?.message ?? pub.json()?.error?.message ?? '')).toMatch(/verif/i);
   });
 });
 
@@ -364,8 +362,9 @@ describe('workflows API authz (C7)', () => {
     });
     expect(started.statusCode).toBe(200);
     adminRunId = started.json().id;
-    adminStepKey = started.json().steps.find((s: { status: string }) => s.status === 'pending')
-      ?.stepKey;
+    adminStepKey = started
+      .json()
+      .steps.find((s: { status: string }) => s.status === 'pending')?.stepKey;
     expect(adminStepKey).toBeTruthy();
   }, 120_000);
 

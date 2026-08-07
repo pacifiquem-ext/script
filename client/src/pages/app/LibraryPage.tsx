@@ -50,8 +50,6 @@ import {
   IconAttach,
   IconClose,
   IconDocFile,
-  IconFile,
-  IconFolderSimple,
   IconGrid,
   IconImage,
   IconMenu,
@@ -93,15 +91,6 @@ type PathCrumb = { id: string; name: string };
 
 type ContextTarget =
   { kind: 'folder'; item: PublicFolder } | { kind: 'file'; item: PublicDocument };
-
-const TYPE_COLOR: Record<FileKind, string> = {
-  pdf: '#6060FF',
-  doc: '#6060FF',
-  xls: '#6060FF',
-  txt: '#6060FF',
-  img: '#6060FF',
-  other: '#6060FF',
-};
 
 const TYPE_LABEL: Record<FileKind, string> = {
   pdf: 'PDF',

@@ -33,9 +33,7 @@ describe('extractUrlFromStepLabel', () => {
 
 describe('executeSimpleNavigateStep 404 guard', () => {
   it('does not complete when deep path lands on GitHub 404', async () => {
-    const { executeSimpleNavigateStep } = await import(
-      '../src/modules/workflows/agent-executor'
-    );
+    const { executeSimpleNavigateStep } = await import('../src/modules/workflows/agent-executor');
     // Only exercises URL extraction + failure path when browser is available;
     // if chromium missing, skip gracefully.
     const sessionKey = `test-404-${Date.now()}`;
@@ -107,6 +105,10 @@ describe('workflow agent execute (browser)', () => {
     });
     expect(created.statusCode).toBe(200);
     workflowId = created.json().id;
+    await prisma.workflowVersion.updateMany({
+      where: { workflowId },
+      data: { verifiedAt: new Date(), verifiedRunId: 'agent-execute-verify' },
+    });
     const published = await app.inject({
       method: 'POST',
       url: `/workflows/${workflowId}/publish`,
@@ -122,9 +124,7 @@ describe('workflow agent execute (browser)', () => {
     });
     expect(started.statusCode).toBe(200);
     runId = started.json().id;
-    const pending = started
-      .json()
-      .steps.find((s: { status: string }) => s.status === 'pending');
+    const pending = started.json().steps.find((s: { status: string }) => s.status === 'pending');
     stepKey = pending.stepKey;
   }, 60_000);
 

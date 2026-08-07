@@ -228,7 +228,7 @@ export function refineCitationRange(
     }
   }
 
-  let absStart = base.startOffset + best.relStart;
+  const absStart = base.startOffset + best.relStart;
   let absEnd = base.startOffset + best.relEnd;
   // Expand slightly with neighbors if still tiny, without exceeding maxChars.
   if (absEnd - absStart < Math.min(80, maxChars / 2)) {
