@@ -4,13 +4,13 @@
 
 ## Specialists as tools (current)
 
-| Domain | Form | Why |
-| ------ | ---- | --- |
-| Library | tools on `company-brain` | Clearance-scoped retrieval; low prompt cost |
-| Meetings | tools | Same |
-| Work items | tools | Same |
-| Web search | tool (`@mastra/tavily` client) | Generic; Mastra package |
-| Channel context | tools later | Bound channels feed MemoryChunk; still tools |
+| Domain          | Form                           | Why                                          |
+| --------------- | ------------------------------ | -------------------------------------------- |
+| Library         | tools on `company-brain`       | Clearance-scoped retrieval; low prompt cost  |
+| Meetings        | tools                          | Same                                         |
+| Work items      | tools                          | Same                                         |
+| Web search      | tool (`@mastra/tavily` client) | Generic; Mastra package                      |
+| Channel context | tools later                    | Bound channels feed MemoryChunk; still tools |
 
 ## When to introduce supervisors
 

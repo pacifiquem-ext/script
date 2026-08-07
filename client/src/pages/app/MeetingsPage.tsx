@@ -196,25 +196,25 @@ export function MeetingsPage() {
           {!listQuery.isError &&
             !connectorQuery.isError &&
             meetings.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => {
-                setSelectedId(m.id);
-                setHighlightMs(null);
-              }}
-              className={`w-full text-left rounded-10 px-3 py-2 mb-1 border-none cursor-pointer transition-colors ${
-                selectedId === m.id ? 'bg-primary-alpha-10' : 'bg-transparent hover:bg-neutral-50'
-              }`}
-            >
-              <p className="text-[13px] font-medium text-neutral-950 truncate">{m.title}</p>
-              <p className="text-[11px] text-neutral-500 capitalize">
-                {m.status}
-                {m.startedAt ? ` · ${new Date(m.startedAt).toLocaleDateString()}` : ''}
-                {m.sourceProvider ? ` · ${m.sourceProvider}` : ''}
-              </p>
-            </button>
-          ))}
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => {
+                  setSelectedId(m.id);
+                  setHighlightMs(null);
+                }}
+                className={`w-full text-left rounded-10 px-3 py-2 mb-1 border-none cursor-pointer transition-colors ${
+                  selectedId === m.id ? 'bg-primary-alpha-10' : 'bg-transparent hover:bg-neutral-50'
+                }`}
+              >
+                <p className="text-[13px] font-medium text-neutral-950 truncate">{m.title}</p>
+                <p className="text-[11px] text-neutral-500 capitalize">
+                  {m.status}
+                  {m.startedAt ? ` · ${new Date(m.startedAt).toLocaleDateString()}` : ''}
+                  {m.sourceProvider ? ` · ${m.sourceProvider}` : ''}
+                </p>
+              </button>
+            ))}
         </div>
       </aside>
 

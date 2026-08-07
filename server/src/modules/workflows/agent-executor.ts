@@ -72,7 +72,10 @@ export type WorkflowExecuteEvent =
 export function extractUrlFromStepLabel(label: string): string | null {
   const trimmed = label.trim();
   // Don't treat PAT/token lines as navigation just because they mention github.
-  if (/\b(pat|token|api[_-]?key|secret|password)\b/i.test(trimmed) && !/^https?:\/\//i.test(trimmed)) {
+  if (
+    /\b(pat|token|api[_-]?key|secret|password)\b/i.test(trimmed) &&
+    !/^https?:\/\//i.test(trimmed)
+  ) {
     const onlyUrl = trimmed.match(/https?:\/\/[^\s)\]>"']+/i);
     if (!onlyUrl) return null;
   }
@@ -87,7 +90,9 @@ export function extractUrlFromStepLabel(label: string): string | null {
     return host.startsWith('http') ? host : `https://${host}`;
   }
 
-  const bare = trimmed.match(/\b([a-z0-9][-a-z0-9]*\.(?:com|org|net|io|dev|ai|co)(?:\/[^\s]*)?)\b/i);
+  const bare = trimmed.match(
+    /\b([a-z0-9][-a-z0-9]*\.(?:com|org|net|io|dev|ai|co)(?:\/[^\s]*)?)\b/i,
+  );
   if (bare?.[1] && /go|visit|open|navigate|browse|check|view|see/i.test(trimmed)) {
     return `https://${bare[1]}`;
   }
@@ -221,12 +226,7 @@ export async function* executeWorkflowRun(input: {
   };
 
   try {
-    let run = await workflows.getRun(
-      input.workspaceId,
-      input.userId,
-      input.runId,
-      input.role,
-    );
+    let run = await workflows.getRun(input.workspaceId, input.userId, input.runId, input.role);
 
     if (run.assigneeUserId !== input.userId && input.role !== 'owner' && input.role !== 'admin') {
       const log = await emitAndLog(
@@ -400,12 +400,7 @@ export async function* executeWorkflowRun(input: {
           evidence: result.evidence,
           log,
         };
-        run = await workflows.getRun(
-          input.workspaceId,
-          input.userId,
-          input.runId,
-          input.role,
-        );
+        run = await workflows.getRun(input.workspaceId, input.userId, input.runId, input.role);
       } else {
         const log = await emitAndLog(
           input.runId,
@@ -432,7 +427,10 @@ export async function* executeWorkflowRun(input: {
           'phase',
           humanizePhase(`Phase 2: workflow agent for ${stillPending.length} remaining step(s)`),
           {
-            detail: stillPending.map((s) => `• ${s.label}`).join('\n').slice(0, 2000),
+            detail: stillPending
+              .map((s) => `• ${s.label}`)
+              .join('\n')
+              .slice(0, 2000),
           },
         );
         yield { type: 'phase', message: log.message, log };
@@ -467,15 +465,12 @@ Do not invent success. Write user-facing summaries in plain English.`;
       });
 
       try {
-        const stream = await workflowExecutorAgent.stream(
-          [{ role: 'user', content: userPrompt }],
-          {
-            requestContext,
-            instructions: WORKFLOW_EXECUTOR_SYSTEM_PROMPT,
-            maxSteps: Math.min(8 + stillPending.length * 6, 40),
-            abortSignal: input.signal,
-          },
-        );
+        const stream = await workflowExecutorAgent.stream([{ role: 'user', content: userPrompt }], {
+          requestContext,
+          instructions: WORKFLOW_EXECUTOR_SYSTEM_PROMPT,
+          maxSteps: Math.min(8 + stillPending.length * 6, 40),
+          abortSignal: input.signal,
+        });
 
         for await (const chunk of stream.fullStream) {
           if (input.signal?.aborted) break;

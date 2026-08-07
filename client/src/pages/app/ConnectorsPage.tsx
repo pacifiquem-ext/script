@@ -260,8 +260,8 @@ export function ConnectorsPage() {
         <h2 className="text-[16px] font-semibold">Slack (messaging)</h2>
         <p className="text-[12px] text-neutral-500">
           Install via OAuth or paste a bot token (xoxb-…), bind channels to listen, Events API
-          webhook <code>/webhooks/slack/events</code> with <code>SLACK_SIGNING_SECRET</code>. Mentions
-          ack with hourglass and reply in thread.
+          webhook <code>/webhooks/slack/events</code> with <code>SLACK_SIGNING_SECRET</code>.
+          Mentions ack with hourglass and reply in thread.
         </p>
         {slackQ.data?.connected ? (
           <>

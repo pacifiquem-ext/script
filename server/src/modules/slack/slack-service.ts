@@ -312,10 +312,7 @@ async function deleteChannelMemory(workspaceId: string, channelId?: string) {
       where: {
         workspaceId,
         type: 'channel',
-        OR: [
-          { externalKey: { startsWith: `${channelId}:` } },
-          { externalKey: channelId },
-        ],
+        OR: [{ externalKey: { startsWith: `${channelId}:` } }, { externalKey: channelId }],
       },
     });
   } else {

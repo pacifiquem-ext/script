@@ -403,7 +403,11 @@ export function SettingsModal({ open, onClose }: Props) {
                       <div className="flex flex-col gap-1">
                         <span className="text-[13px] text-neutral-500">Credits remaining</span>
                         <span className="text-[14px] font-medium text-neutral-950">
-                          {(usage?.creditBalance ?? activeWorkspace?.creditBalance ?? 0).toLocaleString()}
+                          {(
+                            usage?.creditBalance ??
+                            activeWorkspace?.creditBalance ??
+                            0
+                          ).toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -441,7 +445,11 @@ export function SettingsModal({ open, onClose }: Props) {
                   <div className="flex items-center justify-between">
                     <span className="text-[13px] text-neutral-600 w-[100px]">Credits</span>
                     <span className="text-[13px] text-neutral-700">
-                      {(usage?.creditBalance ?? activeWorkspace?.creditBalance ?? 0).toLocaleString()}{' '}
+                      {(
+                        usage?.creditBalance ??
+                        activeWorkspace?.creditBalance ??
+                        0
+                      ).toLocaleString()}{' '}
                       remaining
                     </span>
                   </div>
@@ -519,7 +527,13 @@ export function SettingsModal({ open, onClose }: Props) {
                           <Button variant="primary" size="sm" className="w-fit" disabled>
                             Upgrade Plan
                           </Button>
-                          <Button variant="neutral" mode="stroke" size="sm" className="w-fit" disabled>
+                          <Button
+                            variant="neutral"
+                            mode="stroke"
+                            size="sm"
+                            className="w-fit"
+                            disabled
+                          >
                             Purchase Credits
                           </Button>
                         </div>

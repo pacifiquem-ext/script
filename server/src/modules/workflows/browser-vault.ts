@@ -1,6 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { BadRequestError, ConfigurationError, ConflictError, NotFoundError } from '../../common/errors';
+import {
+  BadRequestError,
+  ConfigurationError,
+  ConflictError,
+  NotFoundError,
+} from '../../common/errors';
 import { prisma } from '../../db/prisma';
 import { decryptSecret, encryptSecret, hasTokenEncryptionKey } from '../../lib/token-crypto';
 

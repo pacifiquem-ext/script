@@ -14,21 +14,21 @@ the workspace owns. The way it stops saying that is **tools**.
 
 ## 1. What ships today
 
-| Tool                     | Source                                        | What it answers                               |
-| ------------------------ | --------------------------------------------- | --------------------------------------------- |
-| `list_library_documents` | `mastra/tools/library.ts`                     | Library inventory                             |
-| `get_document_summary`   | `mastra/tools/library.ts`                     | One document by id or name                    |
-| `search_library`         | `mastra/tools/library.ts`                     | Semantic document search                      |
-| `list_meetings`          | `mastra/tools/meetings.ts`                    | Meeting inventory                             |
-| `get_meeting_summary`    | `mastra/tools/meetings.ts`                    | One meeting                                   |
-| `search_meetings`        | `mastra/tools/meetings.ts`                    | Transcript search                             |
-| `list_work_items`        | `mastra/tools/work-items.ts`                  | Work-item inventory                           |
-| `get_work_item`          | `mastra/tools/work-items.ts`                  | One work item (live GitHub when connected)    |
-| `list_workflows`         | `mastra/tools/workflows.ts`                   | Workflow catalog                              |
-| `get_workflow`           | `mastra/tools/workflows.ts`                   | One workflow’s steps                          |
-| `get_my_workflow_progress` | `mastra/tools/workflows.ts`                 | Assignee progress / what’s next               |
-| `complete_workflow_step` | `mastra/tools/workflows.ts`                   | Write: chat requires HITL confirm; executor skipHitl |
-| `web_search`             | `mastra/tools/web-search.ts` (@mastra/tavily) | External/public facts; needs `TAVILY_API_KEY` |
+| Tool                       | Source                                        | What it answers                                      |
+| -------------------------- | --------------------------------------------- | ---------------------------------------------------- |
+| `list_library_documents`   | `mastra/tools/library.ts`                     | Library inventory                                    |
+| `get_document_summary`     | `mastra/tools/library.ts`                     | One document by id or name                           |
+| `search_library`           | `mastra/tools/library.ts`                     | Semantic document search                             |
+| `list_meetings`            | `mastra/tools/meetings.ts`                    | Meeting inventory                                    |
+| `get_meeting_summary`      | `mastra/tools/meetings.ts`                    | One meeting                                          |
+| `search_meetings`          | `mastra/tools/meetings.ts`                    | Transcript search                                    |
+| `list_work_items`          | `mastra/tools/work-items.ts`                  | Work-item inventory                                  |
+| `get_work_item`            | `mastra/tools/work-items.ts`                  | One work item (live GitHub when connected)           |
+| `list_workflows`           | `mastra/tools/workflows.ts`                   | Workflow catalog                                     |
+| `get_workflow`             | `mastra/tools/workflows.ts`                   | One workflow’s steps                                 |
+| `get_my_workflow_progress` | `mastra/tools/workflows.ts`                   | Assignee progress / what’s next                      |
+| `complete_workflow_step`   | `mastra/tools/workflows.ts`                   | Write: chat requires HITL confirm; executor skipHitl |
+| `web_search`               | `mastra/tools/web-search.ts` (@mastra/tavily) | External/public facts; needs `TAVILY_API_KEY`        |
 
 ---
 

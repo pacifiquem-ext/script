@@ -70,9 +70,7 @@ export const getMyWorkflowProgressTool = createTool({
 });
 
 const evidenceSchema = z.object({
-  method: z
-    .enum(['agent_browser', 'agent_tool', 'manual'])
-    .describe('How the step was completed'),
+  method: z.enum(['agent_browser', 'agent_tool', 'manual']).describe('How the step was completed'),
   summary: z.string().min(1).describe('What was done and how you verified it'),
   finalUrl: z.string().optional().describe('Page URL after the action, if browser was used'),
   actions: z.array(z.string()).optional().describe('Short list of tool actions taken'),

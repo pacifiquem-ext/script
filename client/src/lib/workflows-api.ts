@@ -295,9 +295,7 @@ export async function* executeWorkflowRunStream(
     method: 'POST',
     credentials: 'include',
     headers,
-    body: JSON.stringify(
-      opts?.browserSessionId ? { browserSessionId: opts.browserSessionId } : {},
-    ),
+    body: JSON.stringify(opts?.browserSessionId ? { browserSessionId: opts.browserSessionId } : {}),
     signal: opts?.signal,
   });
 

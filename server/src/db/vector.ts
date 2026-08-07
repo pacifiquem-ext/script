@@ -143,12 +143,7 @@ export async function searchDocumentChunkVectors(input: {
   `;
 }
 
-export type MemorySourceTypeName =
-  | 'document'
-  | 'meeting'
-  | 'channel'
-  | 'work_item'
-  | 'workflow';
+export type MemorySourceTypeName = 'document' | 'meeting' | 'channel' | 'work_item' | 'workflow';
 
 export type MemoryVectorHit = {
   id: string;

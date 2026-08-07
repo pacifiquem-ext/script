@@ -27,10 +27,7 @@ import {
   useMessages,
   type WriteConfirmEvent,
 } from '../../lib/chat-api';
-import {
-  confirmWriteConfirmation,
-  rejectWriteConfirmation,
-} from '../../lib/workflows-api';
+import { confirmWriteConfirmation, rejectWriteConfirmation } from '../../lib/workflows-api';
 import { matchDocumentsInText, useDocument, useDocuments, useFolders } from '../../lib/library-api';
 import { getErrorMessage } from '../../lib/form-errors';
 import { queryKeys } from '../../lib/query-client';
@@ -462,7 +459,10 @@ export function ChatPage() {
       return;
     }
     if (sourceType === 'channel') {
-      notify.info('Channel memory is cited from Slack — open Connectors to manage bindings.', 'Channel');
+      notify.info(
+        'Channel memory is cited from Slack — open Connectors to manage bindings.',
+        'Channel',
+      );
       return;
     }
     if (!citation.documentId) return;
@@ -507,7 +507,9 @@ export function ChatPage() {
           >
             <span>{chip.label}</span>
             {chip.sourceType !== 'document' ? (
-              <span className="ml-1 opacity-70 capitalize">{chip.sourceType.replace('_', ' ')}</span>
+              <span className="ml-1 opacity-70 capitalize">
+                {chip.sourceType.replace('_', ' ')}
+              </span>
             ) : chip.indices.length > 1 ? (
               <span className="ml-1 opacity-70">×{chip.indices.length}</span>
             ) : (

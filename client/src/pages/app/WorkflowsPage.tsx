@@ -11,7 +11,13 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import { Input } from '../../components/ui/Input';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { MarkdownContent } from '../../components/ui/MarkdownContent';
-import { Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from '../../components/ui/Modal';
+import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+} from '../../components/ui/Modal';
 import { useAuth } from '../../contexts/useAuth';
 import { getErrorMessage } from '../../lib/form-errors';
 import { IconCheck, IconDelete, IconPlus } from '../../lib/icons';
@@ -245,10 +251,7 @@ export function WorkflowsPage() {
     onError: (err) => notify.error(getErrorMessage(err, 'Could not delete browser session')),
   });
 
-  const runWithAgent = async (
-    runId: string,
-    opts?: { markVerifiedWorkflowId?: string },
-  ) => {
+  const runWithAgent = async (runId: string, opts?: { markVerifiedWorkflowId?: string }) => {
     setError(null);
     setMessage(null);
     setAgentExecuting(true);
@@ -454,9 +457,7 @@ export function WorkflowsPage() {
             />
           )}
 
-          {published.length > 0 && (
-            <SectionLabel>Published</SectionLabel>
-          )}
+          {published.length > 0 && <SectionLabel>Published</SectionLabel>}
           {published.map((wf) => (
             <WorkflowListRow
               key={wf.id}
@@ -496,7 +497,9 @@ export function WorkflowsPage() {
           )}
 
           <SectionLabel>My runs</SectionLabel>
-          {runsQuery.isLoading && <p className="px-3 py-2 text-[12px] text-neutral-500">Loading…</p>}
+          {runsQuery.isLoading && (
+            <p className="px-3 py-2 text-[12px] text-neutral-500">Loading…</p>
+          )}
           {!runsQuery.isLoading && myRuns.length === 0 && (
             <p className="px-3 py-2 text-[12px] text-neutral-500">No runs yet.</p>
           )}
@@ -511,7 +514,9 @@ export function WorkflowsPage() {
                   : 'bg-transparent hover:bg-neutral-50'
               }`}
             >
-              <p className="text-[13px] font-medium text-neutral-950 truncate">{run.workflowName}</p>
+              <p className="text-[13px] font-medium text-neutral-950 truncate">
+                {run.workflowName}
+              </p>
               <p className="text-[11px] text-neutral-500 capitalize">
                 {run.status.replace('_', ' ')} · {progressLabel(run)}
               </p>
@@ -545,7 +550,9 @@ export function WorkflowsPage() {
                   setSelectedVaultId((prev) => (prev === session.id ? '' : session.id))
                 }
               >
-                <p className="text-[13px] font-medium text-neutral-950 truncate m-0">{session.name}</p>
+                <p className="text-[13px] font-medium text-neutral-950 truncate m-0">
+                  {session.name}
+                </p>
                 <p className="text-[11px] text-neutral-500 m-0">
                   {session.lastUsedAt
                     ? `Used ${new Date(session.lastUsedAt).toLocaleDateString()}`
@@ -679,9 +686,7 @@ export function WorkflowsPage() {
         {panel === 'run' && (
           <RunnerPanel
             loading={runQuery.isLoading}
-            error={
-              runQuery.isError ? getErrorMessage(runQuery.error, 'Failed to load run') : null
-            }
+            error={runQuery.isError ? getErrorMessage(runQuery.error, 'Failed to load run') : null}
             onRetry={() => void runQuery.refetch()}
             run={activeRun ?? null}
             nextStep={nextStep}
@@ -806,7 +811,9 @@ function WorkflowListRow({
         className="w-full text-left bg-transparent border-none cursor-pointer p-0"
       >
         <div className="flex items-center gap-2 min-w-0">
-          <p className="text-[13px] font-medium text-neutral-950 truncate flex-1">{workflow.name}</p>
+          <p className="text-[13px] font-medium text-neutral-950 truncate flex-1">
+            {workflow.name}
+          </p>
           <Badge size="sm" variant={workflow.status === 'published' ? 'success' : 'neutral'}>
             {workflow.status}
           </Badge>
@@ -853,9 +860,7 @@ function WelcomePanel({
   startLoading: boolean;
   onEdit: (id: string) => void;
 }) {
-  const selected = selectedWorkflowId
-    ? workflows.find((w) => w.id === selectedWorkflowId)
-    : null;
+  const selected = selectedWorkflowId ? workflows.find((w) => w.id === selectedWorkflowId) : null;
 
   if (selected && selected.status === 'published' && !canAuthor) {
     return (
@@ -971,7 +976,9 @@ function AuthorPanel({
   if (loading) return <LoadingState label="Loading workflow…" />;
   if (error) return <ErrorState message={error} onRetry={onRetry} />;
   if (!workflow) {
-    return <EmptyState title="Workflow not found" description="Select another workflow from the list." />;
+    return (
+      <EmptyState title="Workflow not found" description="Select another workflow from the list." />
+    );
   }
 
   if (!canAuthor) {
@@ -1083,8 +1090,9 @@ function AuthorPanel({
       </div>
 
       <p className="text-[12px] text-neutral-500">
-        Use <code className="text-[12px]"># Title</code>, <code className="text-[12px]">## Section</code>,
-        and <code className="text-[12px]">- [ ] step</code> for tracked checklist items. Other prose is
+        Use <code className="text-[12px]"># Title</code>,{' '}
+        <code className="text-[12px]">## Section</code>, and{' '}
+        <code className="text-[12px]">- [ ] step</code> for tracked checklist items. Other prose is
         guidance only. <strong>Verify with agent</strong> polishes wording and runs the agent so you
         see Activity logs before publishing.
       </p>
@@ -1268,10 +1276,7 @@ function ActivityPanel({
       ) : (
         <div className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1">
           {activityLog.map((entry) => (
-            <div
-              key={entry.id}
-              className={`rounded-12 border px-3 py-2 ${kindStyles(entry.kind)}`}
-            >
+            <div key={entry.id} className={`rounded-12 border px-3 py-2 ${kindStyles(entry.kind)}`}>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
                   {kindLabel(entry.kind)}
@@ -1359,9 +1364,7 @@ function RunnerPanel({
   }
 
   const pct =
-    run.progress.total === 0
-      ? 0
-      : Math.round((run.progress.done / run.progress.total) * 100);
+    run.progress.total === 0 ? 0 : Math.round((run.progress.done / run.progress.total) * 100);
   const hasPending = run.progress.pending > 0;
 
   return (
@@ -1591,9 +1594,7 @@ function BrowserVaultModal({
           encrypted at rest and never shown again.
         </ModalBody>
         <form onSubmit={submit} className="flex flex-col gap-3">
-          {error ? (
-            <Alert status="error" variant="lighter" compact description={error} />
-          ) : null}
+          {error ? <Alert status="error" variant="lighter" compact description={error} /> : null}
           <Input
             id={nameId}
             label="Name"

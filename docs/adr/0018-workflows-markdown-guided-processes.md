@@ -14,12 +14,12 @@ Hard-to-reverse choices: step identity, versioning, write-tool policy, role of M
 
 ### 1. Product models (Prisma), not Mastra graph as source of truth
 
-| Model | Role |
-| --- | --- |
-| **Workflow** | Workspace-scoped catalog entry: name, status (`draft` \| `published`), currentVersionId |
-| **WorkflowVersion** | Append-only snapshot: markdown, parsed step tree JSON, versionNumber, createdBy |
-| **WorkflowRun** | One assignee’s traversal of one **WorkflowVersion** |
-| **WorkflowStepState** | Per step key on a run: `pending` \| `done` \| `skipped` |
+| Model                 | Role                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| **Workflow**          | Workspace-scoped catalog entry: name, status (`draft` \| `published`), currentVersionId |
+| **WorkflowVersion**   | Append-only snapshot: markdown, parsed step tree JSON, versionNumber, createdBy         |
+| **WorkflowRun**       | One assignee’s traversal of one **WorkflowVersion**                                     |
+| **WorkflowStepState** | Per step key on a run: `pending` \| `done` \| `skipped`                                 |
 
 **Runs pin a WorkflowVersion.** Editing markdown creates a **new version** (like DocumentVersion /
 ADR 0008). In-flight runs never mutate step keys mid-flight from author typos.
@@ -42,13 +42,13 @@ Sections (`##`) group steps for UI outline only; they are not tracked units.
 
 ### 3. Markdown grammar (v1)
 
-| Markdown | Meaning |
-| --- | --- |
-| First `# Title` | Workflow display name (synced on publish) |
-| `## Heading` | Section (outline) |
-| `- [ ] text` | Required tracked step |
-| `- [x] text` | Tracked step defaulting to done on **new** runs only |
-| Other list/prose | Guidance, not tracked |
+| Markdown         | Meaning                                              |
+| ---------------- | ---------------------------------------------------- |
+| First `# Title`  | Workflow display name (synced on publish)            |
+| `## Heading`     | Section (outline)                                    |
+| `- [ ] text`     | Required tracked step                                |
+| `- [x] text`     | Tracked step defaulting to done on **new** runs only |
+| Other list/prose | Guidance, not tracked                                |
 
 No YAML attributes / owner / due offsets in v1.
 
@@ -85,16 +85,16 @@ First agent **write** tool:
 
 The original v1 design assumed:
 
-| Assumption | Status |
-| --- | --- |
-| Completing a step = human/agent asserts done with no external proof | Superseded for web steps: evidence required |
-| Runner Complete button → ConfirmModal self-attest copy | Replaced by **Run with agent** + manual fallback |
-| Checklist labels are not executable | Superseded: labels are instructions for browser/agent tools |
-| No Playwright / browser tool surface | Added server Playwright tools + workflow-executor agent |
-| `complete_workflow_step` only needs explicit user “mark done” | Agent may complete after performing work with evidence |
-| No `evidence` on `WorkflowStepState` | `evidenceJson` added |
-| Mastra product runs ≠ AI execution | Product state stays Prisma; execution agent is separate |
-| P5.7 connector verify only future path for “real” done | Still true for source-system proof; browser evidence is interim |
+| Assumption                                                          | Status                                                          |
+| ------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Completing a step = human/agent asserts done with no external proof | Superseded for web steps: evidence required                     |
+| Runner Complete button → ConfirmModal self-attest copy              | Replaced by **Run with agent** + manual fallback                |
+| Checklist labels are not executable                                 | Superseded: labels are instructions for browser/agent tools     |
+| No Playwright / browser tool surface                                | Added server Playwright tools + workflow-executor agent         |
+| `complete_workflow_step` only needs explicit user “mark done”       | Agent may complete after performing work with evidence          |
+| No `evidence` on `WorkflowStepState`                                | `evidenceJson` added                                            |
+| Mastra product runs ≠ AI execution                                  | Product state stays Prisma; execution agent is separate         |
+| P5.7 connector verify only future path for “real” done              | Still true for source-system proof; browser evidence is interim |
 
 ### 6. Memory
 

@@ -8,12 +8,7 @@ import {
   browserType,
   browserWait,
 } from '../../modules/workflows/browser-session';
-import {
-  RC_BROWSER_SESSION,
-  RC_RUN_ID,
-  RC_USER_ID,
-  RC_WORKSPACE_ID,
-} from '../request-context';
+import { RC_BROWSER_SESSION, RC_RUN_ID, RC_USER_ID, RC_WORKSPACE_ID } from '../request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 
 function sessionKeyFromRc(rc: RequestContext): string {
@@ -89,8 +84,7 @@ export const browserClickTool = createTool({
 
 export const browserTypeTool = createTool({
   id: 'browser_type',
-  description:
-    'Type into an input by CSS selector, accessible label, or placeholder text.',
+  description: 'Type into an input by CSS selector, accessible label, or placeholder text.',
   inputSchema: z.object({
     value: z.string().describe('Text to type'),
     selector: z.string().optional(),

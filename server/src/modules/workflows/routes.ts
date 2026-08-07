@@ -97,8 +97,7 @@ export async function workflowRoutes(app: FastifyInstance) {
       consumed.payload.stepKey,
       {
         role: workspace.role,
-        source:
-          consumed.payload.evidence.method === 'agent_browser' ? 'agent_browser' : 'agent',
+        source: consumed.payload.evidence.method === 'agent_browser' ? 'agent_browser' : 'agent',
         evidence: consumed.payload.evidence,
       },
     );

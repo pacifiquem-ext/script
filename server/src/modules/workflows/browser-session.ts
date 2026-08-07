@@ -206,10 +206,13 @@ export async function browserWait(
 ): Promise<BrowserSnapshot> {
   const session = await getBrowserSession(sessionKey);
   if (opts.text) {
-    await session.page.getByText(opts.text, { exact: false }).first().waitFor({
-      state: 'visible',
-      timeout: Math.min(opts.ms ?? 15_000, 30_000),
-    });
+    await session.page
+      .getByText(opts.text, { exact: false })
+      .first()
+      .waitFor({
+        state: 'visible',
+        timeout: Math.min(opts.ms ?? 15_000, 30_000),
+      });
     recordBrowserAction(sessionKey, `wait text=${opts.text}`);
   } else {
     const ms = Math.min(Math.max(opts.ms ?? 1000, 100), 15_000);

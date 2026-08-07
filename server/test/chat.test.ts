@@ -242,9 +242,7 @@ describe('chat routes', () => {
       documentName: string;
       chunkId: string;
     }>;
-    expect(citations.some((c) => c.sourceType === 'workflow' && c.chunkId === chunk.id)).toBe(
-      true,
-    );
+    expect(citations.some((c) => c.sourceType === 'workflow' && c.chunkId === chunk.id)).toBe(true);
     const hit = citations.find((c) => c.chunkId === chunk.id);
     expect(hit?.workflowId).toBe(source.externalKey);
     expect(hit?.documentName).toMatch(/onboarding/i);

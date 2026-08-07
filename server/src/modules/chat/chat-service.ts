@@ -227,7 +227,10 @@ type RetrievedChunk = {
   endMs?: number | null;
 };
 
-function mergeCitations(existing: MessageCitation[], incoming: MessageCitation[]): MessageCitation[] {
+function mergeCitations(
+  existing: MessageCitation[],
+  incoming: MessageCitation[],
+): MessageCitation[] {
   const byId = new Map<string, MessageCitation>();
   for (const c of existing) {
     if (c.chunkId) byId.set(c.chunkId, c);
@@ -237,9 +240,7 @@ function mergeCitations(existing: MessageCitation[], incoming: MessageCitation[]
     const prev = byId.get(c.chunkId);
     if (!prev || (c.score ?? 0) > (prev.score ?? 0)) byId.set(c.chunkId, c);
   }
-  return [...byId.values()]
-    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-    .slice(0, RAG_TOP_K);
+  return [...byId.values()].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, RAG_TOP_K);
 }
 
 function documentNameMatches(content: string, name: string): boolean {

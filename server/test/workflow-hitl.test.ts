@@ -94,9 +94,7 @@ describe('workflow HITL confirmToken (P5.6b / M.6)', () => {
     });
     expect(started.statusCode).toBe(200);
     runId = started.json().id;
-    const pending = started
-      .json()
-      .steps.find((s: { status: string }) => s.status === 'pending');
+    const pending = started.json().steps.find((s: { status: string }) => s.status === 'pending');
     stepKey = pending.stepKey;
   }, 60_000);
 
