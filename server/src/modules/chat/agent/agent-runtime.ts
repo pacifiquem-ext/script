@@ -407,7 +407,7 @@ export function setAgentRunnerForTests(runner: AgentRunner | null) {
 }
 
 /** @deprecated Prefer Mastra stream; retained for tests that stub Anthropic message create. */
-export function setAnthropicMessagesCreateForTests(_fn: unknown) {
+export function setAnthropicMessagesCreateForTests() {
   if (env.NODE_ENV !== 'test') {
     throw new Error('setAnthropicMessagesCreateForTests is only available in test');
   }
