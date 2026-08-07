@@ -45,6 +45,7 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm --filter @script/server exec playwright install --with-deps chromium
       - run: pnpm test
       - run: pnpm test:coverage
       - run: pnpm build
