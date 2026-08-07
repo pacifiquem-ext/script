@@ -30,6 +30,7 @@ import { assertSameOrigin } from '../src/lib/origin';
 import { buildSseHeaders } from '../src/lib/sse-headers';
 import { hashPassword, verifyPassword } from '../src/lib/password';
 import { assertSafeUrl } from '../src/lib/ssrf';
+import { decryptSecret, encryptSecret, hasTokenEncryptionKey } from '../src/lib/token-crypto';
 import { authCookieNames, signAccessToken, verifyAccessToken } from '../src/lib/tokens';
 import { chunkText, extractText } from '../src/modules/jobs/extract';
 
@@ -299,5 +300,16 @@ describe('error handler client errors', () => {
     expect(res.statusCode).toBe(429);
     expect(res.json().error.code).toBe('FST_ERR_RATE_LIMIT');
     await app.close();
+  });
+});
+
+describe('token-crypto', () => {
+  it('round-trips secrets and reports key presence', () => {
+    expect(hasTokenEncryptionKey()).toBe(true);
+    const packed = encryptSecret('slack-bot-token');
+    expect(packed).toMatch(/^[^:]+:[^:]+:[^:]+$/);
+    expect(packed).not.toContain('slack-bot-token');
+    expect(decryptSecret(packed)).toBe('slack-bot-token');
+    expect(() => decryptSecret('not-valid')).toThrow(/Invalid encrypted secret/);
   });
 });
