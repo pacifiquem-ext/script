@@ -224,8 +224,10 @@ export function ChatPage() {
   }, [loading, streaming]);
 
   useEffect(() => {
-    const state = location.state as { conversationId?: string } | null;
-    if (state?.conversationId) setConversationId(state.conversationId);
+    const state = location.state as { conversationId?: string | null } | null;
+    if (!state || !('conversationId' in state)) return;
+    setConversationId(state.conversationId ?? null);
+    if (state.conversationId === null) setError(null);
   }, [location.state]);
 
   const ensureConversation = useCallback(async () => {
@@ -334,7 +336,6 @@ export function ChatPage() {
         });
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
-          setError('Generation stopped.');
           notify.info('Generation stopped.', 'Stopped');
           // Server may have saved a partial assistant message — reconcile once.
           if (activeConversationId) {
@@ -667,11 +668,11 @@ export function ChatPage() {
         <div className="flex items-center gap-2 px-1">
           <IconZap size={14} className="text-neutral-400" />
           <span className="text-[13px] font-medium text-neutral-600">
-            You are remaining with{' '}
+            You have{' '}
             <span className="font-semibold text-primary-base">
               {credits.data?.balance?.toLocaleString() ?? '—'}
             </span>{' '}
-            credits
+            credits remaining
           </span>
         </div>
 
@@ -866,6 +867,20 @@ export function ChatPage() {
             <EmptyState
               title="Couldn’t load messages"
               description={getErrorMessage(messagesQuery.error, 'Try again in a moment.')}
+              action={
+                <Button
+                  size="sm"
+                  variant="neutral"
+                  mode="stroke"
+                  onClick={() => {
+                    setConversationId(null);
+                    setError(null);
+                    navigate('/app/chat', { replace: true, state: { conversationId: null } });
+                  }}
+                >
+                  New chat
+                </Button>
+              }
             />
           ) : isEmpty ? (
             <div className="mx-auto flex min-h-full w-full max-w-[720px] flex-col items-center justify-center gap-8 px-6 py-12">

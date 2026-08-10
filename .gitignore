@@ -38,8 +38,14 @@ config.bat
 # Playwright MCP local artifacts
 .playwright-mcp/
 
+# Local thorough-test reports (never commit)
+.local-test/
+
 # test coverage
 coverage
+
+# Tesseract language data downloaded at runtime
+*.traineddata
 
 # intro video intermediates
 docs/assets/intro/renders/

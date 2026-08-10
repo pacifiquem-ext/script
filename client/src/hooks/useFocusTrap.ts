@@ -1,9 +1,16 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 const FOCUSABLE =
   'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])';
 
-export function useFocusTrap(active: boolean, containerRef: RefObject<HTMLElement | null>) {
+export function useFocusTrap(
+  active: boolean,
+  containerRef: RefObject<HTMLElement | null>,
+  onEscape?: () => void,
+) {
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
+
   useEffect(() => {
     if (!active || !containerRef.current) return;
     const root = containerRef.current;
@@ -16,6 +23,8 @@ export function useFocusTrap(active: boolean, containerRef: RefObject<HTMLElemen
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
+        event.preventDefault();
+        onEscapeRef.current?.();
         previouslyFocused?.focus();
         return;
       }

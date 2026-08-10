@@ -19,6 +19,7 @@ import { useAuth } from '../../contexts/useAuth';
 import {
   initials,
   useCreateWorkspace,
+  useRenameWorkspace,
   useSwitchWorkspace,
   useWorkspaces,
 } from '../../lib/workspaces';
@@ -46,6 +47,7 @@ export function AppLayout() {
   const workspacesQuery = useWorkspaces(Boolean(user));
   const switchWorkspace = useSwitchWorkspace();
   const createWorkspace = useCreateWorkspace();
+  const renameWorkspace = useRenameWorkspace();
   const workspaces = workspacesQuery.data ?? [];
   const activeWorkspace =
     workspaces.find((workspace) => workspace.id === user?.lastWorkspaceId) ?? workspaces[0] ?? null;
@@ -65,6 +67,7 @@ export function AppLayout() {
   const [renameTarget, setRenameTarget] = useState<PublicConversation | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PublicConversation | null>(null);
   const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
+  const [renameWorkspaceOpen, setRenameWorkspaceOpen] = useState(false);
   const [modalBusy, setModalBusy] = useState(false);
   const sidebarPanel = useResizableWidth({
     storageKey: 'script.sidebarWidth',
@@ -121,10 +124,24 @@ export function AppLayout() {
       notify.success('Chat deleted');
       setDeleteTarget(null);
       if (activeConversationId === id) {
-        navigate('/app/chat', { replace: true, state: {} });
+        navigate('/app/chat', { replace: true, state: { conversationId: null } });
       }
     } catch (err) {
       notify.error(getErrorMessage(err, 'Could not delete chat.'));
+    } finally {
+      setModalBusy(false);
+    }
+  }
+
+  async function submitWorkspaceRename(name: string) {
+    setModalBusy(true);
+    try {
+      await renameWorkspace.mutateAsync(name);
+      notify.success('Workspace renamed');
+      setRenameWorkspaceOpen(false);
+      setWorkspaceOpen(false);
+    } catch (err) {
+      notify.error(getErrorMessage(err, 'Could not rename workspace.'));
     } finally {
       setModalBusy(false);
     }
@@ -226,6 +243,17 @@ export function AppLayout() {
                       <span className="text-para-sm flex-1 truncate">{workspace.name}</span>
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    className="flex items-center gap-2.5 w-full p-2 bg-transparent border-none cursor-pointer rounded-8 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-950 text-left mt-1"
+                    onClick={() => {
+                      setWorkspaceOpen(false);
+                      setRenameWorkspaceOpen(true);
+                    }}
+                  >
+                    <IconEdit size={14} />
+                    <span className="text-para-sm flex-1 truncate">Rename workspace</span>
+                  </button>
                   <button
                     className="flex items-center gap-2.5 w-full p-2 bg-transparent border-none cursor-pointer rounded-8 text-primary-base transition-colors hover:bg-primary-alpha-10 text-left mt-1"
                     onClick={() => {
@@ -528,6 +556,20 @@ export function AppLayout() {
         destructive
         loading={modalBusy}
         onConfirm={submitDelete}
+      />
+      <FormModal
+        open={renameWorkspaceOpen}
+        onOpenChange={(open) => {
+          if (!open && !modalBusy) setRenameWorkspaceOpen(false);
+        }}
+        title="Rename workspace"
+        description="This name is visible to everyone in the workspace."
+        label="Workspace name"
+        initialValue={activeWorkspace?.name ?? ''}
+        confirmLabel="Save"
+        loading={modalBusy}
+        validate={(value) => (value.trim().length === 0 ? 'Workspace name is required' : null)}
+        onSubmit={submitWorkspaceRename}
       />
       <FormModal
         open={workspaceModalOpen}

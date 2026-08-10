@@ -58,6 +58,23 @@ export function useCreateWorkspace() {
   });
 }
 
+export function useRenameWorkspace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const data = await apiRequest<{ workspace: PublicWorkspace }>('/workspaces/current', {
+        method: 'PATCH',
+        body: { name },
+      });
+      return data.workspace;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.workspaces });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.session });
+    },
+  });
+}
+
 export function initials(name: string): string {
   return (
     name
