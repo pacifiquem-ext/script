@@ -55,6 +55,10 @@ function appBaseUrl(): string {
   return env.APP_PUBLIC_URL ?? env.primaryCorsOrigin;
 }
 
+function inviteAcceptUrl(token: string): string {
+  return `${appBaseUrl().replace(/\/$/, '')}/invite/accept?token=${encodeURIComponent(token)}`;
+}
+
 async function createOneInvite(
   workspace: WorkspaceContext,
   actor: AuthUser,
@@ -101,7 +105,7 @@ async function createOneInvite(
     },
   });
 
-  const acceptUrl = `${appBaseUrl().replace(/\/$/, '')}/invite/accept?token=${encodeURIComponent(token)}`;
+  const acceptUrl = inviteAcceptUrl(token);
   await sendInviteEmail({
     to: email,
     workspaceName: workspace.name,
@@ -139,8 +143,8 @@ export async function createInvite(
   ip?: string | null,
 ) {
   requireWorkspaceRole(workspace, ['owner', 'admin']);
-  const { invite } = await createOneInvite(workspace, actor, body.email, body.role, ip);
-  return { invite };
+  const { invite, token } = await createOneInvite(workspace, actor, body.email, body.role, ip);
+  return { invite, acceptUrl: inviteAcceptUrl(token) };
 }
 
 export async function bulkInvite(
@@ -223,7 +227,7 @@ export async function resendInvite(
     },
   });
 
-  const acceptUrl = `${appBaseUrl().replace(/\/$/, '')}/invite/accept?token=${encodeURIComponent(token)}`;
+  const acceptUrl = inviteAcceptUrl(token);
   await sendInviteEmail({
     to: invite.email,
     workspaceName: workspace.name,
@@ -240,7 +244,7 @@ export async function resendInvite(
     metadata: { email: invite.email },
     ip,
   });
-  return { invite: mapInvite(updated) };
+  return { invite: mapInvite(updated), acceptUrl };
 }
 
 export async function acceptInvite(user: AuthUser, body: AcceptInviteBody, ip?: string | null) {

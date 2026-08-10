@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { LoadingState } from '../../components/ui/LoadingState';
 import { ApiClientError, apiRequest, getApiBaseUrl } from '../../lib/api-client';
 import { getErrorMessage } from '../../lib/form-errors';
 import { notify } from '../../components/ui/toast-alert';
@@ -13,7 +15,12 @@ type GithubStatus = {
   lastSyncAt?: string | null;
 };
 
-type SlackBinding = { id: string; channelId: string; channelName: string | null };
+type SlackBinding = {
+  id: string;
+  channelId: string;
+  channelName: string | null;
+  announcedAt?: string | null;
+};
 
 type SlackStatus = {
   connected: boolean;
@@ -159,6 +166,36 @@ export function ConnectorsPage() {
   const gh = connectorsQ.data?.connectors?.[0] as GithubStatus | undefined;
   const slackOauthUrl = `${getApiBaseUrl()}/slack/oauth/start`;
 
+  if (connectorsQ.isLoading || slackQ.isLoading) {
+    return (
+      <div className="h-full overflow-y-auto p-8 max-w-3xl">
+        <h1 className="text-[20px] font-semibold text-neutral-950 mb-1">Connectors</h1>
+        <LoadingState label="Loading connectors…" />
+      </div>
+    );
+  }
+
+  if (connectorsQ.isError || slackQ.isError) {
+    return (
+      <div className="h-full overflow-y-auto p-8 max-w-3xl">
+        <h1 className="text-[20px] font-semibold text-neutral-950 mb-1">Connectors</h1>
+        <p className="text-[13px] text-neutral-500 mb-6">
+          System connectors (work + messaging) — distinct from file Integrations.
+        </p>
+        <ErrorState
+          message={getErrorMessage(
+            connectorsQ.error ?? slackQ.error,
+            'Failed to load connectors',
+          )}
+          onRetry={() => {
+            void connectorsQ.refetch();
+            void slackQ.refetch();
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full overflow-y-auto p-8 max-w-3xl">
       <h1 className="text-[20px] font-semibold text-neutral-950 mb-1">Connectors</h1>
@@ -274,7 +311,14 @@ export function ConnectorsPage() {
                   key={b.id}
                   className="flex flex-wrap items-center justify-between gap-2 border border-neutral-100 rounded-12 px-3 py-2"
                 >
-                  <span>{b.channelName ? `#${b.channelName}` : b.channelId}</span>
+                  <span className="flex flex-col">
+                    <span>{b.channelName ? `#${b.channelName}` : b.channelId}</span>
+                    <span className="text-[11px] text-neutral-400">
+                      {b.announcedAt
+                        ? `Announced ${new Date(b.announcedAt).toLocaleString()}`
+                        : 'Not announced in-channel yet'}
+                    </span>
+                  </span>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="neutral"
@@ -406,7 +450,7 @@ export function ConnectorsPage() {
         open={slackDisconnectOpen}
         onOpenChange={setSlackDisconnectOpen}
         title="Disconnect Slack?"
-        description="This uninstalls the Slack bot and unbinds every channel in this workspace."
+        description="This uninstalls the Slack bot, unbinds every channel, and deletes channel memory chunks for this workspace."
         confirmLabel="Disconnect"
         destructive
         loading={slackDisconnect.isPending}
@@ -418,7 +462,7 @@ export function ConnectorsPage() {
           if (!next) setUnbindId(null);
         }}
         title="Unbind this channel?"
-        description="script will stop ingesting new messages from this Slack channel."
+        description="script will stop ingesting new messages from this Slack channel and delete existing channel memory chunks for it."
         confirmLabel="Unbind"
         destructive
         loading={unbindChannel.isPending}

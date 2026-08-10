@@ -1,14 +1,47 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PublicMeeting, PublicMeetingDetail } from '@script/shared';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { apiRequest } from '../../lib/api-client';
 import { getErrorMessage } from '../../lib/form-errors';
+
+function transcriptOffsetForMs(text: string, ms: number): number {
+  const targetSec = Math.floor(ms / 1000);
+  const re = /\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/g;
+  let best = 0;
+  let bestDiff = Number.POSITIVE_INFINITY;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text))) {
+    const hours = match[3] != null ? Number(match[1]) : 0;
+    const minutes = match[3] != null ? Number(match[2]) : Number(match[1]);
+    const seconds = match[3] != null ? Number(match[3]) : Number(match[2]);
+    const sec = hours * 3600 + minutes * 60 + seconds;
+    const diff = Math.abs(sec - targetSec);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = match.index;
+    }
+  }
+  return best;
+}
+
+function splitTranscriptAround(text: string, ms: number | null): { before: string; hit: string; after: string } {
+  if (ms == null || !text) return { before: text, hit: '', after: '' };
+  const start = transcriptOffsetForMs(text, ms);
+  const end = text.indexOf('\n', start);
+  const lineEnd = end === -1 ? text.length : end;
+  return {
+    before: text.slice(0, start),
+    hit: text.slice(start, lineEnd) || text.slice(start, start + 80),
+    after: text.slice(lineEnd),
+  };
+}
 
 type ConnectorStatus = {
   provider: string;
@@ -26,7 +59,10 @@ export function MeetingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [highlightMs, setHighlightMs] = useState<number | null>(null);
+  const transcriptRef = useRef<HTMLPreElement>(null);
+  const transcriptMarkRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const fromQuery = searchParams.get('id');
@@ -57,6 +93,11 @@ export function MeetingsPage() {
     },
   });
 
+  useEffect(() => {
+    if (highlightMs == null) return;
+    transcriptMarkRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightMs, detailQuery.data?.transcriptText]);
+
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['meetings'] });
     await queryClient.invalidateQueries({ queryKey: ['meetings-connector-fireflies'] });
@@ -75,12 +116,16 @@ export function MeetingsPage() {
       setMessage('Fireflies connected.');
       await invalidate();
     },
-    onError: (err) => setError(getErrorMessage(err, 'Connect failed')),
+    onError: (err) => {
+      setConnectOpen(false);
+      setError(getErrorMessage(err, 'Connect failed'));
+    },
   });
 
   const disconnectMutation = useMutation({
     mutationFn: async () => apiRequest('/meetings/connector/fireflies', { method: 'DELETE' }),
     onSuccess: async () => {
+      setDisconnectOpen(false);
       setMessage('Fireflies disconnected.');
       await invalidate();
     },
@@ -148,7 +193,7 @@ export function MeetingsPage() {
                   loading={disconnectMutation.isPending}
                   onClick={() => {
                     setError(null);
-                    disconnectMutation.mutate();
+                    setDisconnectOpen(true);
                   }}
                 >
                   Disconnect
@@ -249,6 +294,12 @@ export function MeetingsPage() {
           />
         )}
         {selectedId && detailQuery.isLoading && <LoadingState />}
+        {selectedId && detailQuery.isError && (
+          <ErrorState
+            message={getErrorMessage(detailQuery.error, 'Failed to load this meeting')}
+            onRetry={() => void detailQuery.refetch()}
+          />
+        )}
         {selectedId && detail && (
           <div className="max-w-3xl flex flex-col gap-5">
             <div>
@@ -322,10 +373,26 @@ export function MeetingsPage() {
                   ) : null}
                 </h3>
                 <pre
+                  ref={transcriptRef}
                   className="text-[12px] text-neutral-700 whitespace-pre-wrap bg-neutral-50 border border-neutral-200 rounded-12 p-4 max-h-[50vh] overflow-y-auto"
                   data-highlight-ms={highlightMs ?? undefined}
                 >
-                  {detail.transcriptText}
+                  {(() => {
+                    const parts = splitTranscriptAround(detail.transcriptText, highlightMs);
+                    if (!parts.hit) return detail.transcriptText;
+                    return (
+                      <>
+                        {parts.before}
+                        <mark
+                          ref={transcriptMarkRef}
+                          className="bg-primary-alpha-10 text-neutral-950 rounded-4 px-0.5"
+                        >
+                          {parts.hit}
+                        </mark>
+                        {parts.after}
+                      </>
+                    );
+                  })()}
                 </pre>
               </section>
             )}
@@ -377,6 +444,16 @@ export function MeetingsPage() {
           </div>
         </div>
       )}
+      <ConfirmModal
+        open={disconnectOpen}
+        onOpenChange={setDisconnectOpen}
+        title="Disconnect Fireflies?"
+        description="This removes the Fireflies connector for this workspace. Existing meetings stay in memory until you delete them."
+        confirmLabel="Disconnect"
+        destructive
+        loading={disconnectMutation.isPending}
+        onConfirm={() => disconnectMutation.mutate()}
+      />
     </div>
   );
 }

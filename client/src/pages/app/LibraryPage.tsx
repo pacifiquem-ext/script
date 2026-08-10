@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   humanizeIngestionFailure,
@@ -154,7 +155,7 @@ function cardStatusLabel(doc: PublicDocument): string | null {
     return 'Processing…';
   }
   if (doc.status === 'failed') {
-    return doc.failureReason ? humanizeIngestionFailure(doc.failureReason) : 'Processing failed';
+    return 'Failed';
   }
   return null;
 }
@@ -571,6 +572,30 @@ export function LibraryPage() {
     if (!q) return documents;
     return documents.filter((d) => d.name.toLowerCase().includes(q));
   }, [documentsQuery.data, q]);
+  const filesScrollRef = useRef<HTMLDivElement>(null);
+  const [gridLanes, setGridLanes] = useState(4);
+  const virtualizeFiles = displayFiles.length > 24;
+
+  useEffect(() => {
+    const el = filesScrollRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      setGridLanes(Math.max(2, Math.floor(w / 124)));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [viewMode, virtualizeFiles, displayFiles.length]);
+
+  const fileVirtualizer = useVirtualizer({
+    count: virtualizeFiles ? displayFiles.length : 0,
+    getScrollElement: () => filesScrollRef.current,
+    estimateSize: () => (viewMode === 'grid' ? 132 : 58),
+    overscan: 10,
+    lanes: viewMode === 'grid' ? gridLanes : 1,
+  });
   const previewListDocument = previewId
     ? (documentsQuery.data ?? []).find((doc) => doc.id === previewId)
     : undefined;
@@ -1437,6 +1462,82 @@ export function LibraryPage() {
                     ) : undefined
                   }
                 />
+              ) : virtualizeFiles ? (
+                <div
+                  ref={filesScrollRef}
+                  className="max-h-[min(70vh,720px)] overflow-y-auto"
+                  data-virtualized-files="true"
+                >
+                  <div
+                    className="relative w-full"
+                    style={{ height: fileVirtualizer.getTotalSize() }}
+                  >
+                    {fileVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const doc = displayFiles[virtualRow.index];
+                      if (!doc) return null;
+                      const style: React.CSSProperties = {
+                        position: 'absolute',
+                        top: 0,
+                        left: viewMode === 'grid' ? `${(virtualRow.lane / gridLanes) * 100}%` : 0,
+                        width: viewMode === 'grid' ? `${100 / gridLanes}%` : '100%',
+                        height: virtualRow.size,
+                        transform: `translateY(${virtualRow.start}px)`,
+                        padding: viewMode === 'grid' ? '0 6px 12px' : 0,
+                      };
+                      if (viewMode === 'grid') {
+                        return (
+                          <div key={doc.id} style={style}>
+                            <FileCard
+                              doc={doc}
+                              onOpen={() => {
+                                setPreviewVersionId(null);
+                                setPreviewId(doc.id);
+                              }}
+                              onMenu={(e) => {
+                                e.stopPropagation();
+                                openContext(e, { kind: 'file', item: doc });
+                              }}
+                              onDragStart={(e) => onFileDragStart(e, doc)}
+                            />
+                          </div>
+                        );
+                      }
+                      const kind = fileKind(doc);
+                      const status = cardStatusLabel(doc);
+                      return (
+                        <div
+                          key={doc.id}
+                          style={style}
+                          draggable={doc.status === 'ready'}
+                          onDragStart={(e) => onFileDragStart(e, doc)}
+                          className="group flex items-center gap-4 p-[12px_16px] border-b border-neutral-200 bg-white hover:bg-neutral-50 cursor-pointer transition-colors"
+                          onClick={() => {
+                            setPreviewVersionId(null);
+                            setPreviewId(doc.id);
+                          }}
+                          onContextMenu={(e) => openContext(e, { kind: 'file', item: doc })}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <SmallFileIcon kind={kind} />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-label-sm text-neutral-950 truncate block">
+                              {doc.name}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-para-xs w-28 hidden md:block truncate ${
+                              isDocProcessing(doc) ? 'text-primary-base' : 'text-neutral-400'
+                            }`}
+                          >
+                            {status ?? formatBytes(doc.byteSize)}
+                          </span>
+                          <MoreButton onOpen={(e) => openContext(e, { kind: 'file', item: doc })} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               ) : viewMode === 'grid' ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3">
                   {displayFiles.map((doc) => (
@@ -1534,11 +1635,11 @@ export function LibraryPage() {
           <div className="flex items-center gap-2 px-1">
             <IconZap size={14} className="text-neutral-400" />
             <span className="text-[13px] font-medium text-neutral-600">
-              You are remaining with{' '}
+              You have{' '}
               <span className="font-semibold text-primary-base">
                 {credits.data?.balance?.toLocaleString() ?? '—'}
               </span>{' '}
-              credits
+              credits remaining
             </span>
           </div>
 

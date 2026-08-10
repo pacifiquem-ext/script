@@ -50,6 +50,14 @@ describe('getErrorMessage', () => {
     }
     expect(getErrorMessage(new Error('plain'))).toBe('plain');
     expect(getErrorMessage('weird', 'fallback')).toBe('fallback');
+    expect(getErrorMessage(new ApiClientError(401, 'X', '{"message":"Bad credentials"}'))).toBe(
+      'Bad credentials',
+    );
+    expect(
+      getErrorMessage(
+        new ApiClientError(401, 'X', 'GitHub API 401: {"message":"Bad credentials","documentation_url":"https://docs.github.com"}'),
+      ),
+    ).toBe('Bad credentials');
   });
 });
 

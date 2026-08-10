@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import type { PublicAuditEvent, PublicInvite } from '@script/shared';
 import { useNavigate } from 'react-router-dom';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { getApiBaseUrl } from '../../lib/api-client';
@@ -23,6 +24,7 @@ import {
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { FormModal } from '../../components/ui/FormModal';
 import { Input } from '../../components/ui/Input';
 import { LoadingState } from '../../components/ui/LoadingState';
@@ -119,23 +121,15 @@ function SegmentedBar({ percentage, color }: { percentage: number; color: string
   );
 }
 
-function Toggle({ checked }: { checked: boolean }) {
-  return (
-    <div
-      className={`w-[36px] h-[20px] rounded-full flex items-center p-[2px] transition-colors cursor-pointer shrink-0 ${checked ? 'bg-[#10b981]' : 'bg-neutral-200'}`}
-    >
-      <div
-        className={`w-[16px] h-[16px] bg-white rounded-full shadow-sm transition-transform ${checked ? 'translate-x-[16px]' : 'translate-x-0'}`}
-      />
-    </div>
-  );
-}
-
 export function SettingsModal({ open, onClose }: Props) {
   const [activeItem, setActiveItem] = useState('workspace');
   const dialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(open, dialogRef);
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
   const navigate = useNavigate();
   const [deleteEmail, setDeleteEmail] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
@@ -146,6 +140,16 @@ export function SettingsModal({ open, onClose }: Props) {
   const membersQuery = useWorkspaceMembers(
     open && Boolean(user) && (activeItem === 'people' || activeItem === 'workspace'),
   );
+  const auditQuery = useQuery({
+    queryKey: ['workspace-audit'],
+    enabled: open && Boolean(user) && activeItem === 'people',
+    queryFn: async () => {
+      const data = await apiRequest<{ events: PublicAuditEvent[] }>(
+        '/workspaces/current/audit?pageSize=20',
+      );
+      return data.events;
+    },
+  });
   const invitesQuery = useQuery({
     queryKey: ['workspace-invites'],
     enabled: open && Boolean(user) && activeItem === 'people',
@@ -221,6 +225,10 @@ export function SettingsModal({ open, onClose }: Props) {
     creditShare: number | null;
   } | null>(null);
   const [creditShareBusy, setCreditShareBusy] = useState(false);
+  useFocusTrap(open, dialogRef, () => {
+    if (profileEditOpen || deleteConfirmOpen || creditShareMember) return;
+    onClose();
+  });
   const apiKeysQuery = useQuery({
     queryKey: ['api-keys'],
     enabled: open && (activeItem === 'advanced' || activeItem === 'integrations'),
@@ -242,7 +250,11 @@ export function SettingsModal({ open, onClose }: Props) {
   const preferencesQuery = useQuery({
     queryKey: ['preferences'],
     enabled:
-      open && (activeItem === 'preferences' || activeItem === 'appearance' || activeItem === 'ai'),
+      open &&
+      (activeItem === 'preferences' ||
+        activeItem === 'appearance' ||
+        activeItem === 'ai' ||
+        activeItem === 'profile'),
     queryFn: async () => {
       const data = await apiRequest<{
         preferences: { theme: string; locale: string; aiTone: string };
@@ -599,8 +611,10 @@ export function SettingsModal({ open, onClose }: Props) {
                 </p>
               </div>
               <button
+                type="button"
                 className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 rounded-8 transition-colors duration-200 shrink-0 hover:text-neutral-950 hover:bg-neutral-100"
                 onClick={onClose}
+                aria-label="Close"
               >
                 <IconClose size={18} />
               </button>
@@ -614,18 +628,55 @@ export function SettingsModal({ open, onClose }: Props) {
                   <p className="text-[13px] text-neutral-500">Update your avatar image.</p>
                 </div>
                 <div className="flex-1 flex flex-col gap-4 w-full max-w-[500px]">
-                  <div className="w-12 h-12 rounded-full bg-neutral-200 flex items-center justify-center text-[14px] font-bold text-neutral-600">
-                    JB
-                  </div>
+                  {user?.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt=""
+                      className="w-12 h-12 rounded-full object-cover bg-neutral-200"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-neutral-200 flex items-center justify-center text-[14px] font-bold text-neutral-600">
+                      {initialsFromName(displayName)}
+                    </div>
+                  )}
                   <div>
                     <h4 className="text-[14px] font-medium text-neutral-950">Upload image</h4>
-                    <p className="text-[12px] text-neutral-400 mt-1">
-                      Min 400x400px, PNG or JPEG formats.
-                    </p>
+                    <p className="text-[12px] text-neutral-400 mt-1">PNG or JPEG, up to 5MB.</p>
                   </div>
-                  <button className="w-fit px-4 py-2 border border-neutral-200 rounded-8 bg-white text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 transition-colors mt-2">
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      const body = new FormData();
+                      body.append('file', file);
+                      void fetch(`${getApiBaseUrl()}/me/avatar`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        body,
+                      })
+                        .then(async (res) => {
+                          if (!res.ok) throw new Error('Avatar upload failed');
+                          await refresh();
+                          notify.success('Avatar updated');
+                        })
+                        .catch((err) => notify.error(getErrorMessage(err, 'Could not upload avatar')));
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="neutral"
+                    mode="stroke"
+                    className="w-fit"
+                    onClick={() => avatarInputRef.current?.click()}
+                  >
                     Upload
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div className="py-8 border-t border-neutral-200 flex items-start gap-12 max-lg:flex-col max-lg:gap-6">
@@ -644,92 +695,31 @@ export function SettingsModal({ open, onClose }: Props) {
                         <span className="text-neutral-950 font-medium">{memberSince}</span>
                       </p>
                     </div>
-                    <button className="px-4 py-1.5 border border-neutral-200 rounded-8 bg-white text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 transition-colors">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="neutral"
+                      mode="stroke"
+                      className="w-fit"
+                      onClick={() => setProfileEditOpen(true)}
+                    >
                       Edit profile
-                    </button>
+                    </Button>
                   </div>
                   <div className="grid grid-cols-[140px_1fr] gap-y-4 gap-x-8 mt-2 border-t border-neutral-100 pt-6">
-                    <div className="flex items-center gap-2">
-                      <IconUser size={14} className="text-neutral-400" />
-                      <span className="text-[13px] text-neutral-500">Full name</span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[14px] font-medium text-neutral-950">
-                        {displayName}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] text-neutral-500">
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="text-neutral-400"
-                        >
-                          <rect width="20" height="16" x="2" y="4" rx="2" />
-                          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-                        </svg>
-                      </span>
-                      <span className="text-[13px] text-neutral-500">Email address</span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[14px] font-medium text-neutral-950">
-                        james@alignui.com
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] text-neutral-500">
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="text-neutral-400"
-                        >
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                      </span>
-                      <span className="text-[13px] text-neutral-500">Time zone</span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[14px] font-medium text-neutral-950">
-                        UTC-05:00{' '}
-                        <span className="text-neutral-400 font-normal">(Eastern Time)</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] text-neutral-500">
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="text-neutral-400"
-                        >
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="2" x2="22" y1="12" y2="12" />
-                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                        </svg>
-                      </span>
-                      <span className="text-[13px] text-neutral-500">Language</span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[14px] font-medium text-neutral-950">English</span>
-                    </div>
+                    <span className="text-[13px] text-neutral-500">Full name</span>
+                    <span className="text-[14px] font-medium text-neutral-950">{displayName}</span>
+                    <span className="text-[13px] text-neutral-500">Email address</span>
+                    <span className="text-[14px] font-medium text-neutral-950">{displayEmail}</span>
+                    <span className="text-[13px] text-neutral-500">Time zone</span>
+                    <span className="text-[14px] font-medium text-neutral-950">
+                      {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                      <span className="text-neutral-400 font-normal"> (this device)</span>
+                    </span>
+                    <span className="text-[13px] text-neutral-500">Language</span>
+                    <span className="text-[14px] font-medium text-neutral-950">
+                      {preferencesQuery.data?.locale ?? 'en'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -772,11 +762,26 @@ export function SettingsModal({ open, onClose }: Props) {
                   leftIcon={<IconPlus size={14} />}
                   onClick={() => {
                     setInviteError(null);
-                    void apiRequest('/workspaces/current/members', {
+                    void apiRequest<{
+                      invite?: PublicInvite;
+                      acceptUrl?: string;
+                      member?: { id: string };
+                    }>('/workspaces/current/members', {
                       method: 'POST',
                       body: { email: inviteEmail, role: 'member' },
                     })
-                      .then(async () => {
+                      .then(async (res) => {
+                        if (res.acceptUrl) {
+                          setLastInviteUrl(res.acceptUrl);
+                          try {
+                            await navigator.clipboard.writeText(res.acceptUrl);
+                            notify.success('Invite sent. Link copied.');
+                          } catch {
+                            notify.success('Invite sent. Copy the link below.');
+                          }
+                        } else {
+                          notify.success('Member added.');
+                        }
                         setInviteEmail('');
                         await membersQuery.refetch();
                         await invitesQuery.refetch();
@@ -906,11 +911,26 @@ export function SettingsModal({ open, onClose }: Props) {
                             size="sm"
                             className="w-fit"
                             onClick={() => {
-                              void apiRequest(`/workspaces/current/invites/${invite.id}/resend`, {
-                                method: 'POST',
-                              }).catch((err) =>
-                                setInviteError(getErrorMessage(err, 'Resend failed')),
-                              );
+                              void apiRequest<{ acceptUrl?: string }>(
+                                `/workspaces/current/invites/${invite.id}/resend`,
+                                { method: 'POST' },
+                              )
+                                .then(async (res) => {
+                                  if (res.acceptUrl) {
+                                    setLastInviteUrl(res.acceptUrl);
+                                    try {
+                                      await navigator.clipboard.writeText(res.acceptUrl);
+                                      notify.success('Invite resent. Link copied.');
+                                    } catch {
+                                      notify.success('Invite resent. Copy the link below.');
+                                    }
+                                  } else {
+                                    notify.success('Invite resent.');
+                                  }
+                                })
+                                .catch((err) =>
+                                  setInviteError(getErrorMessage(err, 'Resend failed')),
+                                );
                             }}
                           >
                             Resend
@@ -936,6 +956,58 @@ export function SettingsModal({ open, onClose }: Props) {
                     ))}
                 </div>
               )}
+              {lastInviteUrl ? (
+                <div className="flex flex-col gap-2 mt-2 border border-neutral-200 rounded-12 p-3">
+                  <p className="text-[13px] font-medium text-neutral-950">Invite link</p>
+                  <p className="text-[12px] text-neutral-500 break-all">{lastInviteUrl}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="neutral"
+                    mode="stroke"
+                    className="w-fit"
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(lastInviteUrl)
+                        .then(() => notify.success('Link copied'))
+                        .catch(() => notify.error('Could not copy link'));
+                    }}
+                  >
+                    Copy link
+                  </Button>
+                </div>
+              ) : null}
+              <div className="flex flex-col gap-2 mt-4">
+                <p className="text-[13px] font-medium text-neutral-950">Recent activity</p>
+                {auditQuery.isLoading ? (
+                  <LoadingState label="Loading audit…" />
+                ) : auditQuery.isError ? (
+                  <Alert
+                    status="error"
+                    variant="stroke"
+                    compact
+                    description={getErrorMessage(auditQuery.error, 'Could not load audit events')}
+                  />
+                ) : (auditQuery.data ?? []).length === 0 ? (
+                  <p className="text-[12px] text-neutral-500">No audit events yet.</p>
+                ) : (
+                  <ul className="list-none m-0 p-0 flex flex-col gap-2">
+                    {(auditQuery.data ?? []).map((event) => (
+                      <li
+                        key={event.id}
+                        className="border border-neutral-100 rounded-10 px-3 py-2 text-[12px] text-neutral-700"
+                      >
+                        <span className="font-medium text-neutral-950">{event.action}</span>
+                        {event.targetType ? ` · ${event.targetType}` : ''}
+                        <span className="text-neutral-400">
+                          {' '}
+                          · {new Date(event.createdAt).toLocaleString()}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </>
         );
@@ -1493,47 +1565,10 @@ export function SettingsModal({ open, onClose }: Props) {
                         </div>
                       </div>
                       <p className="text-[12px] text-neutral-400">
-                        Sessions sync from refresh tokens.
+                        Sessions sync from refresh tokens. Use Forgot password on the login page to
+                        recover access.
                       </p>
                     </div>
-                    <button className="px-4 py-1.5 border border-neutral-200 rounded-8 bg-white text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 transition-colors">
-                      Change
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-[13px] font-medium text-neutral-950">
-                        Two-factor authentication
-                      </h4>
-                      <p className="text-[12px] text-neutral-400">
-                        Add an extra layer of security to your account
-                      </p>
-                    </div>
-                    <button className="px-4 py-1.5 border border-neutral-200 rounded-8 bg-white text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 transition-colors">
-                      Enable 2FA
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-[13px] font-medium text-neutral-950">
-                        Login notifications
-                      </h4>
-                      <p className="text-[12px] text-neutral-400">Get notified of new sign-ins</p>
-                    </div>
-                    <Toggle checked={true} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-[13px] font-medium text-neutral-950">
-                        Password recovery
-                      </h4>
-                      <p className="text-[12px] text-neutral-400">
-                        Update your recovery email address
-                      </p>
-                    </div>
-                    <button className="px-4 py-1.5 border border-neutral-200 rounded-8 bg-white text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 transition-colors">
-                      Update
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1628,18 +1663,7 @@ export function SettingsModal({ open, onClose }: Props) {
                   onClick={() => {
                     setPrivacyError(null);
                     setPrivacyMessage(null);
-                    setPrivacyLoading(true);
-                    void apiRequest('/me', {
-                      method: 'DELETE',
-                      body: { email: deleteEmail.trim(), password: deletePassword },
-                    })
-                      .then(async () => {
-                        onClose();
-                        await logout();
-                        navigate('/app/signup');
-                      })
-                      .catch((err) => setPrivacyError(getErrorMessage(err, 'Deletion failed')))
-                      .finally(() => setPrivacyLoading(false));
+                    setDeleteConfirmOpen(true);
                   }}
                 >
                   Delete my account
@@ -1667,10 +1691,117 @@ export function SettingsModal({ open, onClose }: Props) {
           </>
         );
 
+      case 'advanced':
+        return (
+          <>
+            <div className="flex items-start justify-between p-[32px_40px_24px]">
+              <div>
+                <h2 className="text-[18px] font-semibold text-neutral-950 mb-1">Advanced</h2>
+                <p className="text-[14px] text-neutral-500">
+                  Workspace API keys for programmatic access.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 rounded-8"
+                onClick={onClose}
+                aria-label="Close"
+              >
+                <IconClose size={18} />
+              </button>
+            </div>
+            <div className="px-[40px] pb-[40px] flex flex-col gap-4 max-w-[560px]">
+              <Input
+                label="Key name"
+                value={apiKeyName}
+                onChange={(e) => setApiKeyName(e.target.value)}
+                placeholder="CI deploy"
+              />
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-fit"
+                onClick={() => {
+                  void apiRequest<{ secret: string; apiKey: { id: string } }>('/api-keys', {
+                    method: 'POST',
+                    body: { name: apiKeyName.trim() || 'API key' },
+                  })
+                    .then(async (res) => {
+                      setApiKeySecret(res.secret);
+                      setApiKeyName('');
+                      await apiKeysQuery.refetch();
+                      notify.success('API key created. Copy it now — it will not be shown again.');
+                    })
+                    .catch((err) => notify.error(getErrorMessage(err, 'Could not create API key')));
+                }}
+              >
+                Generate API Key
+              </Button>
+              {apiKeySecret ? (
+                <Alert
+                  status="information"
+                  variant="lighter"
+                  compact
+                  title="Copy now"
+                  description={apiKeySecret}
+                />
+              ) : null}
+              {(apiKeysQuery.data ?? []).length === 0 ? (
+                <p className="text-[13px] text-neutral-500">No API keys yet.</p>
+              ) : (
+                <ul className="list-none m-0 p-0 flex flex-col gap-2">
+                  {(apiKeysQuery.data ?? []).map((key) => (
+                    <li
+                      key={key.id}
+                      className="flex items-center justify-between gap-3 border border-neutral-200 rounded-12 p-3 text-[13px]"
+                    >
+                      <span>
+                        {key.name} ({key.keyPrefix}…){key.revokedAt ? ' revoked' : ''}
+                      </span>
+                      {!key.revokedAt && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="error"
+                          className="w-fit"
+                          onClick={() =>
+                            void apiRequest(`/api-keys/${key.id}`, { method: 'DELETE' })
+                              .then(async () => {
+                                notify.success('API key revoked');
+                                await apiKeysQuery.refetch();
+                              })
+                              .catch((err) =>
+                                notify.error(getErrorMessage(err, 'Could not revoke key')),
+                              )
+                          }
+                        >
+                          Revoke
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        );
+
       default:
         return (
-          <div className="flex items-center justify-center h-full text-neutral-400">
-            <p>Select an option from the sidebar.</p>
+          <div className="flex flex-col h-full">
+            <div className="flex justify-end p-4">
+              <button
+                type="button"
+                className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 rounded-8"
+                onClick={onClose}
+                aria-label="Close"
+              >
+                <IconClose size={18} />
+              </button>
+            </div>
+            <div className="flex items-center justify-center flex-1 text-neutral-400">
+              <p>Select an option from the sidebar.</p>
+            </div>
           </div>
         );
     }
@@ -1794,6 +1925,56 @@ export function SettingsModal({ open, onClose }: Props) {
           } finally {
             setCreditShareBusy(false);
           }
+        }}
+      />
+      <FormModal
+        open={profileEditOpen}
+        onOpenChange={(open) => {
+          if (!open && !profileBusy) setProfileEditOpen(false);
+        }}
+        title="Edit profile"
+        description="Update the name shown to people in this workspace."
+        label="Full name"
+        initialValue={displayName}
+        confirmLabel="Save"
+        loading={profileBusy}
+        validate={(value) => (value.trim().length === 0 ? 'Name is required' : null)}
+        onSubmit={async (value) => {
+          setProfileBusy(true);
+          try {
+            await apiRequest('/me', { method: 'PATCH', body: { name: value.trim() } });
+            await refresh();
+            notify.success('Profile updated');
+            setProfileEditOpen(false);
+          } catch (err) {
+            notify.error(getErrorMessage(err, 'Could not update profile'));
+          } finally {
+            setProfileBusy(false);
+          }
+        }}
+      />
+      <ConfirmModal
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="Delete your account?"
+        description="This is permanent. Sole-owned workspaces and their files are removed."
+        confirmLabel="Delete account"
+        destructive
+        loading={privacyLoading}
+        onConfirm={() => {
+          setPrivacyLoading(true);
+          void apiRequest('/me', {
+            method: 'DELETE',
+            body: { email: deleteEmail.trim(), password: deletePassword },
+          })
+            .then(async () => {
+              setDeleteConfirmOpen(false);
+              onClose();
+              await logout();
+              navigate('/app/signup');
+            })
+            .catch((err) => setPrivacyError(getErrorMessage(err, 'Deletion failed')))
+            .finally(() => setPrivacyLoading(false));
         }}
       />
     </>
