@@ -31,7 +31,10 @@ function transcriptOffsetForMs(text: string, ms: number): number {
   return best;
 }
 
-function splitTranscriptAround(text: string, ms: number | null): { before: string; hit: string; after: string } {
+function splitTranscriptAround(
+  text: string,
+  ms: number | null,
+): { before: string; hit: string; after: string } {
   if (ms == null || !text) return { before: text, hit: '', after: '' };
   const start = transcriptOffsetForMs(text, ms);
   const end = text.indexOf('\n', start);

@@ -664,7 +664,9 @@ export function SettingsModal({ open, onClose }: Props) {
                           await refresh();
                           notify.success('Avatar updated');
                         })
-                        .catch((err) => notify.error(getErrorMessage(err, 'Could not upload avatar')));
+                        .catch((err) =>
+                          notify.error(getErrorMessage(err, 'Could not upload avatar')),
+                        );
                     }}
                   />
                   <Button

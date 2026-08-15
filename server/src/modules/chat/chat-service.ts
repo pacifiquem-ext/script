@@ -531,9 +531,7 @@ export async function* streamAssistantReply(input: {
     env.COMPLETION_PROVIDER === 'anthropic' &&
     !env.ANTHROPIC_API_KEY
   ) {
-    throw new ConfigurationError(
-      'ANTHROPIC_API_KEY is required for chat. Add it to server/.env.',
-    );
+    throw new ConfigurationError('ANTHROPIC_API_KEY is required for chat. Add it to server/.env.');
   }
   if (env.NODE_ENV !== 'test' && env.EMBEDDING_PROVIDER === 'voyage' && !env.VOYAGE_API_KEY) {
     throw new ConfigurationError(

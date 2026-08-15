@@ -31,15 +31,15 @@ cp server/.env.example server/.env
 
 Edit `server/.env` and set at least:
 
-| Variable | What to put |
-| --- | --- |
-| `DATABASE_URL` | Postgres URL the app uses (pooled, if your host provides one) |
-| `DIRECT_URL` | Unpooled Postgres URL for Prisma migrations |
-| `JWT_SECRET` | Random 32+ byte hex (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) |
-| `REDIS_URL` | Redis URL, e.g. `redis://127.0.0.1:6379` |
-| `ANTHROPIC_API_KEY` | Chat completions |
-| `VOYAGE_API_KEY` | Document and query embeddings |
-| `UPLOADTHING_TOKEN` | File storage (or switch `STORAGE_DRIVER=s3` and set the `S3_*` variables) |
+| Variable            | What to put                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`      | Postgres URL the app uses (pooled, if your host provides one)                                    |
+| `DIRECT_URL`        | Unpooled Postgres URL for Prisma migrations                                                      |
+| `JWT_SECRET`        | Random 32+ byte hex (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) |
+| `REDIS_URL`         | Redis URL, e.g. `redis://127.0.0.1:6379`                                                         |
+| `ANTHROPIC_API_KEY` | Chat completions                                                                                 |
+| `VOYAGE_API_KEY`    | Document and query embeddings                                                                    |
+| `UPLOADTHING_TOKEN` | File storage (or switch `STORAGE_DRIVER=s3` and set the `S3_*` variables)                        |
 
 `client/.env` only needs `VITE_API_URL` (defaults to `http://localhost:4000`).
 

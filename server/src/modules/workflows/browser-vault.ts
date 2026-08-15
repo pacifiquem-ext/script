@@ -86,9 +86,7 @@ export async function createBrowserSession(
   input: { name: string; storageState?: unknown },
 ): Promise<PublicBrowserSession> {
   if (!hasTokenEncryptionKey()) {
-    throw new ConfigurationError(
-      'TOKEN_ENCRYPTION_KEY is required to store browser login vaults',
-    );
+    throw new ConfigurationError('TOKEN_ENCRYPTION_KEY is required to store browser login vaults');
   }
   const name = input.name.trim();
   if (!name || name.length > 80) {

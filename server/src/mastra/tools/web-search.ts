@@ -15,9 +15,7 @@ export type WebSearchFn = (query: string, maxResults: number) => Promise<WebSear
 async function tavilyViaMastra(query: string, maxResults: number): Promise<WebSearchResult[]> {
   const key = env.TAVILY_API_KEY;
   if (!key) {
-    throw new Error(
-      'Web search is not configured. Set TAVILY_API_KEY in server/.env.',
-    );
+    throw new Error('Web search is not configured. Set TAVILY_API_KEY in server/.env.');
   }
   const client = getTavilyClient({ apiKey: key });
   const response = await client.search(query, {

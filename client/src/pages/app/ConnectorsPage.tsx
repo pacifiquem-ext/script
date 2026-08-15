@@ -183,10 +183,7 @@ export function ConnectorsPage() {
           System connectors (work + messaging) — distinct from file Integrations.
         </p>
         <ErrorState
-          message={getErrorMessage(
-            connectorsQ.error ?? slackQ.error,
-            'Failed to load connectors',
-          )}
+          message={getErrorMessage(connectorsQ.error ?? slackQ.error, 'Failed to load connectors')}
           onRetry={() => {
             void connectorsQ.refetch();
             void slackQ.refetch();

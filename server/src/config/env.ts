@@ -239,9 +239,7 @@ function loadEnv(): Env {
     const message = parsed.error.issues
       .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
       .join('\n');
-    throw new Error(
-      `Invalid environment configuration:\n${message}\n\nSee server/.env.example.`,
-    );
+    throw new Error(`Invalid environment configuration:\n${message}\n\nSee server/.env.example.`);
   }
   const corsOrigins = parseCorsOrigins(parsed.data.CORS_ORIGIN);
   return {
