@@ -87,7 +87,7 @@ export async function createBrowserSession(
 ): Promise<PublicBrowserSession> {
   if (!hasTokenEncryptionKey()) {
     throw new ConfigurationError(
-      'TOKEN_ENCRYPTION_KEY is required to store browser login vaults (see ENV.md)',
+      'TOKEN_ENCRYPTION_KEY is required to store browser login vaults',
     );
   }
   const name = input.name.trim();
@@ -135,7 +135,7 @@ export async function loadBrowserSessionStorageState(
 ): Promise<unknown> {
   if (!hasTokenEncryptionKey()) {
     throw new ConfigurationError(
-      'TOKEN_ENCRYPTION_KEY is required to decrypt browser login vaults (see ENV.md)',
+      'TOKEN_ENCRYPTION_KEY is required to decrypt browser login vaults',
     );
   }
   const row = await prisma.browserSessionVault.findFirst({

@@ -1,7 +1,7 @@
 # script: the company brain
 
 **script** is a production application, not a presentational demo. It is built as a `client/` +
-`server/` monorepo (see `AGENTS.md` for the engineering contract, `README.md` for the repo index).
+`server/` monorepo (see `README.md` to run it).
 This document is the product/requirements source of truth: **what we are building, what ships
 today, and what the north star is.**
 
@@ -9,9 +9,7 @@ Marketing and the landing page already frame the product as **the company brain*
 ingest truth, ask anything, and get clearance-aware answers. Engineering docs must use the same
 language. Functional and well-designed are both requirements, not a trade-off.
 
-The owner's definition of the destination is [`product_path.txt`](./product_path.txt); §2 below is
-that definition turned into product scope. When the two disagree, `product_path.txt` wins and this
-file gets updated.
+§2 below is the capability scorecard for product scope.
 
 ---
 
@@ -52,7 +50,7 @@ the places truth already lives_.
 
 ## 2. The seven capability areas
 
-`product_path.txt` defines the destination as seven capabilities. This is the canonical scorecard;
+This is the canonical scorecard for the seven capability areas;
 every roadmap doc in the repo must map back to it.
 
 | #      | Capability                              | What it means                                                                                                                     | Status                                                                                                      |
@@ -67,7 +65,6 @@ every roadmap doc in the repo must map back to it.
 
 Design specs: [`docs/agent-tools.md`](./docs/agent-tools.md) (C2),
 [`docs/connectors.md`](./docs/connectors.md) (C3–C6), [`docs/workflows.md`](./docs/workflows.md) (C7).
-Committed work lives in `TODO.md`; uncommitted bets live in `pipeline.md`.
 
 ### v1 scope: Slack only (ADR 0009)
 
@@ -77,11 +74,11 @@ after v1 is complete; WhatsApp ships with its history limitation stated honestly
 away. The connector framework stays provider-agnostic, but only the Slack adapter exists at first —
 one deep provider is the proof the abstraction works.
 
-**Self-hosting the full product is an open possibility, not a commitment.** Infrastructure already
-self-hosts (Redis, Postgres + pgvector, Garage — `docs/local-infra.md`); what is unsolved is a
+**Self-hosting the full product is an open possibility, not a commitment.** Redis, Postgres +
+pgvector, and S3-compatible object storage can run on your own machines; what is unsolved is a
 self-hosted instance receiving inbound third-party events. That is deliberately left open so
 decisions can be drafted from it later — see [`docs/connectors.md`](./docs/connectors.md) §9 — and
-Phase 6 in `TODO.md` is required to keep the event-transport seam open so it stays possible.
+the event-transport seam must stay open so it stays possible.
 
 ### Cross-cutting prerequisites
 
@@ -121,8 +118,6 @@ exists in the API."
 
 ## 4. Roadmap toward the full company brain
 
-Promoted product bets live in [`pipeline.md`](./pipeline.md). Committed work lives in `TODO.md`.
-
 | Theme                    | Capability  | Direction                                                                          | Status                                      |
 | ------------------------ | ----------- | ---------------------------------------------------------------------------------- | ------------------------------------------- |
 | **Library intelligence** | C1/C2       | Catalog / summaries / tools so "what's in my library?" works                       | **Shipped** (P0)                            |
@@ -142,7 +137,7 @@ Promoted product bets live in [`pipeline.md`](./pipeline.md). Committed work liv
 ## 5. Frontend
 
 Lives in `client/`. **React 18**, **Vite** (SWC), **TypeScript**, **Tailwind**, **Align-UI**.
-Visual rules: `understanding.md`. Marketing landing: `client/src/pages/landing/` +
+Marketing landing: `client/src/pages/landing/` +
 `client/src/components/landing/` — must stay consistent with this vision.
 
 ### Core UI standards
@@ -254,7 +249,7 @@ back to the moment in the call. Spec: [`docs/connectors.md`](./docs/connectors.m
 - `client/src/pages/app/ChatPage.tsx` — ask the brain (stream + citations + tool status).
 - `client/src/pages/app/SettingsModal.tsx` — workspace, integrations, billing chrome.
 - `client/src/pages/landing/page.tsx` — marketing company-brain story.
-- Domain language: `CONTEXT.md`; schema: `server/prisma/schema.prisma`.
+- Schema: `server/prisma/schema.prisma`.
 
 ---
 
@@ -264,8 +259,8 @@ back to the moment in the call. Spec: [`docs/connectors.md`](./docs/connectors.m
    app" for describing the _current shipped slice_, not the whole product identity.
 2. Do not document unshipped connectors, bots, workflows, or agent writes as if they were live. Use
    the C1–C7 status table in §2 as the single answer to "is this shipped?".
-3. Promote accepted roadmap items from `pipeline.md` into `TODO.md` only when we commit to build.
+3. Promote accepted roadmap items only when we commit to build them.
 4. Landing and `projectdef.md` should not contradict each other; if marketing moves first, update
    this file in the same effort.
 5. New capability areas get a **spec doc under `docs/`** and a row in §2 before code — not a schema
-   migration first (`AGENTS.md` §15).
+   migration first.

@@ -59,7 +59,7 @@ export async function embedTexts(
   if (env.NODE_ENV !== 'test') {
     if (env.EMBEDDING_PROVIDER === 'voyage' && !env.VOYAGE_API_KEY) {
       throw new ConfigurationError(
-        'VOYAGE_API_KEY is required for embeddings. Add it to server/.env (see ENV.md).',
+        'VOYAGE_API_KEY is required for embeddings. Add it to server/.env.',
       );
     }
     if (env.EMBEDDING_PROVIDER === 'openai_compatible' && !env.EMBEDDING_BASE_URL) {
@@ -75,7 +75,7 @@ export async function embedQuery(text: string): Promise<number[]> {
   if (env.NODE_ENV !== 'test') {
     if (env.EMBEDDING_PROVIDER === 'voyage' && !env.VOYAGE_API_KEY) {
       throw new ConfigurationError(
-        'VOYAGE_API_KEY is required for query embedding. Add it to server/.env (see ENV.md).',
+        'VOYAGE_API_KEY is required for query embedding. Add it to server/.env.',
       );
     }
   }

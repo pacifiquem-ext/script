@@ -94,7 +94,7 @@ export async function connectFireflies(
   await assertLicenseAllowsWrite();
   if (!hasTokenEncryptionKey()) {
     throw new BadRequestError(
-      'TOKEN_ENCRYPTION_KEY is required to store Fireflies API keys (see ENV.md)',
+      'TOKEN_ENCRYPTION_KEY is required to store Fireflies API keys',
     );
   }
   const key = apiKey.trim();

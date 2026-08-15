@@ -71,12 +71,12 @@ export async function startConnect(
   const adapter = getProviderAdapter(provider);
   if (!adapter.isConfigured()) {
     throw new ConfigurationError(
-      `${adapter.displayName} OAuth is not configured. Set client ID/secret and OAUTH_REDIRECT_URL in server/.env — see ENV.md § Cloud OAuth keys.`,
+      `${adapter.displayName} OAuth is not configured. Set client ID/secret and OAUTH_REDIRECT_URL in server/.env.`,
     );
   }
   if (!hasTokenEncryptionKey()) {
     throw new ConfigurationError(
-      'TOKEN_ENCRYPTION_KEY is required to connect cloud providers (encrypt tokens at rest). See ENV.md.',
+      'TOKEN_ENCRYPTION_KEY is required to connect cloud providers (encrypt tokens at rest).',
     );
   }
   if (!env.OAUTH_REDIRECT_URL) {

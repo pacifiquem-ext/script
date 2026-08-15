@@ -6,7 +6,7 @@ Accepted — 2026-08-03
 
 ## Context
 
-The org-ready track (Org-P7 → Org-P9b in `pipeline.md` / `TODO.md`) requires commercial control
+The org-ready track (Org-P7 → Org-P9b) requires commercial control
 for self-hosted deploys (signed activation keys, seat caps, email invites), ops (audit, runbooks),
 pluggable completion/embeddings for data-sovereign orgs, and an enterprise gate (SSO, clearance,
 retention / air-gap documentation).
@@ -56,5 +56,5 @@ retention / air-gap documentation).
 ## Consequences
 
 - Write paths (upload, chat send, invite, integration connect) call `assertLicenseAllowsWrite()`.
-- New env vars documented in `ENV.md` and `server/.env.example`.
+- New env vars documented in `server/.env.example`.
 - Tests cover license lifecycle, seat cap, invite accept, clearance filter, and provider selection.

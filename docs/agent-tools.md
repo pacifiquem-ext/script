@@ -4,7 +4,7 @@
 Domain services remain in `server/src/modules/*`; tools are Mastra `createTool` wrappers.
 
 **Platform:** [Mastra](https://mastra.ai/) — see [`docs/research/mastra-baseline.md`](./research/mastra-baseline.md),
-[`docs/adr/0017-mastra-agent-baseline.md`](./adr/0017-mastra-agent-baseline.md), `AGENTS.md` §2.7,
+[`docs/adr/0017-mastra-agent-baseline.md`](./adr/0017-mastra-agent-baseline.md),
 skills: `.agents/skills/mastra` + `.agents/skills/script-mastra`.
 
 The company-brain thesis is that the assistant should never say "I can't see that" about something

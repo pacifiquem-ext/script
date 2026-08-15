@@ -8,7 +8,7 @@ description: Strict AlignUI v1.2 UI implementation rules for script client work.
 Canonical external reference: [AlignUI v1.2 docs](https://www.alignui.com/docs/v1.2/introduction)
 (copy/paste, Radix behaviors, Tailwind styling, TypeScript, accessibility built in).
 
-Repo references that still apply: `understanding.md`, `AGENTS.md` §1–2 and §10, existing
+Repo references that still apply: existing
 primitives in `client/src/components/ui/`.
 
 If this skill does not answer a UI question, run the `find-skills` skill (`npx skills find …`)
@@ -39,7 +39,7 @@ for domain help (design-system, toast, feedback, a11y) **before** inventing a on
 5. **Buttons are `w-fit` by default**; modals use **`rounded-20`** (AlignUI Modal content uses
    `rounded-20` — keep that contract).
 6. **Real data, real states, premium presentation** — loading/empty/error/success must be designed,
-   not browser defaults (`AGENTS.md` §1–2).
+   not browser defaults.
 
 ## 1. AlignUI catalog map (v1.2) → when to use what
 
@@ -158,4 +158,4 @@ Also replace hover “Edit/Del” text hacks with Compact Button / Dropdown menu
 3. If the problem is broader (a11y, design-system architecture), run **`find-skills`** and consider
    installing a high-quality skill (prefer ≥1K installs, known owners) rather than improvising.
 4. Stop and ask the user only when choosing a new visual language that conflicts with AlignUI or
-   existing tokens (`AGENTS.md` §15).
+   existing tokens.

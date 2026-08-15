@@ -1276,7 +1276,7 @@ export function SettingsModal({ open, onClose }: Props) {
                   <h3 className="text-[14px] font-semibold text-neutral-950">Cloud Storage</h3>
                   <p className="text-[13px] text-neutral-500">
                     Bulk import files from your storage providers. Configure OAuth apps in{' '}
-                    <code className="text-[12px]">server/.env</code> (see ENV.md).
+                    <code className="text-[12px]">server/.env</code>.
                   </p>
                 </div>
 

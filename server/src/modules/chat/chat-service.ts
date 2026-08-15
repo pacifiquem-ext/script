@@ -256,7 +256,7 @@ function documentNameMatches(content: string, name: string): boolean {
 
 /**
  * Merge explicit mention IDs with documents named in the user message so
- * "Tell me about AGENTS.md" scopes retrieval even without an @-chip.
+ * "Tell me about handbook.md" scopes retrieval even without an @-chip.
  * Throws when the user clearly names only non-ready documents.
  */
 async function resolveDocumentScope(
@@ -532,12 +532,12 @@ export async function* streamAssistantReply(input: {
     !env.ANTHROPIC_API_KEY
   ) {
     throw new ConfigurationError(
-      'ANTHROPIC_API_KEY is required for chat. Add it to server/.env (see ENV.md).',
+      'ANTHROPIC_API_KEY is required for chat. Add it to server/.env.',
     );
   }
   if (env.NODE_ENV !== 'test' && env.EMBEDDING_PROVIDER === 'voyage' && !env.VOYAGE_API_KEY) {
     throw new ConfigurationError(
-      'VOYAGE_API_KEY is required for chat retrieval. Add it to server/.env (see ENV.md).',
+      'VOYAGE_API_KEY is required for chat retrieval. Add it to server/.env.',
     );
   }
 

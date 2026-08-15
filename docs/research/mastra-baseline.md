@@ -1,13 +1,11 @@
 # Mastra baseline research (script adoption)
 
-**Status:** research complete; **owner direction is to adopt** (see `AGENTS.md` §2.7 + `TODO.md`
-Phase M). This file is **not** an ADR — ADR 0017 is the decision record when implementation starts.  
+**Status:** research complete; **owner direction is to adopt**. This file is **not** an ADR — ADR 0017 is the decision record when implementation starts.  
 **Date:** 2026-08-05  
 **Primary sources:** [mastra.ai](https://mastra.ai/), [mastra.ai/docs](https://mastra.ai/docs), [github.com/mastra-ai/mastra](https://github.com/mastra-ai/mastra) (README, packages, LICENSE).  
 **Audience:** agents adopting Mastra for the script company-brain monorepo (`client/` + `server/` + `packages/shared`).
 
-**Canonical build checklist:** `TODO.md` **Phase M** (M.0–M.7). Section 9 below is the same
-adoption story in research numbering — prefer Phase M IDs when updating the ledger.
+**Canonical build checklist:** Section 9 below is the adoption story in research numbering.
 
 ---
 
@@ -274,7 +272,7 @@ Sources: monorepo layout ([GitHub tree](https://github.com/mastra-ai/mastra)), p
 | Exa                                  | guide pattern with `createTool` + `exa-js` | [Web search guide](https://mastra.ai/guides/guide/web-search)                             |
 | Bright Data / Perplexity / Firecrawl | `@mastra/…` tool packages / guides         | Optional                                                                                  |
 
-**Recommendation:** reimplement `web_search` as `createTool` wrapping existing Tavily logic **or** adopt `@mastra/tavily` and drop custom HTTP. Keep `TAVILY_API_KEY` in `ENV.md`.
+**Recommendation:** reimplement `web_search` as `createTool` wrapping existing Tavily logic **or** adopt `@mastra/tavily` and drop custom HTTP. Keep `TAVILY_API_KEY` in `server/.env.example`.
 
 ### 4.2 RAG / vector / pgvector
 
@@ -515,7 +513,7 @@ chat-service.ts
 | Agent loop                   | `agent-runtime.ts` `runAgentWithTools`                  | `Agent.stream` / `generate`                                         | Mastra owns maxSteps, tool loop, retries                                                                   |
 | Anthropic SDK completion     | `defaultAnthropicCreate`                                | Model router `model: 'anthropic/<id>'`                              | Drop direct `messages.create` for agent path                                                               |
 | System prompt                | `AGENT_SYSTEM_PROMPT`                                   | `Agent.instructions` (string or async fn)                           | Can still inject workspace-specific instructions via `RequestContext`                                      |
-| Hard inventory routes        | `inventory-intent` / forced tools                       | Keep as **pre-agent** branch in chat-service **or** input processor | Deterministic catalog answers remain product rule (AGENTS.md §2.5) — do not rely only on model tool choice |
+| Hard inventory routes        | `inventory-intent` / forced tools                       | Keep as **pre-agent** branch in chat-service **or** input processor | Deterministic catalog answers remain a product rule — do not rely only on model tool choice |
 | SSE streaming                | chat-service yields events                              | Map Mastra stream → `AgentStreamEvent`                              | Keep client `chat-api.ts` stable in phase 1                                                                |
 | Tool status labels           | `statusLabel` on registry                               | Map `tool-call` → label table or tool metadata                      | Client UX dependency                                                                                       |
 | Tool audit                   | `recordToolCallAudit`                                   | `hooks.afterToolCall` + existing Prisma                             | Don’t rely on Mastra observability alone for compliance rows                                               |
@@ -615,7 +613,7 @@ Mitigation: start with tracing exporter only or Langfuse; composite store later.
 
 ### 8.10 Hard inventory routes / “no scaffolding” rule
 
-Mastra encourages model tool choice. Script **requires** deterministic inventory routes for catalog questions ([agent-tools.md](../agent-tools.md), AGENTS.md §2.5).
+Mastra encourages model tool choice. Script **requires** deterministic inventory routes for catalog questions ([agent-tools.md](../agent-tools.md)).
 
 Mitigation: keep pre-agent hard routes or implement as Mastra **input processor** that forces tool execution.
 
@@ -625,7 +623,7 @@ Mitigation: keep pre-agent hard routes or implement as Mastra **input processor*
 
 ### Phase 0 — Spike (1–2 days)
 
-- [ ] Confirm Node ≥ 22.13 in Docker/CI; document in `ENV.md` / engines
+- [ ] Confirm Node ≥ 22.13 in CI; document in `package.json` engines
 - [ ] Spike ESM import of `@mastra/core` from server (CJS vs ESM decision recorded)
 - [ ] `pnpm add @mastra/core` in a branch; `new Agent({ model: 'anthropic/…', instructions }).generate('ping')` in a Vitest
 - [ ] Verify Anthropic key via model router (no direct SDK)
@@ -636,7 +634,7 @@ Mitigation: keep pre-agent hard routes or implement as Mastra **input processor*
 - [ ] Add `server/src/mastra/index.ts` with empty/minimal agent registered
 - [ ] Wire `Mastra` singleton from app bootstrap (no public routes yet)
 - [ ] Optional `@mastra/pg` storage behind feature flag (or skip storage)
-- [ ] Update `ENV.md` if new vars (none required beyond existing `ANTHROPIC_API_KEY`)
+- [ ] Update `server/.env.example` if new vars (none required beyond existing `ANTHROPIC_API_KEY`)
 - [ ] **Exit:** process boots; health unaffected
 
 ### Phase 2 — Wrap one agent (parity path)

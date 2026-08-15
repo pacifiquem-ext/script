@@ -2,18 +2,18 @@
 
 **Status: ROADMAP. Nothing in this document is implemented.** No connector models exist in
 `server/prisma/schema.prisma`; no Slack/Teams/WhatsApp/Notion/Jira/GitHub/call code exists in
-`server/src`. Do not build from this file without an ADR per `AGENTS.md` §15 — it is the shared
+`server/src`. Do not build from this file without an ADR — it is the shared
 design target, not an approved schema.
 
 What _is_ shipped: **file** OAuth integrations (Drive, Dropbox, OneDrive, Box) that import documents
 into the Library. Those are `Integration` in the domain model. Everything below is a **Connector** —
-a different concept, deliberately given a different word (`CONTEXT.md`).
+a different concept, deliberately given a different word.
 
 ---
 
 ## 1. Why connectors exist
 
-`product_path.txt` defines the company brain as knowing _everything about the company_, not just its
+The company brain is meant to know _everything about the company_, not just its
 files. Three families of truth live outside the Library:
 
 | Family           | Systems                                    | Questions it must answer                                  |
@@ -50,7 +50,7 @@ inside them as an app**. Two halves, both required.
 
 ### 3.1 The bot surface (script answers where people already talk)
 
-Required behavior, from `product_path.txt`:
+Required behavior:
 
 - The app is installed into a workspace/team/group and **added to channels**.
 - A user tags it: `@script who said they'd own the migration on Friday?`
@@ -122,20 +122,20 @@ for this family and for §3/§5 — design it before the second connector, not a
 
 ## 5. Family C — Calls & meetings
 
-`product_path.txt` lists a **calls summaries provider** first. Two distinct sources, and they are
+Calls start with a **summaries provider**. Two distinct sources, and they are
 not interchangeable:
 
 1. **Provider summaries** — a meeting platform (or a notetaker product) already produces a
    transcript and summary; script ingests them via API/webhook. Cheapest path to value, no media
    handling, no consent machinery of our own.
-2. **In-app capture** — the `pipeline.md` P1 idea: record in the browser, transcribe, ingest. This
+2. **In-app capture** — record in the browser, transcribe, ingest. This
    is a _different_ job (ad-hoc notes) and should not block or be conflated with (1).
 
 Either way the brain needs: transcript with speakers and timestamps, a summary, extracted decisions
 and action items (see §3.3), links back to the source recording, and participant identities mapped
 through the same person identity map. Citations must be able to point at a moment in a call.
 
-Any transcription vendor is a **paid dependency → stop and ask** (`AGENTS.md` §15) before adoption.
+Any transcription vendor is a **paid dependency → stop and ask** before adoption.
 
 ## 6. Clearance (blocking constraint)
 
@@ -168,15 +168,15 @@ The dependency order matters more than the pick of first connector:
 
 ## 8. UI surfaces this implies
 
-Not designed yet; `understanding.md` carries the design rules. Expect: a Connectors section in
+Expect: a Connectors section in
 Settings (separate from file Integrations), a per-connector scopes/consent screen, a channel/source
 binding manager with retention controls, source-type-aware citation chips in chat (a message chip is
 not a document chip), and honest **Coming soon** labels until each lands.
 
 ## 9. Self-hosting (open — do not design it out)
 
-The project already self-hosts its **infrastructure**: Redis, Postgres + pgvector and Garage via
-Docker Compose (`docs/local-infra.md`, `docs/storage.md`), with Neon + UploadThing as managed
+The project already self-hosts its **infrastructure**: Redis, Postgres + pgvector, and
+S3-compatible object storage (`docs/storage.md`), with Neon + UploadThing as managed
 defaults. What it has never had to solve is a self-hosted deployment that receives **inbound events
 from a third party**. Connectors introduce that.
 
@@ -189,8 +189,8 @@ doesn't foreclose it. Two constraints:
   verification, event normalization, and the agent entry point separable** so a second transport is
   an adapter, not a rewrite.
 - **Per-instance app credentials.** A self-hosted operator registers their own Slack app and
-  supplies their own credentials — the pattern `ENV.md` § Cloud OAuth keys already establishes for
-  the file providers. A published app manifest turns that into a paste-one-file step.
+  supplies their own credentials — the same pattern as the file-provider OAuth keys in
+  `server/.env.example`. A published app manifest turns that into a paste-one-file step.
 
 Still open, each needing its own ADR if we commit: per-instance app registration UX, whether an
 air-gapped deployment is ever in scope (Anthropic and Voyage are hosted, required dependencies
@@ -198,5 +198,5 @@ today), and whether self-hosted instances are single-workspace by default.
 
 ## 10. Environment variables
 
-None of these exist in `server/src/config/env.ts` yet. `ENV.md` lists the anticipated set under
-**Planned — connectors**; add them to the Zod schema only in the PR that implements the provider.
+None of these exist in `server/src/config/env.ts` yet. Add them to the Zod schema and
+`server/.env.example` only in the PR that implements the provider.

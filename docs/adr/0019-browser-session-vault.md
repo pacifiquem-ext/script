@@ -10,7 +10,7 @@ Workflow “Run with agent” uses headless Playwright. Many checklist steps nee
 third-party session (GitHub, SSO portals). Storing passwords is out of scope. Playwright
 `storageState` (cookies + origins) is the smallest secret that makes logged-in browsing possible.
 
-AGENTS.md §15 requires an ADR before credential storage.
+Credential storage is a hard-to-reverse choice, so it is recorded here before implementation.
 
 ## Decision
 

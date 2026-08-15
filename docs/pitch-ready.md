@@ -1,6 +1,6 @@
 # Pitch-ready checklist
 
-Companion to [`pipeline.md`](../pipeline.md). Use this when preparing to pitch **script** as an
+Use this when preparing to pitch **script** as an
 organization-ready product. These items are **not** the org MVP build order (P7 → P6 → P9a …);
 they are the extras buyers and IT often ask for before saying yes.
 
@@ -10,7 +10,7 @@ Before sales decks, security questionnaires, POCs, or “are we ready to pitch?�
 **Suggested early pitch set** (after org MVP P7→P9a): **G1, G3, G6, G14** (story) + **G2, G7**
 (IT). Add **SSO (pipeline P9b)** before regulated logos; **G5 + G11** before board-level demos.
 
-Status on each item: track in `TODO.md` / issues when you commit to build — this file is the
+Status on each item: track in issues when you commit to build — this file is the
 glossary and rationale.
 
 ---
@@ -190,6 +190,4 @@ Lawyers need a signature stack before ink.
 
 ## Related
 
-- Org build order and product bets: [`pipeline.md`](../pipeline.md)
-- Live engineering ledger: [`TODO.md`](../TODO.md)
 - Product vision: [`projectdef.md`](../projectdef.md)

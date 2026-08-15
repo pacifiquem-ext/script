@@ -13,7 +13,7 @@ storage, with license activation and backups.
 | Postgres + pgvector        | Relational + vectors          |
 | Garage or S3 / UploadThing | File bytes                    |
 
-Local compose: `pnpm deps:up` then `pnpm dev:app` (see `docs/local-infra.md`).
+Locally: point `server/.env` at Postgres and Redis, then `pnpm dev:app`.
 
 Production sketch:
 

@@ -9,7 +9,7 @@ Accepted — 2026-08-05
 script’s company-brain agent loop lived in a hand-rolled Anthropic tool loop
 (`server/src/modules/chat/agent/agent-runtime.ts`) plus a custom tool registry
 (ADR 0011). Research in [`docs/research/mastra-baseline.md`](../research/mastra-baseline.md)
-and owner direction (`AGENTS.md` §2.7) adopt **[Mastra](https://mastra.ai/)** so we
+adopt **[Mastra](https://mastra.ai/)** so we
 stop reinventing agent loops, multi-agent supervisors, MCP, first-party search tools,
 and AI workflow graphs.
 
@@ -57,4 +57,4 @@ and AI workflow graphs.
 - New code under `server/src/mastra/`; thin adapter in `chat/agent/`.
 - ADR 0011 registry remains as a **compat bridge** for tests/`executeTool` until fully
   retired; production loop is Mastra.
-- Coding agents must follow `AGENTS.md` §2.7 and `.agents/skills/mastra/`.
+- Coding agents must follow `.agents/skills/mastra/`.

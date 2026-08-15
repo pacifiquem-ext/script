@@ -8,8 +8,6 @@ SSE (workflow-executor agent + navigate heuristics), publish-time memory embed. 
 fallback). **Residuals:** agent write HITL/confirmToken (P5.6b), connector-verified completion
 (P5.7), passive RAG over workflow chunks, login/session for sites that require user credentials.
 
-`product_path.txt` calls this **"the ultimate feature"**, so it gets a spec rather than a bullet.
-
 ---
 
 ## 1. The job to be done
@@ -89,7 +87,7 @@ sources. Browser tools live on the workflow-executor agent (not the default chat
 
 ## 5. UI surfaces
 
-Three new surfaces, all bound by `understanding.md` (Align-UI, Huge Icons, `rounded-20`, `w-fit`):
+Three new surfaces (Align-UI, Huge Icons, `rounded-20` modals, `w-fit` buttons):
 
 1. **Workflow list** — workspace workflows, draft/published, with run counts.
 2. **Markdown editor (author)** — split or toggled edit/preview, live-parsed step outline so the

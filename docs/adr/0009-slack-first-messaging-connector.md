@@ -6,7 +6,7 @@ Accepted — 2026-08-03
 
 ## Context
 
-`product_path.txt` names **Teams, WhatsApp and Slack** as the messaging surfaces the company brain
+**Teams, WhatsApp and Slack** are the messaging surfaces the company brain
 should live in: the app is added to channels, tagged with a question, reacts with a loading emoji,
 and replies in thread using everything it knows.
 
@@ -27,7 +27,7 @@ different ack affordance and tenant admin consent. WhatsApp cannot do retroactiv
 all and would ship the weakest version of the feature first.
 
 Separately: the project already self-hosts its **infrastructure** (Redis, Postgres + pgvector,
-Garage — `docs/local-infra.md`). It does not yet have a self-hosting story for a product that
+S3-compatible storage). It does not yet have a self-hosting story for a product that
 receives **inbound webhooks from third parties**, and that gap constrains connector design.
 
 ## Decision
@@ -52,16 +52,16 @@ recorded here because two known constraints must not be designed out prematurely
    handling path should treat "how the event arrived" as a transport detail, not a fact baked
    through the connector.
 2. **Per-instance app credentials.** A self-hosted operator cannot use our Slack app. They register
-   their own and supply their own credentials — the same pattern `ENV.md` § Cloud OAuth keys already
-   establishes for Drive/Dropbox/OneDrive/Box. A Slack app manifest makes that a paste-one-file
+   their own and supply their own credentials — the same pattern already
+   used for Drive/Dropbox/OneDrive/Box OAuth keys. A Slack app manifest makes that a paste-one-file
    step rather than a twenty-field form.
 
 ## Consequences
 
-- `TODO.md` Phase 6 builds Slack only. Teams and WhatsApp sit in Phase 8 (breadth), in that order.
+- v1 builds Slack only. Teams and WhatsApp follow later, in that order.
 - Marketing may name Teams and WhatsApp as roadmap, never as live (`projectdef.md` §10.2).
 - The transport seam above is a **v1 design constraint**, not a v2 refactor: keep webhook
-  verification, event normalization, and the agent entry point (`TODO.md` T0.5) separable so a
+  verification, event normalization, and the agent entry point separable so a
   Socket Mode transport can be added without rewriting mention handling.
 - Full self-hosting of the company brain remains an open design space. Known unresolved pieces, to
   be decided in their own ADRs when we commit: inbound event transport, per-instance app

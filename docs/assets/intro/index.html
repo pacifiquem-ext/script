@@ -341,9 +341,9 @@ pnpm install
 cp client/.env.example client/.env
 cp server/.env.example server/.env
 # DATABASE_URL, JWT_SECRET, VOYAGE_API_KEY,
-# ANTHROPIC_API_KEY, UPLOADTHING_TOKEN — see ENV.md
+# ANTHROPIC_API_KEY, UPLOADTHING_TOKEN
 
-pnpm deps:up      # Redis + Postgres(pgvector) + Garage
+pnpm --filter @script/server db:deploy
 pnpm dev:app      # client + API + worker</pre>
           <p class="hint">Health: http://localhost:4000/health · App: http://localhost:5173</p>
         </div>
@@ -374,9 +374,9 @@ pnpm dev:app      # client + API + worker</pre>
             Garage/S3 · UploadThing · Vitest
           </p>
           <ul>
-            <li>Read <code>AGENTS.md</code> + <code>docs/local-infra.md</code></li>
-            <li>Keys in <code>ENV.md</code> · tasks in <code>TODO.md</code></li>
-            <li>Self-host via Compose · or managed Neon + UploadThing</li>
+            <li>Read <code>README.md</code></li>
+            <li>Keys in <code>server/.env.example</code></li>
+            <li>Postgres + Redis + Voyage + Anthropic</li>
           </ul>
           <p class="cta">Happy building with script.</p>
         </div>

@@ -10,7 +10,7 @@ description: How script embeds Mastra as the company-brain agent runtime (ADR 00
 
 ## Rules (non-negotiable)
 
-1. **Mastra-first** — `AGENTS.md` §2.7. Before inventing agent loops, web search clients, MCP
+1. **Mastra-first**. Before inventing agent loops, web search clients, MCP
    bridges, multi-agent supervisors, or AI workflow graphs: check Mastra.
 2. **Domain stays ours** — clearance, Library/MemoryChunk, credits, JWT/workspace. Implement as
    `createTool` **execute** bodies that call `server/src/modules/*` services.
@@ -44,5 +44,4 @@ server/src/mastra/
 
 - ADR 0017: `docs/adr/0017-mastra-agent-baseline.md`
 - Research: `docs/research/mastra-baseline.md`
-- TODO Phase M: `TODO.md`
 - Official skill: `.agents/skills/mastra/`

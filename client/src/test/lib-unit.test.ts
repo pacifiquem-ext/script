@@ -73,11 +73,11 @@ describe('queryKeys', () => {
 describe('matchDocumentsInText', () => {
   it('matches full names and long basenames case-insensitively', () => {
     const docs = [
-      stubDoc({ id: '1', name: 'AGENTS.md', folderId: 'f1' }),
+      stubDoc({ id: '1', name: 'handbook.md', folderId: 'f1' }),
       stubDoc({ id: '2', name: 'api.md' }),
       stubDoc({ id: '3', name: 'chunking.md' }),
     ];
-    const hits = matchDocumentsInText('Tell me about agents.md in the folder', docs);
+    const hits = matchDocumentsInText('Tell me about handbook.md in the folder', docs);
     expect(hits.map((d) => d.id)).toEqual(['1']);
     // short basename "api" should not match loosely
     expect(matchDocumentsInText('tell me about the api design', docs).map((d) => d.id)).toEqual([]);
