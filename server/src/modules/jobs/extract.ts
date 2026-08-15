@@ -117,7 +117,7 @@ export async function extractText(
 }
 
 /**
- * Character-window chunking with overlap (see docs/chunking.md).
+ * Character-window chunking with overlap.
  * Splits on paragraph boundaries when a window end falls near a blank line.
  */
 export function chunkText(

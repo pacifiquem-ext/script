@@ -63,9 +63,6 @@ every roadmap doc in the repo must map back to it.
 | **C6** | **Work-system context**                 | Notion, Jira, GitHub — "who's working on this?", "what's project X's overview?"                                                   | **Partial** — GitHub PAT + issue memory + tools; Jira/Notion are Phase 8                                    |
 | **C7** | **Workflows**                           | Markdown-authored guided processes (e.g. onboarding) that track and enforce completion                                            | **Shipped (v1)** — author/runner/agent execute/HITL/vault; P5.7 connector verify + P5.8c logged-in E2E open |
 
-Design specs: [`docs/agent-tools.md`](./docs/agent-tools.md) (C2),
-[`docs/connectors.md`](./docs/connectors.md) (C3–C6), [`docs/workflows.md`](./docs/workflows.md) (C7).
-
 ### v1 scope: Slack only (ADR 0009)
 
 **The whole product ships with Slack as its only connector app.** C4/C5 v1 means Slack — added to
@@ -77,8 +74,8 @@ one deep provider is the proof the abstraction works.
 **Self-hosting the full product is an open possibility, not a commitment.** Redis, Postgres +
 pgvector, and S3-compatible object storage can run on your own machines; what is unsolved is a
 self-hosted instance receiving inbound third-party events. That is deliberately left open so
-decisions can be drafted from it later — see [`docs/connectors.md`](./docs/connectors.md) §9 — and
-the event-transport seam must stay open so it stays possible.
+decisions can be drafted from it later, and the event-transport seam must stay open so it stays
+possible.
 
 ### Cross-cutting prerequisites
 
@@ -187,24 +184,23 @@ Marketing landing: `client/src/pages/landing/` +
 
 A surface distinct from file Integrations: install with scoped credentials, choose what the brain
 listens to (channels, projects, repos), see and revoke consent, set retention.
-Spec: [`docs/connectors.md`](./docs/connectors.md).
 
 ### G. Workflows — roadmap (C7)
 
 Markdown editor for authors; run view with tracked checklist for runners; brain-assisted "what's
-next". Spec: [`docs/workflows.md`](./docs/workflows.md).
+next".
 
 ### H. Meetings & calls — roadmap (C3)
 
 Call/meeting records with transcript, summary, participants, decisions and action items, citable
-back to the moment in the call. Spec: [`docs/connectors.md`](./docs/connectors.md) §5.
+back to the moment in the call.
 
 ---
 
 ## 7. Data & storage strategy
 
 - **Database**: Neon Postgres + Prisma + **pgvector**.
-- **File storage**: `StorageDriver` — UploadThing default, S3/Garage for self-host (`docs/storage.md`).
+- **File storage**: `StorageDriver` — UploadThing default, S3-compatible for self-host.
 - **RAG**: precompute at ingest; never re-parse files at chat time (ADR 0001).
 - **Versions**: append-only DocumentVersion; current-only RAG (ADR 0008).
 - **Roadmap**: memory rows that are not documents (messages, work items, transcripts) must reuse the
@@ -226,13 +222,13 @@ back to the moment in the call. Spec: [`docs/connectors.md`](./docs/connectors.m
 - Mentions / document scope; citations with `documentVersionId`.
 - Tool-use orchestrator with Library tools + `web_search`.
 - **Roadmap**: tool registry, clearance-aware tool context, per-tool audit rows, and a webhook entry
-  point so the same runtime serves messaging bots ([`docs/agent-tools.md`](./docs/agent-tools.md) §4).
+  point so the same runtime serves messaging bots.
 
 ### III. Integration gateway
 
 - **Now:** cloud _file_ OAuth (Drive, Dropbox, OneDrive, Box) → import into Library.
 - **Later:** connectors for messaging, work systems and call providers, with scoped credentials,
-  event ingest, consent and retention — see [`docs/connectors.md`](./docs/connectors.md).
+  event ingest, consent and retention.
 
 ### IV. Auth & tenancy
 
@@ -262,5 +258,4 @@ back to the moment in the call. Spec: [`docs/connectors.md`](./docs/connectors.m
 3. Promote accepted roadmap items only when we commit to build them.
 4. Landing and `projectdef.md` should not contradict each other; if marketing moves first, update
    this file in the same effort.
-5. New capability areas get a **spec doc under `docs/`** and a row in §2 before code — not a schema
-   migration first.
+5. New capability areas get a row in §2 before code — not a schema migration first.

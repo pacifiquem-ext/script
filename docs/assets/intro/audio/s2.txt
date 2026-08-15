@@ -1,1 +1,0 @@
-Ingest documents from local upload or URL into a workspace-scoped library with folders, status tracking, and real storage.

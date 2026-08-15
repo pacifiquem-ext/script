@@ -1,1 +1,0 @@
-To run locally: install with pnpm, copy environment files, set your API keys, start Redis Postgres and Garage with deps up, then run pnpm dev app.

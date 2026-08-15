@@ -1,1 +1,0 @@
-Welcome to script: an AI-powered document management platform with RAG chat over your library.

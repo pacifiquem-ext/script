@@ -1,1 +1,0 @@
-Copy the example env files, add your API keys, and run pnpm dev. Happy building with script.

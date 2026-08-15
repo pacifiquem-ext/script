@@ -1,1 +1,0 @@
-A background worker extracts text, chunks it, and embeds with Voyage AI into Postgres using pgvector for fast retrieval.
